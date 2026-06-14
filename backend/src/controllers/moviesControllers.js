@@ -103,3 +103,32 @@ export const updateMovie = async (req, res) => {
     });
   }
 };
+
+export const deleteMovie = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const movie = await Movie.findOneAndUpdate(
+      { _id: id, deleted_at: null },
+      { deleted_at: new Date() },
+      { new: true }
+    );
+
+    if (!movie) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy phim",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Xóa phim thành công",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
