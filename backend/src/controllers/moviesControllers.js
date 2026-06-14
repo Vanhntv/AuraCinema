@@ -56,3 +56,20 @@ export const getMovieById = async (req, res) => {
     });
   }
 };
+
+export const createMovie = async (req, res) => {
+  try {
+    const movie = await Movie.create(req.body);
+
+    res.status(201).json({
+      success: true,
+      message: "Thêm phim thành công",
+      data: movie,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
