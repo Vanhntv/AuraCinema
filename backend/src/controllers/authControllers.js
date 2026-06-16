@@ -1,4 +1,4 @@
-import { randomBytes, scrypt as scryptCallback } from "crypto";
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import User from "../models/User.js";
 
@@ -11,6 +11,24 @@ const hashPassword = async (password) => {
 };
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
+
+const verifyPassword = async (password, storedPassword) => {
+  const [salt, key] = storedPassword.split(":");
+
+  if (!salt || !key) {
+    return false;
+  }
+
+  const derivedKey = await scrypt(password, salt, 64);
+  const storedKeyBuffer = Buffer.from(key, "hex");
+  const derivedKeyBuffer = Buffer.from(derivedKey);
+
+  if (storedKeyBuffer.length !== derivedKeyBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(storedKeyBuffer, derivedKeyBuffer);
+};
 
 export const register = async (req, res) => {
   try {
@@ -76,6 +94,63 @@ export const register = async (req, res) => {
       });
     }
 
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập email và mật khẩu",
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Email không hợp lệ",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({
+      email: normalizedEmail,
+      deleted_at: null,
+      status: true,
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Email hoặc mật khẩu không đúng",
+      });
+    }
+
+    const isPasswordValid = await verifyPassword(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Email hoặc mật khẩu không đúng",
+      });
+    }
+
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    return res.status(200).json({
+      success: true,
+      message: "Đăng nhập thành công",
+      data: userResponse,
+    });
+  } catch (error) {
     return res.status(500).json({
       success: false,
       message: error.message,
