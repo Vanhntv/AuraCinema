@@ -4,6 +4,7 @@ import { connectDB } from './config/db.js';
 import cors from "cors";
 import moviesRoute from "./router/moviesRouters.js";
 import authRoute from "./router/authRouters.js";
+import "dotenv/config";
 
 
 const app = express();

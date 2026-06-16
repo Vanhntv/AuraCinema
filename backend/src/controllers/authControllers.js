@@ -1,6 +1,7 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import User from "../models/User.js";
+import { signJwt } from "../utils/jwt.js";
 
 const scrypt = promisify(scryptCallback);
 
@@ -145,10 +146,46 @@ export const login = async (req, res) => {
     const userResponse = user.toObject();
     delete userResponse.password;
 
+    const token = signJwt(
+      {
+        id: user._id.toString(),
+        role_id: user.role_id,
+      },
+      process.env.JWT_SECRET,
+      7 * 24 * 60 * 60
+    );
+
     return res.status(200).json({
       success: true,
       message: "Đăng nhập thành công",
+      token,
       data: userResponse,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const profile = async (req, res) => {
+  try {
+    const user = await User.findOne({
+      _id: req.user.id,
+      deleted_at: null,
+    }).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy người dùng",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: user,
     });
   } catch (error) {
     return res.status(500).json({
