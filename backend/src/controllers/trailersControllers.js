@@ -34,6 +34,34 @@ export const getAllTrailers = async (req, res) => {
   }
 };
 
+export const getTrailerById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const trailer = await Trailer.findById(id).populate(
+      "movie_id",
+      "title poster banner status release_date"
+    );
+
+    if (!trailer) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy trailer",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: trailer,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const createTrailer = async (req, res) => {
   try {
     const { movie_id, title, youtube_url, thumbnail, status } = req.body;
