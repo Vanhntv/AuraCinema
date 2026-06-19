@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import BookingModal from '../components/BookingModal';
+import MovieDetailModal from '../components/MovieDetailModal';
 
 function MovieSchedule() {
   const days = [
@@ -12,6 +14,8 @@ function MovieSchedule() {
   ];
 
   const [selectedDate, setSelectedDate] = useState('19/06');
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [bookingMovie, setBookingMovie] = useState(null);
 
   const moviesData = [
     {
@@ -109,6 +113,23 @@ function MovieSchedule() {
   const firstBigMovie = moviesData[0];
   const restSmallMovies = moviesData.slice(1);
 
+  const normalizeMovie = (movie) => ({
+    ...movie,
+    _id: movie._id || movie.id,
+    poster: movie.poster || movie.image,
+    banner: movie.banner || movie.image,
+    status: movie.status || 'now_showing',
+  });
+
+  const openDetail = (movie) => {
+    setSelectedMovie(normalizeMovie(movie));
+  };
+
+  const openBooking = (movie) => {
+    setSelectedMovie(null);
+    setBookingMovie(normalizeMovie(movie));
+  };
+
   return (
     <div className="w-full text-white pt-8 pb-24 font-['Be_Vietnam_Pro']">
       <div className="w-[min(1760px,calc(100%_-_96px))] mx-auto max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
@@ -134,12 +155,23 @@ function MovieSchedule() {
         <div className="flex flex-col gap-6">
           {firstBigMovie && (
             <div className="flex max-md:flex-col gap-6 p-6 bg-white/[0.02] border border-white/5 rounded-[24px] relative">
-              <div className="w-[180px] max-md:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0">
+              <button
+                className="w-[180px] max-md:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0 text-left"
+                type="button"
+                onClick={() => openDetail(firstBigMovie)}
+                aria-label={`Xem chi tiết phim ${firstBigMovie.title}`}
+              >
                 <img src={firstBigMovie.image} alt={firstBigMovie.title} className="w-full h-full object-cover" />
-              </div>
+              </button>
               <div className="flex-1 flex flex-col justify-between">
                 <div>
-                  <h2 className="text-xl font-extrabold text-slate-100 uppercase">{firstBigMovie.title}</h2>
+                  <button
+                    className="text-left"
+                    type="button"
+                    onClick={() => openDetail(firstBigMovie)}
+                  >
+                    <h2 className="text-xl font-extrabold text-slate-100 uppercase hover:text-[#ff6070]">{firstBigMovie.title}</h2>
+                  </button>
                   <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-400 mt-2">
                     <span>{firstBigMovie.tags}</span><span>•</span><span>{firstBigMovie.duration}</span><span>•</span><span className="text-[#ff6070] font-bold">Giá: {firstBigMovie.price}</span>
                   </div>
@@ -147,7 +179,12 @@ function MovieSchedule() {
                 </div>
                 <div className="flex flex-wrap gap-2.5">
                   {firstBigMovie.slots.map((slot, idx) => (
-                    <button key={idx} className="flex flex-col items-center justify-center w-[85px] h-[50px] bg-[#161b22] border border-white/5 rounded-[12px] hover:border-[#ff6070]" type="button">
+                    <button
+                      key={idx}
+                      className="flex flex-col items-center justify-center w-[85px] h-[50px] bg-[#161b22] border border-white/5 rounded-[12px] hover:border-[#ff6070]"
+                      type="button"
+                      onClick={() => openBooking(firstBigMovie)}
+                    >
                       <span className="text-sm font-black text-slate-200">{slot}</span>
                     </button>
                   ))}
@@ -159,17 +196,33 @@ function MovieSchedule() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {restSmallMovies.map((movie) => (
               <div key={movie.id} className="flex max-sm:flex-col gap-5 p-5 bg-white/[0.02] border border-white/5 rounded-[24px] relative">
-                <div className="w-[140px] max-sm:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0">
+                <button
+                  className="w-[140px] max-sm:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0 text-left"
+                  type="button"
+                  onClick={() => openDetail(movie)}
+                  aria-label={`Xem chi tiết phim ${movie.title}`}
+                >
                   <img src={movie.image} alt={movie.title} className="w-full h-full object-cover" />
-                </div>
+                </button>
                 <div className="flex-1 flex flex-col justify-between min-h-[190px]">
                   <div>
-                    <h3 className="text-base font-extrabold text-slate-100 uppercase line-clamp-2">{movie.title}</h3>
+                    <button
+                      className="text-left"
+                      type="button"
+                      onClick={() => openDetail(movie)}
+                    >
+                      <h3 className="text-base font-extrabold text-slate-100 uppercase line-clamp-2 hover:text-[#ff6070]">{movie.title}</h3>
+                    </button>
                     <div className="text-[11px] text-slate-400 mt-1.5">{movie.tags} • {movie.duration}</div>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {movie.slots.slice(0, 4).map((slot, idx) => (
-                      <button key={idx} className="flex flex-col items-center justify-center w-[76px] h-[46px] bg-[#161b22] border border-white/5 rounded-[10px] hover:border-[#ff6070]" type="button">
+                      <button
+                        key={idx}
+                        className="flex flex-col items-center justify-center w-[76px] h-[46px] bg-[#161b22] border border-white/5 rounded-[10px] hover:border-[#ff6070]"
+                        type="button"
+                        onClick={() => openBooking(movie)}
+                      >
                         <span className="text-xs font-black text-slate-200">{slot}</span>
                       </button>
                     ))}
@@ -181,6 +234,12 @@ function MovieSchedule() {
         </div>
 
       </div>
+      <MovieDetailModal
+        movie={selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+        onBook={openBooking}
+      />
+      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
     </div>
   );
 }
