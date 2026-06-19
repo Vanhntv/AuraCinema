@@ -1,10 +1,13 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { useState } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import PromotionPage from './pages/PromotionPage'; 
+import BookingModal from './components/BookingModal';
+import MovieDetailModal from './components/MovieDetailModal';
 
 const homeMovies = [
   { id: 1, title: 'MA XÓ', tags: 'Kinh dị', image: 'https://cdn.galaxycine.vn/media/2026/5/29/ma-xo-2_1780061164303.jpg' },
@@ -19,6 +22,29 @@ const homeMovies = [
 ];
 
 function HomePage() {
+  const [selectedMovie, setSelectedMovie] = useState(null);
+  const [bookingMovie, setBookingMovie] = useState(null);
+
+  const openMovieDetail = (movie) => {
+    setSelectedMovie({
+      ...movie,
+      _id: movie._id || movie.id,
+      poster: movie.poster || movie.image,
+      banner: movie.banner || movie.image,
+      status: movie.status || 'now_showing',
+    });
+  };
+
+  const openBooking = (movie) => {
+    setSelectedMovie(null);
+    setBookingMovie({
+      ...movie,
+      _id: movie._id || movie.id,
+      poster: movie.poster || movie.image,
+      banner: movie.banner || movie.image,
+    });
+  };
+
   return (
     <>
       <HeroSlider />
@@ -33,7 +59,12 @@ function HomePage() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
               {homeMovies.map((movie) => (
-                <div key={movie.id} className="group cursor-pointer">
+                <button
+                  key={movie.id}
+                  className="group cursor-pointer text-left"
+                  type="button"
+                  onClick={() => openMovieDetail(movie)}
+                >
                   <div className="w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-900 shadow-lg group-hover:ring-2 ring-[#ff6070] transition-all">
                     <img src={movie.image} alt={movie.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
@@ -41,7 +72,7 @@ function HomePage() {
                     {movie.title}
                   </h3>
                   <p className="text-[10px] text-slate-500 mt-1">{movie.tags}</p>
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -73,6 +104,12 @@ function HomePage() {
           </div>
         </div>
       </div>
+      <MovieDetailModal
+        movie={selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+        onBook={openBooking}
+      />
+      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
     </>
   );
 }
