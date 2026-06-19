@@ -8,6 +8,7 @@ import {
 
 const pageTitles = {
   "/": "Dashboard",
+  "/admin/dashboard": "Dashboard",
   "/genres": "Thể loại",
   "/movies": "Phim",
   "/showtimes": "Suất chiếu",
@@ -22,7 +23,6 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
   return (
     <header className={`header ${isCollapsed ? "sidebar-collapsed" : ""}`}>
       <div className="header-left">
-        {/* Desktop toggle */}
         <button
           className="header-toggle-btn"
           onClick={onToggleSidebar}
@@ -33,11 +33,11 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
           <HiOutlineMenu />
         </button>
 
-        {/* Mobile toggle */}
         <button
           className="header-toggle-btn"
           onClick={onToggleMobile}
           id="sidebar-toggle-mobile"
+          title="Mở menu"
         >
           <HiOutlineMenu />
         </button>
