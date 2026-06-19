@@ -1,0 +1,142 @@
+import Room from "../models/Room.js";
+import Showtime from "../models/Showtime.js";
+
+const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Jakarta",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+const getDayRange = (dateValue) => {
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const jakartaDay = date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Jakarta",
+  });
+
+  const start = new Date(`${jakartaDay}T00:00:00.000+07:00`);
+  const end = new Date(`${jakartaDay}T23:59:59.999+07:00`);
+
+  return { start, end };
+};
+
+const formatTime = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  return jakartaTimeFormatter.format(new Date(value));
+};
+
+const mapShowtime = (showtime) => ({
+  id: showtime._id,
+  movie_id: showtime.movie_id?._id ?? showtime.movie_id ?? null,
+  movieTitle: showtime.movie_id?.title ?? null,
+  moviePoster: showtime.movie_id?.poster ?? null,
+  room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
+  roomName: showtime.room_id?.name ?? null,
+  cinema_id: showtime.room_id?.cinema_id?._id ?? showtime.room_id?.cinema_id ?? null,
+  cinemaName: showtime.room_id?.cinema_id?.name ?? null,
+  cinemaCity: showtime.room_id?.cinema_id?.city ?? null,
+  start_time: showtime.start_time,
+  startTime: formatTime(showtime.start_time),
+  end_time: showtime.end_time,
+  endTime: formatTime(showtime.end_time),
+  base_price: showtime.base_price,
+  created_at: showtime.created_at,
+  updated_at: showtime.updated_at,
+});
+
+export const getAllShowtimes = async (req, res) => {
+  try {
+    const { q, movie_id, room_id, cinema_id, date } = req.query;
+    const filter = {
+      deleted_at: null,
+    };
+
+    if (movie_id) {
+      filter.movie_id = movie_id;
+    }
+
+    if (room_id) {
+      filter.room_id = room_id;
+    }
+
+    if (cinema_id) {
+      const rooms = await Room.find({
+        cinema_id,
+        deleted_at: null,
+      }).select("_id");
+
+      if (!rooms.length) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+        });
+      }
+
+      filter.room_id = {
+        $in: rooms.map((room) => room._id),
+      };
+    }
+
+    if (date) {
+      const dayRange = getDayRange(date);
+
+      if (!dayRange) {
+        return res.status(400).json({
+          success: false,
+          message: "date khong hop le",
+        });
+      }
+
+      filter.start_time = {
+        $gte: dayRange.start,
+        $lte: dayRange.end,
+      };
+    }
+
+    let showtimes = await Showtime.find(filter)
+      .populate("movie_id", "title poster duration release_date status")
+      .populate({
+        path: "room_id",
+        select: "name capacity cinema_id",
+        populate: {
+          path: "cinema_id",
+          select: "name city address",
+        },
+      })
+      .sort({ start_time: 1, created_at: -1 });
+
+    if (q) {
+      const keyword = q.trim().toLowerCase();
+
+      showtimes = showtimes.filter((showtime) => {
+        const movieTitle = showtime.movie_id?.title?.toLowerCase() ?? "";
+        const roomName = showtime.room_id?.name?.toLowerCase() ?? "";
+        const cinemaName = showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
+
+        return (
+          movieTitle.includes(keyword) ||
+          roomName.includes(keyword) ||
+          cinemaName.includes(keyword)
+        );
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: showtimes.map(mapShowtime),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
