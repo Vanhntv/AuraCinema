@@ -4,6 +4,7 @@ import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
+import PromotionPage from './pages/PromotionPage'; // Import trang khuyến mãi mới
 
 // Dữ liệu danh sách phim
 const homeMovies = [
@@ -22,8 +23,6 @@ function HomePage() {
   return (
     <>
       <HeroSlider />
-      
-      {/* Container chính */}
       <div className="mx-auto mt-12 mb-24 w-[90%] max-w-[1400px]">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-12">
           
@@ -34,7 +33,6 @@ function HomePage() {
                 <span className="w-2 h-2 rounded-full bg-[#ff6070]"></span> Phim đang chiếu
               </h2>
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-5 gap-y-8">
               {homeMovies.map((movie) => (
                 <div key={movie.id} className="group cursor-pointer">
@@ -52,11 +50,10 @@ function HomePage() {
 
           {/* CỘT PHẢI: KHUYẾN MÃI & SỰ KIỆN */}
           <div className="hidden lg:flex flex-col gap-10">
-            {/* Khối Khuyến mãi */}
             <div>
               <div className="flex items-center justify-between mb-6 border-b-2 border-[#ff6070] pb-2">
                 <h2 className="text-base font-black uppercase text-white">Khuyến mãi</h2>
-                <span className="text-xs text-slate-400 hover:text-[#ff6070] cursor-pointer">Xem tất cả →</span>
+                <a href="/khuyen-mai" className="text-xs text-slate-400 hover:text-[#ff6070]">Xem tất cả →</a>
               </div>
               <div className="flex flex-col gap-4">
                 <div className="w-full aspect-[16/9] rounded-[16px] overflow-hidden border border-white/10 hover:border-[#ff6070] transition-all cursor-pointer">
@@ -67,8 +64,6 @@ function HomePage() {
                 </div>
               </div>
             </div>
-
-            {/* Khối Sự kiện */}
             <div>
               <div className="flex items-center justify-between mb-6 border-b-2 border-[#ff6070] pb-2">
                 <h2 className="text-base font-black uppercase text-white">Sự kiện</h2>
@@ -94,6 +89,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/lich-chieu" element={<MovieSchedule />} />
           <Route path="/tin-tuc" element={<NewsPage />} />
+          <Route path="/khuyen-mai" element={<PromotionPage />} />
         </Routes>
         <Footer />
       </main>
