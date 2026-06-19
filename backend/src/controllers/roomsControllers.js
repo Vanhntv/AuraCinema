@@ -197,3 +197,34 @@ export const updateRoom = async (req, res) => {
     });
   }
 };
+
+export const deleteRoom = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const room = await Room.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay room",
+      });
+    }
+
+    room.deleted_at = new Date();
+    await room.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Xoa room thanh cong",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
