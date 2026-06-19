@@ -16,6 +16,7 @@ const emptyFormData = {
   country: "",
   age_limit: "",
   status: "coming_soon",
+  trailer_url: "",
 };
 
 const toDateInputValue = (value) => {
@@ -80,6 +81,7 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
           country: initialData.country || "",
           age_limit: initialData.age_limit ?? initialData.ageLimit ?? "",
           status: initialData.status || "coming_soon",
+          trailer_url: initialData.trailer_url || initialData.youtube_url || "",
         });
         setSelectedGenres(
           Array.isArray(initialData.genres)
@@ -364,6 +366,18 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
                   />
                 </div>
               )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Trailer YouTube</label>
+              <input
+                type="url"
+                className="form-input"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={formData.trailer_url}
+                onChange={(e) => handleChange("trailer_url", e.target.value)}
+                id="input-movie-trailer-url"
+              />
             </div>
 
             {/* Banner URL */}

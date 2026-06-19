@@ -1119,6 +1119,32 @@ ul, ol {
   border-top: 1px solid var(--color-border);
 }
 
+.trailer-modal {
+  max-width: 920px;
+}
+
+.trailer-modal-body {
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.trailer-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.trailer-invalid {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--color-danger);
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--color-bg-input);
+}
+
 /* ============================================
    Form
    ============================================ */

@@ -93,6 +93,8 @@ export const createTrailer = async (req, res) => {
       status: status ?? true,
     });
 
+    await Movie.findByIdAndUpdate(movie_id, { trailer_url: youtube_url });
+
     const populatedTrailer = await Trailer.findById(trailer._id).populate(
       "movie_id",
       "title poster banner status release_date"
@@ -159,6 +161,12 @@ export const updateTrailer = async (req, res) => {
 
     await trailer.save();
 
+    if (youtube_url !== undefined) {
+      await Movie.findByIdAndUpdate(trailer.movie_id, {
+        trailer_url: youtube_url || null,
+      });
+    }
+
     const populatedTrailer = await Trailer.findById(trailer._id).populate(
       "movie_id",
       "title poster banner status release_date"
@@ -189,6 +197,8 @@ export const deleteTrailer = async (req, res) => {
         message: "Không tìm thấy trailer",
       });
     }
+
+    await Movie.findByIdAndUpdate(trailer.movie_id, { trailer_url: null });
 
     res.status(200).json({
       success: true,
