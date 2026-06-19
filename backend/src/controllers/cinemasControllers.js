@@ -63,3 +63,55 @@ export const createCinema = async (req, res) => {
     });
   }
 };
+
+export const updateCinema = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, address, city, phone, image } = req.body;
+
+    const cinema = await Cinema.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+
+    if (!cinema) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cinema",
+      });
+    }
+
+    if (name !== undefined) {
+      cinema.name = name;
+    }
+
+    if (address !== undefined) {
+      cinema.address = address;
+    }
+
+    if (city !== undefined) {
+      cinema.city = city;
+    }
+
+    if (phone !== undefined) {
+      cinema.phone = phone;
+    }
+
+    if (image !== undefined) {
+      cinema.image = image;
+    }
+
+    await cinema.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Cập nhật cinema thành công",
+      data: cinema,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
