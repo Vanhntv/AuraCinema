@@ -51,6 +51,38 @@ const parseBoolean = (value, fallback = false) => {
   return fallback;
 };
 
+const normalizeSeatPayload = (payload, defaults = {}) => {
+  return {
+    room_id: payload.room_id ?? defaults.room_id,
+    seat_type_id: payload.seat_type_id ?? defaults.seat_type_id,
+    seat_row: payload.seat_row ?? defaults.seat_row,
+    seat_number: payload.seat_number ?? defaults.seat_number,
+    status: payload.status ?? defaults.status,
+  };
+};
+
+const validateSeatPayload = (seat, index = null) => {
+  const prefix = index === null ? "" : `Seat ${index + 1}: `;
+
+  if (!seat.room_id) {
+    return `${prefix}room_id la bat buoc`;
+  }
+
+  if (!seat.seat_type_id) {
+    return `${prefix}seat_type_id la bat buoc`;
+  }
+
+  if (!seat.seat_row) {
+    return `${prefix}seat_row la bat buoc`;
+  }
+
+  if (seat.seat_number === undefined || seat.seat_number === null || seat.seat_number === "") {
+    return `${prefix}seat_number la bat buoc`;
+  }
+
+  return null;
+};
+
 export const getAllSeats = async (req, res) => {
   try {
     const filter = buildSeatFilter(req.query);
@@ -140,88 +172,130 @@ export const getSeatsByRoom = async (req, res) => {
 
 export const createSeat = async (req, res) => {
   try {
-    const { room_id, seat_type_id, seat_row, seat_number, status } = req.body;
+    const isBulkCreate = Array.isArray(req.body.seats);
+    const rawSeats = isBulkCreate ? req.body.seats : [req.body];
 
-    if (!room_id) {
+    const normalizedSeats = rawSeats.map((seat) =>
+      normalizeSeatPayload(seat, {
+        room_id: req.body.room_id,
+        seat_type_id: req.body.seat_type_id,
+        status: req.body.status,
+      })
+    );
+
+    if (normalizedSeats.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "room_id la bat buoc",
+        message: "Danh sach seat khong duoc rong",
       });
     }
 
-    if (!seat_type_id) {
-      return res.status(400).json({
-        success: false,
-        message: "seat_type_id la bat buoc",
-      });
+    for (let i = 0; i < normalizedSeats.length; i += 1) {
+      const validationError = validateSeatPayload(normalizedSeats[i], isBulkCreate ? i : null);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          message: validationError,
+        });
+      }
     }
 
-    if (!seat_row) {
-      return res.status(400).json({
-        success: false,
-        message: "seat_row la bat buoc",
-      });
-    }
+    const roomIds = [...new Set(normalizedSeats.map((seat) => seat.room_id.toString()))];
+    const seatTypeIds = [...new Set(normalizedSeats.map((seat) => seat.seat_type_id.toString()))];
 
-    if (seat_number === undefined || seat_number === null || seat_number === "") {
-      return res.status(400).json({
-        success: false,
-        message: "seat_number la bat buoc",
-      });
-    }
-
-    const room = await Room.findOne({
-      _id: room_id,
+    const rooms = await Room.find({
+      _id: { $in: roomIds },
       deleted_at: null,
     });
 
-    if (!room) {
+    if (rooms.length !== roomIds.length) {
       return res.status(404).json({
         success: false,
         message: "Khong tim thay room",
       });
     }
 
-    const seatType = await SeatType.findById(seat_type_id);
+    const seatTypes = await SeatType.find({
+      _id: { $in: seatTypeIds },
+    });
 
-    if (!seatType) {
+    if (seatTypes.length !== seatTypeIds.length) {
       return res.status(404).json({
         success: false,
         message: "Khong tim thay seat type",
       });
     }
 
-    const existingSeat = await Seat.findOne({
-      room_id,
-      seat_row: seat_row.trim(),
-      seat_number: Number(seat_number),
+    const preparedSeats = normalizedSeats.map((seat) => ({
+      room_id: seat.room_id,
+      seat_type_id: seat.seat_type_id,
+      seat_row: String(seat.seat_row).trim(),
+      seat_number: Number(seat.seat_number),
+      status: parseBoolean(seat.status, true),
+    }));
+
+    const seenKeys = new Set();
+    for (const seat of preparedSeats) {
+      const key = `${seat.room_id}:${seat.seat_row}:${seat.seat_number}`;
+      if (seenKeys.has(key)) {
+        return res.status(409).json({
+          success: false,
+          message: "Danh sach seat co du lieu trung nhau",
+        });
+      }
+      seenKeys.add(key);
+    }
+
+    const existingSeats = await Seat.find({
       deleted_at: null,
+      $or: preparedSeats.map((seat) => ({
+        room_id: seat.room_id,
+        seat_row: seat.seat_row,
+        seat_number: seat.seat_number,
+      })),
     });
 
-    if (existingSeat) {
+    if (existingSeats.length > 0) {
       return res.status(409).json({
         success: false,
         message: "Seat da ton tai trong room nay",
       });
     }
 
-    const seat = await Seat.create({
-      room_id,
-      seat_type_id,
-      seat_row: seat_row.trim(),
-      seat_number: Number(seat_number),
-      status: parseBoolean(status, true),
-    });
+    if (!isBulkCreate) {
+      const [singleSeat] = preparedSeats;
+      const seat = await Seat.create(singleSeat);
 
-    await seat.populate("room_id", "name capacity cinema_id");
-    await seat.populate("seat_type_id", "name description price_multiplier");
+      await seat.populate("room_id", "name capacity cinema_id");
+      await seat.populate("seat_type_id", "name description price_multiplier");
 
-    res.status(201).json({
+      return res.status(201).json({
+        success: true,
+        message: "Them seat thanh cong",
+        data: seat,
+      });
+    }
+
+    const createdSeats = await Seat.insertMany(preparedSeats);
+
+    await Seat.populate(createdSeats, [
+      { path: "room_id", select: "name capacity cinema_id" },
+      { path: "seat_type_id", select: "name description price_multiplier" },
+    ]);
+
+    return res.status(201).json({
       success: true,
-      message: "Them seat thanh cong",
-      data: seat,
+      message: "Them seats thanh cong",
+      data: createdSeats,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Seat da ton tai trong room nay",
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message,
