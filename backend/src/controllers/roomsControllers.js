@@ -1,3 +1,4 @@
+import Cinema from "../models/Cinema.js";
 import Room from "../models/Room.js";
 
 export const getAllRooms = async (req, res) => {
@@ -80,6 +81,57 @@ export const getRoomsByCinema = async (req, res) => {
     res.status(200).json({
       success: true,
       data: rooms,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const createRoom = async (req, res) => {
+  try {
+    const { cinema_id, name, capacity } = req.body;
+
+    if (!cinema_id) {
+      return res.status(400).json({
+        success: false,
+        message: "cinema_id là bắt buộc",
+      });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "name là bắt buộc",
+      });
+    }
+
+    const cinema = await Cinema.findOne({
+      _id: cinema_id,
+      deleted_at: null,
+    });
+
+    if (!cinema) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cinema",
+      });
+    }
+
+    const room = await Room.create({
+      cinema_id,
+      name,
+      capacity: capacity !== undefined && capacity !== null ? Number(capacity) : null,
+    });
+
+    await room.populate("cinema_id", "name city address");
+
+    res.status(201).json({
+      success: true,
+      message: "Thêm room thành công",
+      data: room,
     });
   } catch (error) {
     res.status(500).json({
