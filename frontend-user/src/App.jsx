@@ -4,9 +4,8 @@ import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
-import PromotionPage from './pages/PromotionPage'; // Import trang khuyến mãi mới
+import PromotionPage from './pages/PromotionPage'; 
 
-// Dữ liệu danh sách phim
 const homeMovies = [
   { id: 1, title: 'MA XÓ', tags: 'Kinh dị', image: 'https://cdn.galaxycine.vn/media/2026/5/29/ma-xo-2_1780061164303.jpg' },
   { id: 2, title: 'TOY STORY 5', tags: 'Hoạt hình', image: 'https://iguov8nhvyobj.vcdn.cloud/media/catalog/product/cache/1/image/c5f0a1eff4c394a251036189ccddaacd/p/o/poster_cau_chuyen_do_choi_5_.jpg' },
@@ -26,7 +25,6 @@ function HomePage() {
       <div className="mx-auto mt-12 mb-24 w-[90%] max-w-[1400px]">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-12">
           
-          {/* CỘT TRÁI: DANH SÁCH PHIM */}
           <div>
             <div className="flex items-center justify-between mb-8 border-b border-white/10 pb-4">
               <h2 className="text-xl font-black uppercase text-[#ff6070] flex items-center gap-2">
@@ -48,7 +46,6 @@ function HomePage() {
             </div>
           </div>
 
-          {/* CỘT PHẢI: KHUYẾN MÃI & SỰ KIỆN */}
           <div className="hidden lg:flex flex-col gap-10">
             <div>
               <div className="flex items-center justify-between mb-6 border-b-2 border-[#ff6070] pb-2">

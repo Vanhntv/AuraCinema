@@ -1,7 +1,6 @@
 import React from 'react';
 
 function NewsPage() {
-  // Bộ dữ liệu mới đã được sửa link ảnh số 7 để hiển thị chuẩn xác
   const newsArticles = [
     {
       id: 1,
