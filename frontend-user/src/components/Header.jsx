@@ -1,11 +1,11 @@
 import { navItems } from '../data/homeData';
 import Logo from './Logo';
-import { Link, useLocation } from 'react-router-dom'; // Import Link và useLocation để nhận diện trang hiện tại
+import { Link, useLocation } from 'react-router-dom'; // Thêm Link và useLocation
 
 function Header() {
-  const location = useLocation(); // Lấy đường dẫn hiện tại của trang web
+  const location = useLocation(); // Lấy đường dẫn hiện tại để check gạch đỏ
 
-  // Hàm phụ trách trả về đường dẫn đúng dựa theo tên menu (item)
+  // Hàm dò đường dẫn chuẩn, các trang chưa làm thì không cho link về '/' để tránh bị trùng gạch đỏ
   const getRoutePath = (item) => {
     switch (item) {
       case 'Trang chủ':
@@ -15,11 +15,12 @@ function Header() {
       case 'Tin tức':
         return '/tin-tuc';
       default:
-        return '/'; // Khuyến mãi, Giá vé... chưa làm thì cho tạm về trang chủ
+        return `/coming-soon/${item}`; // Tránh trùng lặp với trang chủ '/'
     }
   };
 
   return (
+    // GIỮ NGUYÊN 100% THEO GRID GỐC CỦA BẠN
     <header className="mx-auto grid h-[118px] w-[min(1760px,calc(100%_-_96px))] grid-cols-[260px_minmax(0,1fr)_300px] items-center gap-7 max-xl:h-auto max-xl:w-[min(1120px,calc(100%_-_56px))] max-xl:grid-cols-[1fr_auto] max-xl:gap-x-6 max-xl:gap-y-4 max-xl:py-5 max-sm:w-[calc(100%_-_28px)]">
       <Logo />
 
@@ -29,7 +30,7 @@ function Header() {
       >
         {navItems.map((item) => {
           const targetPath = getRoutePath(item);
-          // Kiểm tra xem trang hiện tại (location.pathname) có trùng với mục này không để gạch chân đỏ
+          // CHỈ gạch đỏ khi URL trên trình duyệt trùng khớp hoàn toàn với targetPath của nút đó
           const isActive = location.pathname === targetPath;
 
           return (
@@ -37,7 +38,7 @@ function Header() {
               key={item}
               className={`relative whitespace-nowrap font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
                 isActive
-                  ? 'text-[#ff6070] after:absolute after:-bottom-3 after:left-0 after:right-0 after:h-0.5 after:bg-[#ff6070] after:content-[""]'
+                  ? 'text-[#ff6070] after:absolute after:-bottom-3 after:left-0 after:right-0 Festive after:h-0.5 after:bg-[#ff6070] after:content-[""]'
                   : ''
               }`}
               to={targetPath}
