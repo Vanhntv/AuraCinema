@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getTrailersByMovie } from '../services/trailerService'
 
 const fallbackBackdrop =
@@ -21,6 +21,34 @@ function getStatusLabel(status) {
   return labels[status] || 'Đang cập nhật'
 }
 
+function getYoutubeEmbedUrl(url) {
+  if (!url) return ''
+
+  try {
+    const parsed = new URL(url)
+
+    if (parsed.hostname.includes('youtu.be')) {
+      const id = parsed.pathname.split('/').filter(Boolean)[0]
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : ''
+    }
+
+    if (parsed.pathname.includes('/embed/')) {
+      const id = parsed.pathname.split('/embed/')[1]?.split('/')[0]
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : ''
+    }
+
+    if (parsed.pathname.includes('/shorts/')) {
+      const id = parsed.pathname.split('/shorts/')[1]?.split('/')[0]
+      return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : ''
+    }
+
+    const id = parsed.searchParams.get('v')
+    return id ? `https://www.youtube.com/embed/${id}?autoplay=1` : ''
+  } catch {
+    return ''
+  }
+}
+
 function InfoItem({ label, value }) {
   return (
     <div>
@@ -34,15 +62,87 @@ function InfoItem({ label, value }) {
   )
 }
 
-function MovieTrailerLink({ movieId }) {
-  const [trailer, setTrailer] = useState(null)
+function TrailerPlayerModal({ trailer, onClose }) {
+  const embedUrl = useMemo(
+    () => getYoutubeEmbedUrl(trailer?.youtube_url),
+    [trailer?.youtube_url],
+  )
+
+  if (!trailer) return null
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] grid place-items-center bg-black/80 px-5 py-8 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Trailer ${trailer.title}`}
+    >
+      <div
+        className="relative w-[min(920px,100%)] overflow-hidden rounded-3xl border border-white/10 bg-[#0b1018] shadow-[0_30px_90px_rgba(0,0,0,0.65)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+          <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+            {trailer.title || 'Trailer'}
+          </h3>
+          <button
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+            type="button"
+            aria-label="Đóng trailer"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="aspect-video bg-black">
+          {embedUrl ? (
+            <iframe
+              className="h-full w-full"
+              src={embedUrl}
+              title={trailer.title || 'Trailer'}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          ) : (
+            <div className="grid h-full place-items-center px-6 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-300">
+              Link trailer chưa đúng định dạng YouTube.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MovieTrailerButton({ movie }) {
+  const [trailer, setTrailer] = useState(() =>
+    movie?.trailer_url
+      ? {
+          title: `${movie.title} - Trailer`,
+          youtube_url: movie.trailer_url,
+        }
+      : null,
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isPlayerOpen, setIsPlayerOpen] = useState(false)
 
   useEffect(() => {
     let isMounted = true
 
     async function loadTrailer() {
+      if (movie?.trailer_url) {
+        setTrailer({
+          title: `${movie.title} - Trailer`,
+          youtube_url: movie.trailer_url,
+        })
+        setError('')
+        return
+      }
+
+      const movieId = movie?._id
       if (!movieId) return
 
       try {
@@ -70,7 +170,7 @@ function MovieTrailerLink({ movieId }) {
     return () => {
       isMounted = false
     }
-  }, [movieId])
+  }, [movie])
 
   return (
     <div className="mt-7">
@@ -98,24 +198,30 @@ function MovieTrailerLink({ movieId }) {
         )}
 
         {!isLoading && !error && trailer?.youtube_url && (
-          <div>
-            <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-slate-200">
-              {trailer.title}
-            </p>
-            <a
-              className="mt-3 inline-flex rounded-full bg-white/10 px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white no-underline transition-colors hover:bg-[#ff6070]"
-              href={trailer.youtube_url}
-              target="_blank"
-              rel="noreferrer"
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-slate-200">
+                {trailer.title}
+              </p>
+              <p className="mt-1 break-all font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs text-slate-500">
+                {trailer.youtube_url}
+              </p>
+            </div>
+            <button
+              className="inline-flex rounded-full bg-white/10 px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white transition-colors hover:bg-[#ff6070]"
+              type="button"
+              onClick={() => setIsPlayerOpen(true)}
             >
-              Mở trailer
-            </a>
-            <p className="mt-3 break-all font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs text-slate-500">
-              {trailer.youtube_url}
-            </p>
+              Xem trailer
+            </button>
           </div>
         )}
       </div>
+
+      <TrailerPlayerModal
+        trailer={isPlayerOpen ? trailer : null}
+        onClose={() => setIsPlayerOpen(false)}
+      />
     </div>
   )
 }
@@ -181,7 +287,7 @@ function MovieDetailModal({ movie, onClose, onBook }) {
               {movie.description || 'Phim chưa có mô tả.'}
             </p>
 
-            <MovieTrailerLink movieId={movie._id} />
+            <MovieTrailerButton movie={movie} />
 
             <div className="mt-7 grid grid-cols-2 gap-5 max-sm:grid-cols-1">
               <InfoItem label="Thời lượng" value={movie.duration ? `${movie.duration} phút` : ''} />

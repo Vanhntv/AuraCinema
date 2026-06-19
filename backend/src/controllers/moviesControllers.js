@@ -1,4 +1,5 @@
 import Movie from "../models/Movie.js";
+import Trailer from "../models/Trailer.js";
 
 const normalizeMoviePayload = (body) => {
   const payload = { ...body };
@@ -18,12 +19,66 @@ const normalizeMoviePayload = (body) => {
     delete payload.ageLimit;
   }
 
+  delete payload.trailer_url;
+  delete payload.youtube_url;
+
   return payload;
+};
+
+const getTrailerUrlFromPayload = (body) => {
+  if (body.trailer_url !== undefined) return body.trailer_url;
+  if (body.youtube_url !== undefined) return body.youtube_url;
+  return undefined;
+};
+
+const syncMovieTrailer = async (movie, trailerUrl) => {
+  if (trailerUrl === undefined) return;
+
+  const youtubeUrl = typeof trailerUrl === "string" ? trailerUrl.trim() : "";
+
+  if (!youtubeUrl) {
+    await Trailer.deleteMany({ movie_id: movie._id });
+    return;
+  }
+
+  await Trailer.findOneAndUpdate(
+    { movie_id: movie._id },
+    {
+      movie_id: movie._id,
+      title: `${movie.title} - Trailer`,
+      youtube_url: youtubeUrl,
+      status: true,
+    },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+};
+
+const attachTrailerUrl = async (movies) => {
+  const list = Array.isArray(movies) ? movies : [movies];
+  const movieIds = list.map((movie) => movie._id);
+  const trailers = await Trailer.find({
+    movie_id: { $in: movieIds },
+    status: true,
+  }).sort({ created_at: -1 });
+
+  const trailerMap = trailers.reduce((acc, trailer) => {
+    const movieId = trailer.movie_id.toString();
+    if (!acc[movieId]) acc[movieId] = trailer.youtube_url;
+    return acc;
+  }, {});
+
+  const data = list.map((movie) => {
+    const plain = movie.toObject ? movie.toObject() : movie;
+    plain.trailer_url = trailerMap[plain._id.toString()] || "";
+    return plain;
+  });
+
+  return Array.isArray(movies) ? data : data[0];
 };
 
 export const getAllMovies = async (req, res) => {
   try {
-    const { status, q } = req.query;
+    const { status, q, search } = req.query;
     const filter = {
       deleted_at: null,
     };
@@ -32,17 +87,19 @@ export const getAllMovies = async (req, res) => {
       filter.status = status;
     }
 
-    if (q) {
-      filter.title = { $regex: q, $options: "i" };
+    const keyword = q || search;
+    if (keyword) {
+      filter.title = { $regex: keyword, $options: "i" };
     }
 
     const movies = await Movie.find(filter)
       .populate("genres", "name")
       .sort({ created_at: -1 });
+    const data = await attachTrailerUrl(movies);
 
     res.status(200).json({
       success: true,
-      data: movies,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -68,9 +125,11 @@ export const getMovieById = async (req, res) => {
       });
     }
 
+    const data = await attachTrailerUrl(movie);
+
     res.status(200).json({
       success: true,
-      data: movie,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -84,11 +143,13 @@ export const createMovie = async (req, res) => {
   try {
     const movie = await Movie.create(normalizeMoviePayload(req.body));
     await movie.populate("genres", "name");
+    await syncMovieTrailer(movie, getTrailerUrlFromPayload(req.body));
+    const data = await attachTrailerUrl(movie);
 
     res.status(201).json({
       success: true,
       message: "Thêm phim thành công",
-      data: movie,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -115,10 +176,13 @@ export const updateMovie = async (req, res) => {
       });
     }
 
+    await syncMovieTrailer(movie, getTrailerUrlFromPayload(req.body));
+    const data = await attachTrailerUrl(movie);
+
     res.status(200).json({
       success: true,
       message: "Cập nhật phim thành công",
-      data: movie,
+      data,
     });
   } catch (error) {
     res.status(500).json({
