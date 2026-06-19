@@ -1,7 +1,7 @@
 import { useAuth } from "../hooks/useAuth";
 
 function HomePage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
     <main className="home-shell">
@@ -25,10 +25,6 @@ function HomePage() {
             <dd>{user?.phone || "Chua cap nhat"}</dd>
           </div>
         </dl>
-
-        <button className="secondary-button" type="button" onClick={logout}>
-          Dang xuat
-        </button>
       </section>
     </main>
   );
