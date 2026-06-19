@@ -4,6 +4,7 @@ import DashboardPage from "./pages/DashboardPage";
 import GenresPage from "./pages/GenresPage";
 import MoviesPage from "./pages/MoviesPage";
 import CinemasPage from "./pages/CinemasPage";
+import TrailersPage from "./pages/TrailersPage";
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
         <Route path="/genres" element={<GenresPage />} />
         <Route path="/movies" element={<MoviesPage />} />
         <Route path="/cinemas" element={<CinemasPage />} />
+        <Route path="/trailers" element={<TrailersPage />} />
       </Route>
     </Routes>
   );
