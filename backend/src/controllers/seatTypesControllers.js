@@ -73,3 +73,45 @@ export const getSeatTypeById = async (req, res) => {
     });
   }
 };
+
+export const updateSeatType = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, price_multiplier } = req.body;
+
+    const seatType = await SeatType.findById(id);
+
+    if (!seatType) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay seat type",
+      });
+    }
+
+    if (name !== undefined) {
+      seatType.name = name;
+    }
+
+    if (description !== undefined) {
+      seatType.description = description;
+    }
+
+    if (price_multiplier !== undefined) {
+      seatType.price_multiplier =
+        price_multiplier !== null && price_multiplier !== "" ? Number(price_multiplier) : 1;
+    }
+
+    await seatType.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Cap nhat seat type thanh cong",
+      data: seatType,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
