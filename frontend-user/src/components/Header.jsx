@@ -10,14 +10,10 @@ function Header() {
         className="flex min-w-0 items-center justify-between gap-[18px] max-xl:col-span-full max-xl:row-start-2 max-xl:justify-start max-xl:gap-8 max-xl:overflow-x-auto max-xl:py-2 max-lg:w-full"
         aria-label="Điều hướng chính"
       >
-        {navItems.map((item, index) => (
+        {navItems.map((item) => (
           <a
             key={item}
-            className={`relative whitespace-nowrap font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
-              index === 0
-                ? 'text-[#ff6070] after:absolute after:-bottom-3 after:left-0 after:right-0 after:h-0.5 after:bg-[#d7d9df] after:content-[""]'
-                : ''
-            }`}
+            className='relative whitespace-nowrap font-["Be_Vietnam_Pro",Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors after:absolute after:-bottom-3 after:left-0 after:right-0 after:h-0.5 after:origin-center after:scale-x-0 after:bg-[#d7d9df] after:transition-transform after:content-[""] hover:text-[#ff6070] hover:after:scale-x-100 max-xl:text-[13px]'
             href="/"
           >
             {item}
