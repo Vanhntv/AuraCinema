@@ -104,8 +104,15 @@ export const getSeatById = async (req, res) => {
 
 export const getSeatsByRoom = async (req, res) => {
   try {
-    const { room_id } = req.params;
+    const room_id = req.params.room_id || req.query.room_id;
     const { q, seat_type_id, status } = req.query;
+
+    if (!room_id) {
+      return res.status(400).json({
+        success: false,
+        message: "room_id la bat buoc",
+      });
+    }
 
     const filter = buildSeatFilter({
       q,

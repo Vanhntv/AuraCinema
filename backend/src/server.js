@@ -26,6 +26,7 @@ app.use("/api/dashboard", dashboardRoute)
 app.use("/api/seat-types", seatTypesRoute)
 app.use("/seat-types", seatTypesRoute)
 app.use("/api/seats", seatsRoute)
+app.use("/seats", seatsRoute)
 connectDB().then(()=>{
 app.listen(5001, () =>{
     console.log("5001")

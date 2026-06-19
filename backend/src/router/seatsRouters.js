@@ -11,6 +11,7 @@ import {
 const router = express.Router();
 
 router.get("/", getAllSeats);
+router.get("/room", getSeatsByRoom);
 router.get("/room/:room_id", getSeatsByRoom);
 router.get("/:id", getSeatById);
 router.post("/", createSeat);
