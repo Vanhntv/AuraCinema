@@ -27,6 +27,10 @@ const movieSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    releaseDate: {
+      type: Date,
+      default: null,
+    },
     director: {
       type: String,
       default: null,
@@ -47,11 +51,27 @@ const movieSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    ageLimit: {
+      type: Number,
+      default: null,
+    },
     status: {
       type: String,
       enum: ["coming_soon", "now_showing", "ended"],
       default: "coming_soon",
     },
+    genreIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Genre",
+      },
+    ],
+    genres: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Genre",
+      },
+    ],
     deleted_at: {
       type: Date,
       default: null,
