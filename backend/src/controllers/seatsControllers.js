@@ -308,6 +308,19 @@ export const updateSeat = async (req, res) => {
     const { id } = req.params;
     const { room_id, seat_type_id, seat_row, seat_number, status } = req.body;
 
+    if (
+      room_id === undefined &&
+      seat_type_id === undefined &&
+      seat_row === undefined &&
+      seat_number === undefined &&
+      status === undefined
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Khong co du lieu can cap nhat",
+      });
+    }
+
     const seat = await Seat.findOne({
       _id: id,
       deleted_at: null,
@@ -350,11 +363,29 @@ export const updateSeat = async (req, res) => {
     }
 
     if (seat_row !== undefined) {
-      seat.seat_row = seat_row;
+      const normalizedSeatRow = String(seat_row).trim();
+
+      if (!normalizedSeatRow) {
+        return res.status(400).json({
+          success: false,
+          message: "seat_row la bat buoc",
+        });
+      }
+
+      seat.seat_row = normalizedSeatRow;
     }
 
     if (seat_number !== undefined) {
-      seat.seat_number = Number(seat_number);
+      const normalizedSeatNumber = Number(seat_number);
+
+      if (Number.isNaN(normalizedSeatNumber)) {
+        return res.status(400).json({
+          success: false,
+          message: "seat_number khong hop le",
+        });
+      }
+
+      seat.seat_number = normalizedSeatNumber;
     }
 
     if (status !== undefined) {
