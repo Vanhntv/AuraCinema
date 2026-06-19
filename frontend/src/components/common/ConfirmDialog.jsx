@@ -5,7 +5,7 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "420px" }}>
+      <div className="modal" onClick={(event) => event.stopPropagation()} style={{ maxWidth: "420px" }}>
         <div className="modal-body" style={{ padding: "32px 24px 24px" }}>
           <div className="confirm-icon">
             <HiOutlineExclamation />
