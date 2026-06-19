@@ -9,6 +9,7 @@ import roomsRoute from "./router/roomsRouters.js";
 import trailersRoute from "./router/trailersRouters.js";
 import dashboardRoute from "./router/dashboardRouters.js";
 import seatTypesRoute from "./router/seatTypesRouters.js";
+import seatsRoute from "./router/seatsRouters.js";
 import "dotenv/config";
 
 
@@ -24,6 +25,7 @@ app.use("/api/trailers", trailersRoute)
 app.use("/api/dashboard", dashboardRoute)
 app.use("/api/seat-types", seatTypesRoute)
 app.use("/seat-types", seatTypesRoute)
+app.use("/api/seats", seatsRoute)
 connectDB().then(()=>{
 app.listen(5001, () =>{
     console.log("5001")
