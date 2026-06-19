@@ -31,3 +31,35 @@ export const getAllCinemas = async (req, res) => {
     });
   }
 };
+
+export const createCinema = async (req, res) => {
+  try {
+    const { name, address, city, phone, image } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "name là bắt buộc",
+      });
+    }
+
+    const cinema = await Cinema.create({
+      name,
+      address: address ?? null,
+      city: city ?? null,
+      phone: phone ?? null,
+      image: image ?? null,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Thêm cinema thành công",
+      data: cinema,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
