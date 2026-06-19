@@ -1,9 +1,9 @@
-import { Navigate, Routes, Route } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import AdminLayout from "./components/layout/AdminLayout";
 import DashboardPage from "./pages/DashboardPage";
 import GenresPage from "./pages/GenresPage";
-import MoviesPage from "./pages/MoviesPage";
 import LoginPage from "./pages/auth/LoginPage";
+import MoviesPage from "./pages/MoviesPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import AdminRoute from "./routes/AdminRoute";
 import PublicRoute from "./routes/PublicRoute";
@@ -19,6 +19,7 @@ function App() {
           </PublicRoute>
         }
       />
+
       <Route
         path="/register"
         element={
@@ -27,6 +28,7 @@ function App() {
           </PublicRoute>
         }
       />
+
       <Route
         element={
           <AdminRoute>
@@ -34,11 +36,14 @@ function App() {
           </AdminRoute>
         }
       >
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/genres" element={<GenresPage />} />
-        <Route path="/movies" element={<MoviesPage />} />
+        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<DashboardPage />} />
+        <Route path="/admin/genres" element={<GenresPage />} />
+        <Route path="/admin/movies" element={<MoviesPage />} />
+        <Route path="/genres" element={<Navigate to="/admin/genres" replace />} />
+        <Route path="/movies" element={<Navigate to="/admin/movies" replace />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
     </Routes>
   );
 }

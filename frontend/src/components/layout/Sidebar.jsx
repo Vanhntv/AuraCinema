@@ -13,7 +13,7 @@ const menuItems = [
   {
     section: "Tổng quan",
     items: [
-      { path: "/", icon: <HiOutlineViewGrid />, label: "Dashboard" },
+      { path: "/admin/dashboard", icon: <HiOutlineViewGrid />, label: "Dashboard" },
     ],
   },
   {
@@ -46,13 +46,11 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
   return (
     <>
       <aside className={sidebarClasses}>
-        {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">🎬</div>
+          <div className="sidebar-logo-icon">A</div>
           <span className="sidebar-logo-text">AuraCinema</span>
         </div>
 
-        {/* Navigation */}
         <nav className="sidebar-nav">
           {menuItems.map((section) => (
             <div key={section.section}>
@@ -61,7 +59,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
                 <NavLink
                   key={item.path}
                   to={item.path}
-                  end={item.path === "/"}
                   className={({ isActive }) =>
                     `sidebar-link ${isActive ? "active" : ""}`
                   }
@@ -75,7 +72,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
           ))}
         </nav>
 
-        {/* Footer */}
         <div className="sidebar-footer">
           <div className="sidebar-footer-info">
             <div className="sidebar-footer-avatar">
@@ -89,7 +85,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
         </div>
       </aside>
 
-      {/* Mobile Overlay */}
       {isMobileOpen && (
         <div className="sidebar-overlay active" onClick={onCloseMobile} />
       )}

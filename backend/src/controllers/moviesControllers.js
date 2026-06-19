@@ -1,5 +1,26 @@
 import Movie from "../models/Movie.js";
 
+const normalizeMoviePayload = (body) => {
+  const payload = { ...body };
+
+  if (Array.isArray(payload.genreIds)) {
+    payload.genres = payload.genreIds;
+    delete payload.genreIds;
+  }
+
+  if (payload.releaseDate && !payload.release_date) {
+    payload.release_date = payload.releaseDate;
+    delete payload.releaseDate;
+  }
+
+  if (payload.ageLimit !== undefined && payload.age_limit === undefined) {
+    payload.age_limit = payload.ageLimit;
+    delete payload.ageLimit;
+  }
+
+  return payload;
+};
+
 export const getAllMovies = async (req, res) => {
   try {
     const { status, q, search, page = 1, limit = 10 } = req.query;
@@ -21,8 +42,8 @@ export const getAllMovies = async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const movies = await Movie.find(filter)
-      .populate("genres")
-      .populate("genreIds")
+      .populate("genres", "name")
+      .populate("genreIds", "name")
       .sort({ created_at: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -57,8 +78,8 @@ export const getMovieById = async (req, res) => {
       _id: id,
       deleted_at: null,
     })
-      .populate("genres")
-      .populate("genreIds");
+      .populate("genres", "name")
+      .populate("genreIds", "name")
 
     if (!movie) {
       return res.status(404).json({
@@ -81,37 +102,21 @@ export const getMovieById = async (req, res) => {
 
 export const createMovie = async (req, res) => {
   try {
-    const { genreIds, ...movieData } = req.body;
+    const movie = await Movie.create(normalizeMoviePayload(req.body));
+    await movie.populate("genres", "name");
 
-    // Normalize field names
-    if (!movieData.releaseDate && movieData.release_date) {
-      movieData.releaseDate = movieData.release_date;
-    }
-    if (!movieData.ageLimit && movieData.age_limit) {
-      movieData.ageLimit = movieData.age_limit;
-    }
-
-    const movie = await Movie.create({
-      ...movieData,
-      genres: genreIds || [],
-      genreIds: genreIds || [],
-    });
-
-    const populatedMovie = await movie.populate("genres");
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Thêm phim thành công",
-      data: populatedMovie,
+      data: movie,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 export const updateMovie = async (req, res) => {
   try {
     const { id } = req.params;
@@ -130,11 +135,11 @@ export const updateMovie = async (req, res) => {
       ...(genreIds && { genres: genreIds, genreIds: genreIds }),
     };
 
-    const movie = await Movie.findOneAndUpdate(
+     const movie = await Movie.findOneAndUpdate(
       { _id: id, deleted_at: null },
-      updateData,
+      normalizeMoviePayload(req.body),
       { new: true }
-    ).populate("genres");
+    ).populate("genres", "name");
 
     if (!movie) {
       return res.status(404).json({
