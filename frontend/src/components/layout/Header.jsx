@@ -1,10 +1,12 @@
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   HiOutlineMenu,
   HiOutlineSearch,
   HiOutlineBell,
   HiOutlineMoon,
+  HiOutlineLogout,
 } from "react-icons/hi";
+import { useAuth } from "../../hooks/useAuth";
 
 const pageTitles = {
   "/": "Dashboard",
@@ -17,7 +19,14 @@ const pageTitles = {
 
 const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
   const currentTitle = pageTitles[location.pathname] || "Trang";
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <header className={`header ${isCollapsed ? "sidebar-collapsed" : ""}`}>
@@ -67,6 +76,25 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
         <button className="header-icon-btn" id="btn-notifications" title="Thông báo">
           <HiOutlineBell />
           <span className="header-notification-badge"></span>
+        </button>
+
+        <div className="header-user">
+          <div className="header-user-avatar">
+            {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
+          </div>
+          <div className="header-user-info">
+            <span className="header-user-name">{user?.full_name || "Admin"}</span>
+            <span className="header-user-role">Quản trị viên</span>
+          </div>
+        </div>
+
+        <button
+          className="header-icon-btn"
+          id="btn-logout"
+          onClick={handleLogout}
+          title="Đăng xuất"
+        >
+          <HiOutlineLogout />
         </button>
       </div>
     </header>

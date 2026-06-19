@@ -7,6 +7,7 @@ import {
   HiOutlineUsers,
   HiOutlineCog,
 } from "react-icons/hi";
+import { useAuth } from "../../hooks/useAuth";
 
 const menuItems = [
   {
@@ -33,6 +34,7 @@ const menuItems = [
 ];
 
 const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
+  const { user } = useAuth();
   const sidebarClasses = [
     "sidebar",
     isCollapsed ? "collapsed" : "",
@@ -76,9 +78,11 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
         {/* Footer */}
         <div className="sidebar-footer">
           <div className="sidebar-footer-info">
-            <div className="sidebar-footer-avatar">A</div>
+            <div className="sidebar-footer-avatar">
+              {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
+            </div>
             <div className="sidebar-footer-details">
-              <div className="sidebar-footer-name">Admin</div>
+              <div className="sidebar-footer-name">{user?.full_name || "Admin"}</div>
               <div className="sidebar-footer-role">Quản trị viên</div>
             </div>
           </div>
