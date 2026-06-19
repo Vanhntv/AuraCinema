@@ -1,8 +1,9 @@
 import express from "express";
-import { getAllTrailers } from "../controllers/trailersControllers.js";
+import { createTrailer, getAllTrailers } from "../controllers/trailersControllers.js";
 
 const router = express.Router();
 
 router.get("/", getAllTrailers);
+router.post("/", createTrailer);
 
 export default router;
