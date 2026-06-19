@@ -47,6 +47,12 @@ const movieSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    genres: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Genre",
+      },
+    ],
     status: {
       type: String,
       enum: ["coming_soon", "now_showing", "ended"],
