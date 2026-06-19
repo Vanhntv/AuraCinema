@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { slides } from '../data/homeData'
-import MovieSchedule from './MovieSchedule'
+import MovieSchedule from '../pages/MovieSchedule'
 import PosterStack from './PosterStack'
 
 function HeroSlider() {
