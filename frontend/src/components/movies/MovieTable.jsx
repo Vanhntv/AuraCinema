@@ -1,8 +1,8 @@
-import { HiOutlinePencil, HiOutlineTrash } from "react-icons/hi";
+import { HiOutlinePencil, HiOutlinePlay, HiOutlineTrash } from "react-icons/hi";
 
-const MovieTable = ({ movies, onEdit, onDelete }) => {
+const MovieTable = ({ movies, onEdit, onDelete, onViewTrailer }) => {
   const formatDate = (dateStr) => {
-    if (!dateStr) return "—";
+    if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString("vi-VN", {
       day: "2-digit",
       month: "2-digit",
@@ -11,13 +11,13 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
   };
 
   const getMovieGenres = (movie) => {
-    if (!Array.isArray(movie.genres)) return "—";
+    if (!Array.isArray(movie.genres)) return "-";
 
     const genreNames = movie.genres
       .map((genre) => (typeof genre === "string" ? "" : genre.name))
       .filter(Boolean);
 
-    return genreNames.length > 0 ? genreNames.join(", ") : "—";
+    return genreNames.length > 0 ? genreNames.join(", ") : "-";
   };
 
   const getStatusBadgeClass = (status) => {
@@ -47,9 +47,9 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
           <th style={{ minWidth: "150px" }}>Tên phim</th>
           <th style={{ minWidth: "120px" }}>Thể loại</th>
           <th style={{ width: "80px" }}>Thời lượng</th>
-          <th style={{ width: "100px" }}>Ngày phát hành</th>
-          <th style={{ width: "100px" }}>Trạng thái</th>
-          <th style={{ width: "120px", textAlign: "center" }}>Thao tác</th>
+          <th style={{ width: "110px" }}>Ngày phát hành</th>
+          <th style={{ width: "110px" }}>Trạng thái</th>
+          <th style={{ width: "150px", textAlign: "center" }}>Thao tác</th>
         </tr>
       </thead>
       <tbody>
@@ -77,8 +77,8 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
                     <img
                       src={movie.poster}
                       alt={movie.title}
-                      onError={(e) => {
-                        e.target.src =
+                      onError={(event) => {
+                        event.currentTarget.src =
                           "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='80'%3E%3Crect fill='%23333' width='60' height='80'/%3E%3C/svg%3E";
                       }}
                     />
@@ -89,7 +89,7 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
               </td>
               <td className="table-cell-name">{movie.title}</td>
               <td className="table-cell-genres">{getMovieGenres(movie)}</td>
-              <td>{movie.duration ? `${movie.duration} phút` : "—"}</td>
+              <td>{movie.duration ? `${movie.duration} phút` : "-"}</td>
               <td className="table-cell-date">
                 {formatDate(movie.release_date || movie.releaseDate)}
               </td>
@@ -100,6 +100,15 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
               </td>
               <td>
                 <div className="table-actions" style={{ justifyContent: "center" }}>
+                  <button
+                    className="btn btn-icon btn-ghost"
+                    style={{ color: "var(--color-success)" }}
+                    onClick={() => onViewTrailer(movie)}
+                    title="Xem trailer"
+                    id={`btn-trailer-${movie._id}`}
+                  >
+                    <HiOutlinePlay />
+                  </button>
                   <button
                     className="btn btn-icon btn-ghost"
                     style={{ color: "var(--color-info)" }}

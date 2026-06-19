@@ -62,7 +62,7 @@ function InfoItem({ label, value }) {
   )
 }
 
-function TrailerPlayerModal({ trailer, onClose }) {
+function TrailerModal({ trailer, onClose }) {
   const embedUrl = useMemo(
     () => getYoutubeEmbedUrl(trailer?.youtube_url),
     [trailer?.youtube_url],
@@ -107,7 +107,7 @@ function TrailerPlayerModal({ trailer, onClose }) {
             />
           ) : (
             <div className="grid h-full place-items-center px-6 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-300">
-              Link trailer chưa đúng định dạng YouTube.
+              Trailer không hợp lệ
             </div>
           )}
         </div>
@@ -218,7 +218,7 @@ function MovieTrailerButton({ movie }) {
         )}
       </div>
 
-      <TrailerPlayerModal
+      <TrailerModal
         trailer={isPlayerOpen ? trailer : null}
         onClose={() => setIsPlayerOpen(false)}
       />

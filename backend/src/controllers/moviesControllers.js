@@ -19,8 +19,17 @@ const normalizeMoviePayload = (body) => {
     delete payload.ageLimit;
   }
 
-  delete payload.trailer_url;
-  delete payload.youtube_url;
+  if (payload.youtube_url !== undefined && payload.trailer_url === undefined) {
+    payload.trailer_url = payload.youtube_url;
+    delete payload.youtube_url;
+  }
+
+  if (payload.trailer_url !== undefined) {
+    payload.trailer_url =
+      typeof payload.trailer_url === "string" && payload.trailer_url.trim()
+        ? payload.trailer_url.trim()
+        : null;
+  }
 
   return payload;
 };
@@ -69,7 +78,7 @@ const attachTrailerUrl = async (movies) => {
 
   const data = list.map((movie) => {
     const plain = movie.toObject ? movie.toObject() : movie;
-    plain.trailer_url = trailerMap[plain._id.toString()] || "";
+    plain.trailer_url = plain.trailer_url || trailerMap[plain._id.toString()] || "";
     return plain;
   });
 
