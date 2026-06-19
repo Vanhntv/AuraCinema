@@ -1,5 +1,26 @@
 import Movie from "../models/Movie.js";
 
+const normalizeMoviePayload = (body) => {
+  const payload = { ...body };
+
+  if (Array.isArray(payload.genreIds)) {
+    payload.genres = payload.genreIds;
+    delete payload.genreIds;
+  }
+
+  if (payload.releaseDate && !payload.release_date) {
+    payload.release_date = payload.releaseDate;
+    delete payload.releaseDate;
+  }
+
+  if (payload.ageLimit !== undefined && payload.age_limit === undefined) {
+    payload.age_limit = payload.ageLimit;
+    delete payload.ageLimit;
+  }
+
+  return payload;
+};
+
 export const getAllMovies = async (req, res) => {
   try {
     const { status, q } = req.query;
@@ -15,7 +36,9 @@ export const getAllMovies = async (req, res) => {
       filter.title = { $regex: q, $options: "i" };
     }
 
-    const movies = await Movie.find(filter).sort({ created_at: -1 });
+    const movies = await Movie.find(filter)
+      .populate("genres", "name")
+      .sort({ created_at: -1 });
 
     res.status(200).json({
       success: true,
@@ -36,7 +59,7 @@ export const getMovieById = async (req, res) => {
     const movie = await Movie.findOne({
       _id: id,
       deleted_at: null,
-    });
+    }).populate("genres", "name");
 
     if (!movie) {
       return res.status(404).json({
@@ -59,7 +82,8 @@ export const getMovieById = async (req, res) => {
 
 export const createMovie = async (req, res) => {
   try {
-    const movie = await Movie.create(req.body);
+    const movie = await Movie.create(normalizeMoviePayload(req.body));
+    await movie.populate("genres", "name");
 
     res.status(201).json({
       success: true,
@@ -80,9 +104,9 @@ export const updateMovie = async (req, res) => {
 
     const movie = await Movie.findOneAndUpdate(
       { _id: id, deleted_at: null },
-      req.body,
+      normalizeMoviePayload(req.body),
       { new: true }
-    );
+    ).populate("genres", "name");
 
     if (!movie) {
       return res.status(404).json({
