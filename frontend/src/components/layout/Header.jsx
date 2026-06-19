@@ -11,6 +11,7 @@ const pageTitles = {
   "/admin/dashboard": "Dashboard",
   "/genres": "Thể loại",
   "/movies": "Phim",
+  "/cinemas": "Rạp chiếu",
   "/showtimes": "Suất chiếu",
   "/users": "Người dùng",
   "/settings": "Cài đặt",

@@ -12,6 +12,10 @@ const genreSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        status: {
+            type: Boolean,
+            default: true,
+        },
         deleted_at: {
             type: Date,
             default: null,
