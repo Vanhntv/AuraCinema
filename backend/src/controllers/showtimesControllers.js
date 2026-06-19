@@ -140,3 +140,40 @@ export const getAllShowtimes = async (req, res) => {
     });
   }
 };
+
+export const getShowtimeById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const showtime = await Showtime.findOne({
+      _id: id,
+      deleted_at: null,
+    })
+      .populate("movie_id", "title poster duration release_date status")
+      .populate({
+        path: "room_id",
+        select: "name capacity cinema_id",
+        populate: {
+          path: "cinema_id",
+          select: "name city address",
+        },
+      });
+
+    if (!showtime) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay showtime",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: mapShowtime(showtime),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
