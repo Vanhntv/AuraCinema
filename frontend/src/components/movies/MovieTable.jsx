@@ -10,6 +10,16 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
     });
   };
 
+  const getMovieGenres = (movie) => {
+    if (!Array.isArray(movie.genres)) return "—";
+
+    const genreNames = movie.genres
+      .map((genre) => (typeof genre === "string" ? "" : genre.name))
+      .filter(Boolean);
+
+    return genreNames.length > 0 ? genreNames.join(", ") : "—";
+  };
+
   const getStatusBadgeClass = (status) => {
     const statusMap = {
       coming_soon: "status-badge status-coming-soon",
@@ -78,13 +88,11 @@ const MovieTable = ({ movies, onEdit, onDelete }) => {
                 </div>
               </td>
               <td className="table-cell-name">{movie.title}</td>
-              <td className="table-cell-genres">
-                {movie.genres && movie.genres.length > 0
-                  ? movie.genres.map((g) => g.name).join(", ")
-                  : "—"}
-              </td>
+              <td className="table-cell-genres">{getMovieGenres(movie)}</td>
               <td>{movie.duration ? `${movie.duration} phút` : "—"}</td>
-              <td className="table-cell-date">{formatDate(movie.releaseDate)}</td>
+              <td className="table-cell-date">
+                {formatDate(movie.release_date || movie.releaseDate)}
+              </td>
               <td>
                 <span className={getStatusBadgeClass(movie.status)}>
                   {getStatusLabel(movie.status)}

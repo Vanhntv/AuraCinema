@@ -3,22 +3,40 @@ import { HiOutlineX } from "react-icons/hi";
 import { getGenres } from "../../services/genreService";
 import GenreMultiSelect from "./GenreMultiSelect";
 
+const emptyFormData = {
+  title: "",
+  poster: "",
+  banner: "",
+  description: "",
+  duration: "",
+  release_date: "",
+  director: "",
+  actors: "",
+  language: "",
+  country: "",
+  age_limit: "",
+  status: "coming_soon",
+};
+
+const toDateInputValue = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value.split("T")[0];
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().split("T")[0];
+};
+
+const getGenreId = (genre) =>
+  typeof genre === "string" ? genre : genre?._id || genre?.id;
+
+const getInitialGenreIds = (movie) => {
+  const genres = movie?.genres || movie?.genreIds || [];
+  if (!Array.isArray(genres)) return [];
+  return genres.map(getGenreId).filter(Boolean);
+};
+
 const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
-  const [formData, setFormData] = useState({
-    title: "",
-    poster: "",
-    banner: "",
-    description: "",
-    duration: "",
-    releaseDate: "",
-    director: "",
-    actors: "",
-    language: "",
-    country: "",
-    ageLimit: "",
-    status: "coming_soon",
-    genreIds: [],
-  });
+  const [formData, setFormData] = useState(emptyFormData);
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [genreOptions, setGenreOptions] = useState([]);
   const [genresLoading, setGenresLoading] = useState(false);
@@ -53,44 +71,39 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
           banner: initialData.banner || "",
           description: initialData.description || "",
           duration: initialData.duration || "",
-          releaseDate: initialData.releaseDate
-            ? new Date(initialData.releaseDate).toISOString().split("T")[0]
-            : "",
+          release_date: toDateInputValue(
+            initialData.release_date || initialData.releaseDate
+          ),
           director: initialData.director || "",
           actors: initialData.actors || "",
           language: initialData.language || "",
           country: initialData.country || "",
-          ageLimit: initialData.ageLimit || "",
+          age_limit: initialData.age_limit ?? initialData.ageLimit ?? "",
           status: initialData.status || "coming_soon",
-          genreIds: [],
         });
-        // Set selected genres
-        if (initialData.genres && Array.isArray(initialData.genres)) {
-          setSelectedGenres(initialData.genres);
-        } else {
-          setSelectedGenres([]);
-        }
+        setSelectedGenres(
+          Array.isArray(initialData.genres)
+            ? initialData.genres.filter((genre) => typeof genre === "object")
+            : []
+        );
       } else {
-        setFormData({
-          title: "",
-          poster: "",
-          banner: "",
-          description: "",
-          duration: "",
-          releaseDate: "",
-          director: "",
-          actors: "",
-          language: "",
-          country: "",
-          ageLimit: "",
-          status: "coming_soon",
-          genreIds: [],
-        });
+        setFormData(emptyFormData);
         setSelectedGenres([]);
       }
       setErrors({});
     }
   }, [isOpen, initialData]);
+
+  useEffect(() => {
+    if (!isOpen || !initialData || genreOptions.length === 0) return;
+
+    const initialGenreIds = getInitialGenreIds(initialData);
+    if (initialGenreIds.length === 0) return;
+
+    setSelectedGenres(
+      genreOptions.filter((genre) => initialGenreIds.includes(genre._id))
+    );
+  }, [isOpen, initialData, genreOptions]);
 
   const validate = () => {
     const newErrors = {};
@@ -103,8 +116,8 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
     if (!formData.duration || formData.duration <= 0) {
       newErrors.duration = "Thời lượng phải là số dương";
     }
-    if (!formData.releaseDate) {
-      newErrors.releaseDate = "Ngày phát hành không được để trống";
+    if (!formData.release_date) {
+      newErrors.release_date = "Ngày phát hành không được để trống";
     }
     if (selectedGenres.length === 0) {
       newErrors.genres = "Phải chọn ít nhất một thể loại";
@@ -119,6 +132,8 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
     if (validate()) {
       const submitData = {
         ...formData,
+        duration: Number(formData.duration),
+        age_limit: formData.age_limit === "" ? null : Number(formData.age_limit),
         genreIds: selectedGenres.map((g) => g._id),
       };
       onSubmit(submitData);
@@ -197,8 +212,8 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
                   type="number"
                   className="form-input"
                   placeholder="13"
-                  value={formData.ageLimit}
-                  onChange={(e) => handleChange("ageLimit", e.target.value)}
+                  value={formData.age_limit}
+                  onChange={(e) => handleChange("age_limit", e.target.value)}
                   min="0"
                   id="input-movie-age-limit"
                 />
@@ -213,13 +228,13 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
                 </label>
                 <input
                   type="date"
-                  className={`form-input ${errors.releaseDate ? "error" : ""}`}
-                  value={formData.releaseDate}
-                  onChange={(e) => handleChange("releaseDate", e.target.value)}
+                  className={`form-input ${errors.release_date ? "error" : ""}`}
+                  value={formData.release_date}
+                  onChange={(e) => handleChange("release_date", e.target.value)}
                   id="input-movie-release-date"
                 />
-                {errors.releaseDate && (
-                  <p className="form-error">{errors.releaseDate}</p>
+                {errors.release_date && (
+                  <p className="form-error">{errors.release_date}</p>
                 )}
               </div>
 
