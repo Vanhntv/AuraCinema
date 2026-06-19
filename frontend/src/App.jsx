@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route } from "react-router-dom";
 import AdminLayout from "./components/layout/AdminLayout";
 import DashboardPage from "./pages/DashboardPage";
 import GenresPage from "./pages/GenresPage";
@@ -8,7 +8,8 @@ function App() {
   return (
     <Routes>
       <Route element={<AdminLayout />}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<DashboardPage />} />
         <Route path="/genres" element={<GenresPage />} />
         <Route path="/movies" element={<MoviesPage />} />
       </Route>
