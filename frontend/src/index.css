@@ -1323,6 +1323,10 @@ ul, ol {
   .header {
     left: 0 !important;
   }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -1356,6 +1360,15 @@ ul, ol {
     display: block;
     overflow-x: auto;
   }
+
+  .dashboard-header-actions {
+    width: 100%;
+  }
+
+  .dashboard-header-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1369,6 +1382,14 @@ ul, ol {
 
   .modal {
     margin: 16px;
+  }
+
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-panel {
+    padding: 16px;
   }
 }
 
