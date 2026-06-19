@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getMovies } from '../services/movieService'
+import MovieDetailModal from './MovieDetailModal'
 
 const fallbackPoster =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22 viewBox=%220 0 300 450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22225%22 fill=%22%23f8fafc%22 font-family=%22Arial%22 font-size=%2222%22 text-anchor=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E'
@@ -16,11 +17,14 @@ function getReleaseYear(dateValue) {
   return date.getFullYear()
 }
 
-function MovieCard({ movie }) {
+function MovieCard({ movie, onOpen }) {
   const year = getReleaseYear(movie.release_date || movie.releaseDate)
 
   return (
-    <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_18px_45px_rgba(0,0,0,0.22)]">
+    <article
+      className="group cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_18px_45px_rgba(0,0,0,0.22)] transition-transform duration-300 hover:-translate-y-1"
+      onClick={() => onOpen(movie)}
+    >
       <div className="aspect-[2/3] overflow-hidden bg-[#151b26]">
         <img
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -52,6 +56,10 @@ function MovieCard({ movie }) {
         <button
           className="mt-5 h-11 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
           type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onOpen(movie)
+          }}
         >
           Đặt vé
         </button>
@@ -60,7 +68,7 @@ function MovieCard({ movie }) {
   )
 }
 
-function MovieGroup({ title, movies, emptyText }) {
+function MovieGroup({ title, movies, emptyText, onOpenMovie }) {
   return (
     <div className="mt-10 first:mt-0">
       <div className="mb-5 flex items-center justify-between gap-4">
@@ -79,7 +87,7 @@ function MovieGroup({ title, movies, emptyText }) {
       ) : (
         <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
           {movies.map((movie) => (
-            <MovieCard key={movie._id} movie={movie} />
+            <MovieCard key={movie._id} movie={movie} onOpen={onOpenMovie} />
           ))}
         </div>
       )}
@@ -89,6 +97,7 @@ function MovieGroup({ title, movies, emptyText }) {
 
 function NowShowingMovies() {
   const [movies, setMovies] = useState([])
+  const [selectedMovie, setSelectedMovie] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -167,14 +176,21 @@ function NowShowingMovies() {
             title="Phim đang chiếu"
             movies={nowShowingMovies}
             emptyText="Chưa có phim đang chiếu."
+            onOpenMovie={setSelectedMovie}
           />
           <MovieGroup
             title="Phim sắp chiếu"
             movies={comingSoonMovies}
             emptyText="Chưa có phim sắp chiếu."
+            onOpenMovie={setSelectedMovie}
           />
         </>
       )}
+
+      <MovieDetailModal
+        movie={selectedMovie}
+        onClose={() => setSelectedMovie(null)}
+      />
     </section>
   )
 }
