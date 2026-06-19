@@ -141,6 +141,94 @@ export const getAllShowtimes = async (req, res) => {
   }
 };
 
+export const getShowtimesByMovie = async (req, res) => {
+  try {
+    const { movie_id } = req.params;
+    const { q, room_id, cinema_id, date } = req.query;
+
+    const filter = {
+      deleted_at: null,
+      movie_id,
+    };
+
+    if (room_id) {
+      filter.room_id = room_id;
+    }
+
+    if (cinema_id) {
+      const rooms = await Room.find({
+        cinema_id,
+        deleted_at: null,
+      }).select("_id");
+
+      if (!rooms.length) {
+        return res.status(200).json({
+          success: true,
+          data: [],
+        });
+      }
+
+      filter.room_id = {
+        $in: rooms.map((room) => room._id),
+      };
+    }
+
+    if (date) {
+      const dayRange = getDayRange(date);
+
+      if (!dayRange) {
+        return res.status(400).json({
+          success: false,
+          message: "date khong hop le",
+        });
+      }
+
+      filter.start_time = {
+        $gte: dayRange.start,
+        $lte: dayRange.end,
+      };
+    }
+
+    let showtimes = await Showtime.find(filter)
+      .populate("movie_id", "title poster duration release_date status")
+      .populate({
+        path: "room_id",
+        select: "name capacity cinema_id",
+        populate: {
+          path: "cinema_id",
+          select: "name city address",
+        },
+      })
+      .sort({ start_time: 1, created_at: -1 });
+
+    if (q) {
+      const keyword = q.trim().toLowerCase();
+
+      showtimes = showtimes.filter((showtime) => {
+        const movieTitle = showtime.movie_id?.title?.toLowerCase() ?? "";
+        const roomName = showtime.room_id?.name?.toLowerCase() ?? "";
+        const cinemaName = showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
+
+        return (
+          movieTitle.includes(keyword) ||
+          roomName.includes(keyword) ||
+          cinemaName.includes(keyword)
+        );
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: showtimes.map(mapShowtime),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const getShowtimeById = async (req, res) => {
   try {
     const { id } = req.params;
