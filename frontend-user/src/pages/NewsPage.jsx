@@ -55,10 +55,8 @@ function NewsPage() {
 
   return (
     <div className="w-full text-white pb-24 pt-6 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif]">
-      {/* ĐÃ TĂNG LÊN MAX-W-1760PX ĐỂ RỘNG FULL MÀN HÌNH GIỐNG HEADER */}
       <div className="w-[min(1760px,calc(100%_-_96px))] mx-auto max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
         
-        {/* TIÊU ĐỀ TRANG MANG PHONG CÁCH HIỆN ĐẠI */}
         <div className="flex items-center justify-between border-b border-white/5 pb-6 mb-10">
           <h1 className="text-2xl md:text-3xl font-extrabold uppercase tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400">
             Bảng Tin Điện Ảnh
@@ -66,14 +64,12 @@ function NewsPage() {
           <span className="text-sm text-slate-400 max-sm:hidden">Cập nhật xu hướng mới nhất</span>
         </div>
 
-        {/* LƯỚI TIN TỨC RỘNG RÃI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-6 gap-y-10">
           {newsArticles.map((article) => (
             <div 
               key={article.id} 
               className="group flex flex-col bg-white/[0.02] border border-white/5 rounded-[20px] overflow-hidden backdrop-blur-sm hover:border-[#ff6070]/30 hover:shadow-[0_20px_50px_rgba(255,96,112,0.08)] transition-all duration-500 cursor-pointer"
             >
-              {/* Khung chứa ảnh tỷ lệ 16:9 với hiệu ứng zoom mượt */}
               <div className="w-full aspect-video overflow-hidden bg-slate-900 relative">
                 <img 
                   src={article.image} 
@@ -84,7 +80,6 @@ function NewsPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               </div>
 
-              {/* Chi tiết bài viết */}
               <div className="p-5 flex-1 flex flex-col justify-between min-h-[150px]">
                 <div>
                   <span className="text-xs text-[#ff6070] font-bold tracking-wider uppercase mb-2.5 block">
@@ -96,7 +91,6 @@ function NewsPage() {
                   </h3>
                 </div>
                 
-                {/* Hiệu ứng mũi tên tinh tế khi hover vào card */}
                 <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 group-hover:text-[#ff6070] transition-colors duration-300 mt-4">
                   <span>Xem chi tiết</span>
                   <span className="transform group-hover:translate-x-1 transition-transform duration-300">→</span>
@@ -105,8 +99,6 @@ function NewsPage() {
             </div>
           ))}
         </div>
-
-        {/* PHÂN TRANG BO TRÒN THEO STYLE NÚT BẤM CỦA HEADER */}
         <div className="flex justify-end gap-3 mt-16">
           <button className="h-[46px] px-6 rounded-full border border-white/10 bg-white/[0.02] font-bold text-sm text-slate-400 hover:bg-white/[0.08] hover:text-white transition-all duration-300">
             Quay lại
