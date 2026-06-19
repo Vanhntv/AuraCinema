@@ -115,3 +115,34 @@ export const updateCinema = async (req, res) => {
     });
   }
 };
+
+export const deleteCinema = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const cinema = await Cinema.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+
+    if (!cinema) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cinema",
+      });
+    }
+
+    cinema.deleted_at = new Date();
+    await cinema.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Xóa cinema thành công",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
