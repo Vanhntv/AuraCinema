@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getMovies } from '../services/movieService'
+import BookingModal from './BookingModal'
 import MovieDetailModal from './MovieDetailModal'
 
 const fallbackPoster =
@@ -17,13 +18,13 @@ function getReleaseYear(dateValue) {
   return date.getFullYear()
 }
 
-function MovieCard({ movie, onOpen }) {
+function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
   const year = getReleaseYear(movie.release_date || movie.releaseDate)
 
   return (
     <article
       className="group cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_18px_45px_rgba(0,0,0,0.22)] transition-transform duration-300 hover:-translate-y-1"
-      onClick={() => onOpen(movie)}
+      onClick={() => onOpenDetail(movie)}
     >
       <div className="aspect-[2/3] overflow-hidden bg-[#151b26]">
         <img
@@ -58,7 +59,7 @@ function MovieCard({ movie, onOpen }) {
           type="button"
           onClick={(event) => {
             event.stopPropagation()
-            onOpen(movie)
+            onOpenBooking(movie)
           }}
         >
           Đặt vé
@@ -68,7 +69,7 @@ function MovieCard({ movie, onOpen }) {
   )
 }
 
-function MovieGroup({ title, movies, emptyText, onOpenMovie }) {
+function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
   return (
     <div className="mt-10 first:mt-0">
       <div className="mb-5 flex items-center justify-between gap-4">
@@ -87,7 +88,12 @@ function MovieGroup({ title, movies, emptyText, onOpenMovie }) {
       ) : (
         <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
           {movies.map((movie) => (
-            <MovieCard key={movie._id} movie={movie} onOpen={onOpenMovie} />
+            <MovieCard
+              key={movie._id}
+              movie={movie}
+              onOpenDetail={onOpenDetail}
+              onOpenBooking={onOpenBooking}
+            />
           ))}
         </div>
       )}
@@ -98,6 +104,7 @@ function MovieGroup({ title, movies, emptyText, onOpenMovie }) {
 function NowShowingMovies() {
   const [movies, setMovies] = useState([])
   const [selectedMovie, setSelectedMovie] = useState(null)
+  const [bookingMovie, setBookingMovie] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -130,6 +137,11 @@ function NowShowingMovies() {
       isMounted = false
     }
   }, [])
+
+  const openBooking = (movie) => {
+    setSelectedMovie(null)
+    setBookingMovie(movie)
+  }
 
   const nowShowingMovies = movies.filter((movie) => movie.status === 'now_showing')
   const comingSoonMovies = movies.filter((movie) => movie.status === 'coming_soon')
@@ -176,13 +188,15 @@ function NowShowingMovies() {
             title="Phim đang chiếu"
             movies={nowShowingMovies}
             emptyText="Chưa có phim đang chiếu."
-            onOpenMovie={setSelectedMovie}
+            onOpenDetail={setSelectedMovie}
+            onOpenBooking={openBooking}
           />
           <MovieGroup
             title="Phim sắp chiếu"
             movies={comingSoonMovies}
             emptyText="Chưa có phim sắp chiếu."
-            onOpenMovie={setSelectedMovie}
+            onOpenDetail={setSelectedMovie}
+            onOpenBooking={openBooking}
           />
         </>
       )}
@@ -190,7 +204,9 @@ function NowShowingMovies() {
       <MovieDetailModal
         movie={selectedMovie}
         onClose={() => setSelectedMovie(null)}
+        onBook={openBooking}
       />
+      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
     </section>
   )
 }
