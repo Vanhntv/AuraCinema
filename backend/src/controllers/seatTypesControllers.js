@@ -115,3 +115,28 @@ export const updateSeatType = async (req, res) => {
     });
   }
 };
+
+export const deleteSeatType = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const seatType = await SeatType.findByIdAndDelete(id);
+
+    if (!seatType) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay seat type",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Xoa seat type thanh cong",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
