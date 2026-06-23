@@ -1,3 +1,4 @@
+import Movie from "../models/Movie.js";
 import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
 
@@ -51,6 +52,17 @@ const mapShowtime = (showtime) => ({
   created_at: showtime.created_at,
   updated_at: showtime.updated_at,
 });
+
+const hasShowtimeConflict = async ({ room_id, startTime, endTime }) => {
+  const conflict = await Showtime.findOne({
+    deleted_at: null,
+    room_id,
+    start_time: { $lt: endTime },
+    end_time: { $gt: startTime },
+  });
+
+  return Boolean(conflict);
+};
 
 export const getAllShowtimes = async (req, res) => {
   try {
@@ -132,6 +144,122 @@ export const getAllShowtimes = async (req, res) => {
     res.status(200).json({
       success: true,
       data: showtimes.map(mapShowtime),
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const createShowtime = async (req, res) => {
+  try {
+    const { movie_id, room_id, start_time, end_time, base_price } = req.body;
+
+    if (!movie_id || !room_id || !start_time) {
+      return res.status(400).json({
+        success: false,
+        message: "movie_id, room_id va start_time la bat buoc",
+      });
+    }
+
+    const movie = await Movie.findOne({
+      _id: movie_id,
+      deleted_at: null,
+    });
+
+    if (!movie) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay movie",
+      });
+    }
+
+    const room = await Room.findOne({
+      _id: room_id,
+      deleted_at: null,
+    }).populate("cinema_id", "name city address");
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay room",
+      });
+    }
+
+    const startDate = new Date(start_time);
+
+    if (Number.isNaN(startDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "start_time khong hop le",
+      });
+    }
+
+    let finalEndTime = end_time ? new Date(end_time) : null;
+
+    if (finalEndTime && Number.isNaN(finalEndTime.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "end_time khong hop le",
+      });
+    }
+
+    if (!finalEndTime) {
+      if (!movie.duration) {
+        return res.status(400).json({
+          success: false,
+          message: "Phim chua co duration de tinh end_time",
+        });
+      }
+
+      finalEndTime = new Date(startDate.getTime() + movie.duration * 60 * 1000);
+    }
+
+    if (finalEndTime <= startDate) {
+      return res.status(400).json({
+        success: false,
+        message: "end_time phai lon hon start_time",
+      });
+    }
+
+    const conflictExists = await hasShowtimeConflict({
+      room_id,
+      startTime: startDate,
+      endTime: finalEndTime,
+    });
+
+    if (conflictExists) {
+      return res.status(409).json({
+        success: false,
+        message: "Khung gio nay da trung voi showtime khac",
+      });
+    }
+
+    const showtime = await Showtime.create({
+      movie_id,
+      room_id,
+      start_time: startDate,
+      end_time: finalEndTime,
+      base_price: base_price !== undefined && base_price !== null ? Number(base_price) : null,
+    });
+
+    const populatedShowtime = await Showtime.findById(showtime._id)
+      .populate("movie_id", "title poster duration release_date status")
+      .populate({
+        path: "room_id",
+        select: "name capacity cinema_id",
+        populate: {
+          path: "cinema_id",
+          select: "name city address",
+        },
+      });
+
+    res.status(201).json({
+      success: true,
+      message: "Them showtime thanh cong",
+      data: mapShowtime(populatedShowtime),
     });
   } catch (error) {
     res.status(500).json({
