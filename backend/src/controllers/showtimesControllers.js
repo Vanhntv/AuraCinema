@@ -425,6 +425,37 @@ export const updateShowtime = async (req, res) => {
   }
 };
 
+export const deleteShowtime = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const showtime = await Showtime.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+
+    if (!showtime) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay showtime",
+      });
+    }
+
+    showtime.deleted_at = new Date();
+    await showtime.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Xoa showtime thanh cong",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const getShowtimesByMovie = async (req, res) => {
   try {
     const { movie_id } = req.params;
