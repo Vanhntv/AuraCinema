@@ -1,12 +1,13 @@
 import Logo from './Logo'
+import { Link } from 'react-router-dom'
 
 const quickLinks = [
-  'Lịch chiếu',
-  'Tin tức',
-  'Khuyến mãi',
-  'Giá vé',
-  'Liên hoan phim',
-  'Giới thiệu',
+  ['Lịch chiếu', '/lich-chieu'],
+  ['Tin tức', '/tin-tuc'],
+  ['Khuyến mãi', '/khuyen-mai'],
+  ['Giá vé', '/gia-ve'],
+  ['Liên hoan phim', '/lien-hoan-phim'],
+  ['Giới thiệu', '/gioi-thieu'],
 ]
 
 const supportLinks = [
@@ -47,14 +48,14 @@ function Footer() {
             Liên kết
           </h2>
           <ul className="mt-5 grid gap-3">
-            {quickLinks.map((item) => (
-              <li key={item}>
-                <a
+            {quickLinks.map(([label, path]) => (
+              <li key={path}>
+                <Link
                   className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
-                  href="/"
+                  to={path}
                 >
-                  {item}
-                </a>
+                  {label}
+                </Link>
               </li>
             ))}
           </ul>

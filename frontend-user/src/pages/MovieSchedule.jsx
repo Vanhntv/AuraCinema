@@ -1,247 +1,187 @@
-import React, { useState } from 'react';
-import BookingModal from '../components/BookingModal';
-import MovieDetailModal from '../components/MovieDetailModal';
+import { useEffect, useMemo, useState } from 'react'
+import BookingModal from '../components/BookingModal'
+import MovieDetailModal from '../components/MovieDetailModal'
+import { getShowtimesByDate } from '../services/showtimeService'
 
-function MovieSchedule() {
-  const days = [
-    { date: '19/06', label: 'T6' },
-    { date: '20/06', label: 'T7' },
-    { date: '21/06', label: 'CN' },
-    { date: '22/06', label: 'T2' },
-    { date: '23/06', label: 'T3' },
-    { date: '24/06', label: 'T4' },
-    { date: '25/06', label: 'T5' },
-  ];
+const fallbackPoster =
+  'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22225%22 fill=%22%2394a3b8%22 font-family=%22Arial%22 font-size=%2220%22 text-anchor=%22middle%22%3EAura Cinema%3C/text%3E%3C/svg%3E'
 
-  const [selectedDate, setSelectedDate] = useState('19/06');
-  const [selectedMovie, setSelectedMovie] = useState(null);
-  const [bookingMovie, setBookingMovie] = useState(null);
-
-  const moviesData = [
-    {
-      id: 1,
-      title: 'MA XÓ',
-      tags: 'Kinh dị',
-      duration: '1 giờ 42 phút',
-      origin: 'Việt Nam',
-      price: '50.000đ',
-      image: 'https://cdn.galaxycine.vn/media/2026/5/29/ma-xo-2_1780061164303.jpg',
-      slots: ['08:45', '12:40', '14:00', '16:40', '18:00', '20:45', '23:15']
-    },
-    {
-      id: 2,
-      title: 'TOY STORY 5',
-      tags: 'Hoạt hình / Hài hước',
-      duration: '1 giờ 42 phút',
-      origin: 'Mỹ',
-      price: '45.000đ',
-      image: 'https://iguov8nhvyobj.vcdn.cloud/media/catalog/product/cache/1/image/c5f0a1eff4c394a251036189ccddaacd/p/o/poster_cau_chuyen_do_choi_5_.jpg',
-      slots: ['09:30', '11:15', '13:45', '16:00', '19:15', '21:30']
-    },
-    {
-      id: 3,
-      title: 'LẦU CHÚ HỎA',
-      tags: 'Kinh dị',
-      duration: '1 giờ 43 phút',
-      origin: 'Việt Nam',
-      price: '45.000đ',
-      image: 'https://iguov8nhvyobj.vcdn.cloud/media/catalog/product/cache/1/image/c5f0a1eff4c394a251036189ccddaacd/4/7/470wx700h-lch.jpg',
-      slots: ['10:00', '14:30', '17:45', '20:00', '22:15']
-    },
-    {
-      id: 4,
-      title: 'MUMBO GIẢI CỨU BÉ BỰ',
-      tags: 'Hoạt hình / Viễn tưởng',
-      duration: '88 phút',
-      origin: 'Mỹ',
-      price: '35.000đ',
-      image: 'https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?w=600&auto=format&fit=crop&q=80',
-      slots: ['09:00', '13:15', '15:30', '18:45']
-    },
-    {
-      id: 5,
-      title: 'THỎ ƠI',
-      tags: 'Tâm lý / Tình cảm',
-      duration: '127 phút',
-      origin: 'Việt Nam',
-      price: '45.000đ',
-      image: 'https://cdn2.tuoitre.vn/thumb_w/640/471584752817336320/2026/2/21/base64-17716817771081137588961.jpeg',
-      slots: ['10:30', '14:00', '17:15', '20:30']
-    },
-    {
-      id: 6,
-      title: 'MESDAMES THANH SẮC',
-      tags: 'Tâm lý / Tình cảm',
-      duration: '125 phút',
-      origin: 'Việt Nam',
-      price: '50.000đ',
-      image: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=600&auto=format&fit=crop&q=80',
-      slots: ['18:45', '21:00', '22:20', '23:15']
-    },
-    {
-      id: 7,
-      title: 'ÁM ẢNH KINH HOÀNG',
-      tags: 'Kinh dị / Giật gân',
-      duration: '109 phút',
-      origin: 'Mỹ',
-      price: '45.000đ',
-      image: 'https://images.unsplash.com/photo-1505635552518-3448ff116af3?w=600&auto=format&fit=crop&q=80',
-      slots: ['15:00', '17:00', '18:50', '22:40', '23:10']
-    },
-    {
-      id: 8,
-      title: 'BẠCH XÀ: MỘT KIẾP NHÂN GIAN',
-      tags: 'Hoạt hình / Cổ trang',
-      duration: '133 phút',
-      origin: 'Trung Quốc',
-      price: '45.000đ',
-      image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
-      slots: ['18:05', '19:30']
-    },
-    {
-      id: 9,
-      title: 'MA LU: MA LÀM ĂN THỊT NGƯỜI',
-      tags: 'Kinh dị / Huyền bí',
-      duration: '98 phút',
-      origin: 'Indonesia',
-      price: '45.000đ',
-      image: 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?w=600&auto=format&fit=crop&q=80',
-      slots: ['19:05', '22:55']
-    }
-  ];
-
-  const firstBigMovie = moviesData[0];
-  const restSmallMovies = moviesData.slice(1);
-
-  const normalizeMovie = (movie) => ({
-    ...movie,
-    _id: movie._id || movie.id,
-    poster: movie.poster || movie.image,
-    banner: movie.banner || movie.image,
-    status: movie.status || 'now_showing',
-  });
-
-  const openDetail = (movie) => {
-    setSelectedMovie(normalizeMovie(movie));
-  };
-
-  const openBooking = (movie) => {
-    setSelectedMovie(null);
-    setBookingMovie(normalizeMovie(movie));
-  };
-
-  return (
-    <div className="w-full text-white pt-8 pb-24 font-['Be_Vietnam_Pro']">
-      <div className="w-[min(1760px,calc(100%_-_96px))] mx-auto max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
-        
-        <div className="flex items-center gap-3 overflow-x-auto pb-4 mb-10 scrollbar-none border-b border-white/5">
-          {days.map((day) => {
-            const isTarget = selectedDate === day.date;
-            return (
-              <button
-                key={day.date}
-                onClick={() => setSelectedDate(day.date)}
-                className={`flex flex-col items-center justify-center min-w-[85px] h-[70px] rounded-[16px] transition-all ${
-                  isTarget ? 'bg-[#ff5364] text-white scale-105 shadow-lg' : 'bg-white/[0.02] border border-white/5 text-slate-400 hover:text-white'
-                }`}
-                type="button"
-              >
-                <span className="text-base font-black">{day.date}</span>
-                <span className="text-[10px] font-bold opacity-70 uppercase">{day.label}</span>
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex flex-col gap-6">
-          {firstBigMovie && (
-            <div className="flex max-md:flex-col gap-6 p-6 bg-white/[0.02] border border-white/5 rounded-[24px] relative">
-              <button
-                className="w-[180px] max-md:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0 text-left"
-                type="button"
-                onClick={() => openDetail(firstBigMovie)}
-                aria-label={`Xem chi tiết phim ${firstBigMovie.title}`}
-              >
-                <img src={firstBigMovie.image} alt={firstBigMovie.title} className="w-full h-full object-cover" />
-              </button>
-              <div className="flex-1 flex flex-col justify-between">
-                <div>
-                  <button
-                    className="text-left"
-                    type="button"
-                    onClick={() => openDetail(firstBigMovie)}
-                  >
-                    <h2 className="text-xl font-extrabold text-slate-100 uppercase hover:text-[#ff6070]">{firstBigMovie.title}</h2>
-                  </button>
-                  <div className="flex flex-wrap items-center gap-x-3 text-xs text-slate-400 mt-2">
-                    <span>{firstBigMovie.tags}</span><span>•</span><span>{firstBigMovie.duration}</span><span>•</span><span className="text-[#ff6070] font-bold">Giá: {firstBigMovie.price}</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-500 mt-5 mb-3">2D PHỤ ĐỀ</div>
-                </div>
-                <div className="flex flex-wrap gap-2.5">
-                  {firstBigMovie.slots.map((slot, idx) => (
-                    <button
-                      key={idx}
-                      className="flex flex-col items-center justify-center w-[85px] h-[50px] bg-[#161b22] border border-white/5 rounded-[12px] hover:border-[#ff6070]"
-                      type="button"
-                      onClick={() => openBooking(firstBigMovie)}
-                    >
-                      <span className="text-sm font-black text-slate-200">{slot}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {restSmallMovies.map((movie) => (
-              <div key={movie.id} className="flex max-sm:flex-col gap-5 p-5 bg-white/[0.02] border border-white/5 rounded-[24px] relative">
-                <button
-                  className="w-[140px] max-sm:w-full aspect-[2/3] rounded-[16px] overflow-hidden flex-shrink-0 text-left"
-                  type="button"
-                  onClick={() => openDetail(movie)}
-                  aria-label={`Xem chi tiết phim ${movie.title}`}
-                >
-                  <img src={movie.image} alt={movie.title} className="w-full h-full object-cover" />
-                </button>
-                <div className="flex-1 flex flex-col justify-between min-h-[190px]">
-                  <div>
-                    <button
-                      className="text-left"
-                      type="button"
-                      onClick={() => openDetail(movie)}
-                    >
-                      <h3 className="text-base font-extrabold text-slate-100 uppercase line-clamp-2 hover:text-[#ff6070]">{movie.title}</h3>
-                    </button>
-                    <div className="text-[11px] text-slate-400 mt-1.5">{movie.tags} • {movie.duration}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {movie.slots.slice(0, 4).map((slot, idx) => (
-                      <button
-                        key={idx}
-                        className="flex flex-col items-center justify-center w-[76px] h-[46px] bg-[#161b22] border border-white/5 rounded-[10px] hover:border-[#ff6070]"
-                        type="button"
-                        onClick={() => openBooking(movie)}
-                      >
-                        <span className="text-xs font-black text-slate-200">{slot}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-      </div>
-      <MovieDetailModal
-        movie={selectedMovie}
-        onClose={() => setSelectedMovie(null)}
-        onBook={openBooking}
-      />
-      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
-    </div>
-  );
+const toDateKey = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
-export default MovieSchedule;
+const createDays = () => Array.from({ length: 7 }, (_, index) => {
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + index)
+  return {
+    value: toDateKey(date),
+    date: date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' }),
+    label: index === 0 ? 'Hôm nay' : date.toLocaleDateString('vi-VN', { weekday: 'short' }),
+  }
+})
+
+const formatTime = (value) => new Date(value).toLocaleTimeString('vi-VN', {
+  hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Bangkok',
+})
+
+const formatPrice = (value) => value == null
+  ? 'Đang cập nhật'
+  : `${Number(value).toLocaleString('vi-VN')}đ`
+
+function groupShowtimes(items) {
+  const movies = new Map()
+
+  items.forEach((showtime) => {
+    const movieId = String(showtime.movie_id || '')
+    if (!movies.has(movieId)) {
+      movies.set(movieId, {
+        _id: movieId,
+        title: showtime.movieTitle,
+        poster: showtime.moviePoster,
+        status: 'now_showing',
+        showtimes: [],
+      })
+    }
+    movies.get(movieId).showtimes.push(showtime)
+  })
+
+  return [...movies.values()]
+}
+
+function groupByLocation(showtimes) {
+  return showtimes.reduce((groups, item) => {
+    const key = `${item.cinemaName || 'Rạp'}|${item.roomName || 'Phòng'}`
+    groups[key] = [...(groups[key] || []), item]
+    return groups
+  }, {})
+}
+
+function MovieSchedule() {
+  const [days] = useState(createDays)
+  const [selectedDate, setSelectedDate] = useState(() => createDays()[0].value)
+  const [showtimes, setShowtimes] = useState([])
+  const [selectedMovie, setSelectedMovie] = useState(null)
+  const [bookingMovie, setBookingMovie] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    getShowtimesByDate(selectedDate)
+      .then((data) => {
+        if (!active) return
+        setShowtimes(data)
+        setError('')
+      })
+      .catch((err) => {
+        if (!active) return
+        setShowtimes([])
+        setError(err.message || 'Không thể tải lịch chiếu')
+      })
+      .finally(() => active && setLoading(false))
+
+    return () => { active = false }
+  }, [selectedDate])
+
+  const movies = useMemo(() => groupShowtimes(showtimes), [showtimes])
+
+  const changeDate = (date) => {
+    setLoading(true)
+    setSelectedDate(date)
+  }
+
+  const openBooking = (movie) => {
+    setSelectedMovie(null)
+    setBookingMovie(movie)
+  }
+
+  return (
+    <main className="w-full pb-24 pt-8 text-white">
+      <div className="mx-auto w-[min(1760px,calc(100%_-_96px))] max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
+        <div className="mb-8">
+          <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#ff6070]">Aura Cinema</p>
+          <h1 className="mt-2 text-3xl font-black uppercase">Lịch chiếu phim</h1>
+        </div>
+
+        <div className="mb-10 flex items-center gap-3 overflow-x-auto border-b border-white/5 pb-5">
+          {days.map((day) => (
+            <button
+              key={day.value}
+              onClick={() => changeDate(day.value)}
+              className={`flex h-[74px] min-w-[92px] flex-col items-center justify-center rounded-2xl transition-all ${
+                selectedDate === day.value
+                  ? 'scale-105 bg-[#ff5364] text-white shadow-lg'
+                  : 'border border-white/5 bg-white/[0.02] text-slate-400 hover:border-white/15 hover:text-white'
+              }`}
+              type="button"
+            >
+              <span className="text-base font-black">{day.date}</span>
+              <span className="mt-1 text-[10px] font-bold uppercase">{day.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {loading && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {Array.from({ length: 4 }, (_, index) => <div className="h-64 animate-pulse rounded-3xl bg-white/[0.05]" key={index} />)}
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-8 text-center text-red-100">{error}</div>
+        )}
+
+        {!loading && !error && movies.length === 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-12 text-center">
+            <p className="text-xl font-black">Chưa có suất chiếu</p>
+            <p className="mt-2 text-sm text-slate-400">Vui lòng chọn ngày khác để xem lịch phim.</p>
+          </div>
+        )}
+
+        {!loading && !error && movies.length > 0 && (
+          <div className="grid gap-6 lg:grid-cols-2">
+            {movies.map((movie) => (
+              <article className="flex gap-5 rounded-3xl border border-white/5 bg-white/[0.025] p-5 max-sm:flex-col" key={movie._id}>
+                <button className="aspect-[2/3] w-36 shrink-0 overflow-hidden rounded-2xl max-sm:w-full" type="button" onClick={() => setSelectedMovie(movie)}>
+                  <img className="h-full w-full object-cover" src={movie.poster || fallbackPoster} alt={movie.title} onError={(event) => { event.currentTarget.src = fallbackPoster }} />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <button className="text-left" type="button" onClick={() => setSelectedMovie(movie)}>
+                    <h2 className="line-clamp-2 text-lg font-extrabold uppercase text-slate-100 hover:text-[#ff6070]">{movie.title}</h2>
+                  </button>
+                  <div className="mt-4 grid gap-4">
+                    {Object.entries(groupByLocation(movie.showtimes)).map(([location, slots]) => {
+                      const [cinema, room] = location.split('|')
+                      return (
+                        <div key={location}>
+                          <p className="text-xs font-bold text-slate-400">{cinema} · {room}</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {slots.map((slot) => (
+                              <button className="rounded-xl border border-white/10 bg-[#161b22] px-3 py-2 hover:border-[#ff6070]" key={slot.id} type="button" onClick={() => openBooking(movie)}>
+                                <span className="block text-sm font-black">{formatTime(slot.start_time)}</span>
+                                <span className="mt-0.5 block text-[10px] text-slate-500">{formatPrice(slot.base_price)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <MovieDetailModal movie={selectedMovie} onClose={() => setSelectedMovie(null)} onBook={openBooking} />
+      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
+    </main>
+  )
+}
+
+export default MovieSchedule
