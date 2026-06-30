@@ -2,6 +2,7 @@ import Cinema from "../models/Cinema.js";
 import Genre from "../models/Genre.js";
 import Movie from "../models/Movie.js";
 import Showtime from "../models/Showtime.js";
+import Booking from "../models/Booking.js";
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -34,7 +35,7 @@ export const getDashboardStats = async (_req, res) => {
   try {
     const todayRange = getTodayRange();
 
-    const [genres, movies, cinemas, nowShowingMovies, todayShowtimesCount, todayShowtimes] = await Promise.all([
+    const [genres, movies, cinemas, nowShowingMovies, todayShowtimesCount, todayShowtimes, bookings, todayBookings, revenueResult, recentBookings] = await Promise.all([
       Genre.countDocuments({ deleted_at: null }),
       Movie.countDocuments({ deleted_at: null }),
       Cinema.countDocuments({ deleted_at: null }),
@@ -64,6 +65,17 @@ export const getDashboardStats = async (_req, res) => {
         })
         .sort({ start_time: 1 })
         .limit(5),
+      Booking.countDocuments({ status: "confirmed" }),
+      Booking.countDocuments({ status: "confirmed", created_at: { $gte: todayRange.start, $lte: todayRange.end } }),
+      Booking.aggregate([
+        { $match: { status: "confirmed", payment_status: "paid" } },
+        { $group: { _id: null, total: { $sum: "$total_price" } } },
+      ]),
+      Booking.find().populate({
+        path: "showtime_id",
+        select: "movie_id start_time",
+        populate: { path: "movie_id", select: "title" },
+      }).sort({ created_at: -1 }).limit(5),
     ]);
 
     res.status(200).json({
@@ -73,11 +85,22 @@ export const getDashboardStats = async (_req, res) => {
           genres,
           movies,
           cinemas,
-          bookings: 0,
+          bookings,
+          todayBookings,
+          revenue: revenueResult[0]?.total || 0,
           todayShowtimes: todayShowtimesCount,
           nowShowingMovies,
         },
-        recentBookings: [],
+        recentBookings: recentBookings.map((booking) => ({
+          id: booking._id,
+          code: booking.booking_code,
+          customerName: booking.customer_name,
+          movieTitle: booking.showtime_id?.movie_id?.title ?? null,
+          totalAmount: booking.total_price,
+          status: booking.status,
+          paymentStatus: booking.payment_status,
+          createdAt: booking.created_at,
+        })),
         todayShowtimes: todayShowtimes.map((showtime) => ({
           id: showtime._id,
           movieTitle: showtime.movie_id?.title ?? null,

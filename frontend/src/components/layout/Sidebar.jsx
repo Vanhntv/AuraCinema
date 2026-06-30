@@ -25,6 +25,7 @@ const menuItems = [
       { path: "/trailers", icon: <HiOutlineVideoCamera />, label: "Trailer" },
       { path: "/cinemas", icon: <HiOutlineOfficeBuilding />, label: "Rạp chiếu" },
       { path: "/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
+      { path: "/bookings", icon: <HiOutlineTicket />, label: "Đặt vé" },
     ],
   },
   {
