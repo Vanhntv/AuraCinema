@@ -7,6 +7,7 @@ import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import PromotionPage from './pages/PromotionPage';
 import Register from './components/RegisterModal';
+import LoginModal from './components/LoginModal';
 
 function HomePage() {
   return (
@@ -58,6 +59,7 @@ function App() {
           <Route path="/tin-tuc" element={<NewsPage />} />
           <Route path="/khuyen-mai" element={<PromotionPage />} />
           <Route path="/dang-ky" element={<Register />} />
+          <Route path="/dang-nhap" element={<LoginModal />} />
         </Routes>
         <Footer />
       </main>
