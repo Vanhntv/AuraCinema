@@ -6,6 +6,7 @@ import NowShowingMovies from './components/NowShowingMovies';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import PromotionPage from './pages/PromotionPage';
+import Register from './components/RegisterModal';
 
 function HomePage() {
   return (
@@ -56,6 +57,7 @@ function App() {
           <Route path="/lich-chieu" element={<MovieSchedule />} />
           <Route path="/tin-tuc" element={<NewsPage />} />
           <Route path="/khuyen-mai" element={<PromotionPage />} />
+          <Route path="/dang-ky" element={<Register />} />
         </Routes>
         <Footer />
       </main>
