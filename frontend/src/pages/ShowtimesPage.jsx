@@ -26,12 +26,10 @@ const ShowtimesPage = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchShowtimes = async (query = "") => {
+  const fetchShowtimes = async () => {
     try {
       setLoading(true);
-      const response = await axiosClient.get("/showtimes", {
-        params: { q: query },
-      });
+      const response = await axiosClient.get("/showtimes");
       setShowtimes(response.data?.data || []);
     } catch (error) {
       console.error(error);
@@ -42,7 +40,7 @@ const ShowtimesPage = () => {
   };
 
   useEffect(() => {
-    fetchShowtimes("");
+    fetchShowtimes();
   }, []);
 
   const filteredShowtimes = useMemo(() => {
@@ -77,10 +75,7 @@ const ShowtimesPage = () => {
             Danh sách các suất chiếu đã được tạo trong hệ thống
           </p>
         </div>
-        <button
-          className="btn btn-secondary"
-          onClick={() => fetchShowtimes(searchQuery)}
-        >
+        <button className="btn btn-secondary" onClick={fetchShowtimes}>
           <HiOutlineRefresh />
           Làm mới
         </button>
