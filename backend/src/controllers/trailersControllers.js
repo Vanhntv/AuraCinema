@@ -1,6 +1,14 @@
 import Trailer from "../models/Trailer.js";
 import Movie from "../models/Movie.js";
 
+// Validate YouTube URLs (watch, youtu.be, embed)
+function isValidYouTubeUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  const pattern =
+    /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})([\S]*)?$/;
+  return pattern.test(url.trim());
+}
+
 export const getAllTrailers = async (req, res) => {
   try {
     const { status, movie_id, q } = req.query;
@@ -40,7 +48,7 @@ export const getTrailerById = async (req, res) => {
 
     const trailer = await Trailer.findById(id).populate(
       "movie_id",
-      "title poster banner status release_date"
+      "title poster banner status release_date",
     );
 
     if (!trailer) {
@@ -85,6 +93,14 @@ export const createTrailer = async (req, res) => {
       });
     }
 
+    // Validate YouTube URL format
+    if (!isValidYouTubeUrl(youtube_url)) {
+      return res.status(400).json({
+        success: false,
+        message: "url không đúng định dạng",
+      });
+    }
+
     const trailer = await Trailer.create({
       movie_id,
       title,
@@ -97,7 +113,7 @@ export const createTrailer = async (req, res) => {
 
     const populatedTrailer = await Trailer.findById(trailer._id).populate(
       "movie_id",
-      "title poster banner status release_date"
+      "title poster banner status release_date",
     );
 
     res.status(201).json({
@@ -148,6 +164,13 @@ export const updateTrailer = async (req, res) => {
     }
 
     if (youtube_url !== undefined) {
+      if (youtube_url && !isValidYouTubeUrl(youtube_url)) {
+        return res.status(400).json({
+          success: false,
+          message: "url không đúng định dạng",
+        });
+      }
+
       trailer.youtube_url = youtube_url;
     }
 
@@ -169,7 +192,7 @@ export const updateTrailer = async (req, res) => {
 
     const populatedTrailer = await Trailer.findById(trailer._id).populate(
       "movie_id",
-      "title poster banner status release_date"
+      "title poster banner status release_date",
     );
 
     res.status(200).json({

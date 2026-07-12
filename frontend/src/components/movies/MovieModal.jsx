@@ -36,7 +36,14 @@ const getInitialGenreIds = (movie) => {
   return genres.map(getGenreId).filter(Boolean);
 };
 
-const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
+const MovieModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  initialData,
+  isLoading,
+  apiErrors,
+}) => {
   const [formData, setFormData] = useState(emptyFormData);
   const [selectedGenres, setSelectedGenres] = useState([]);
   const [genreOptions, setGenreOptions] = useState([]);
@@ -73,7 +80,7 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
           description: initialData.description || "",
           duration: initialData.duration || "",
           release_date: toDateInputValue(
-            initialData.release_date || initialData.releaseDate
+            initialData.release_date || initialData.releaseDate,
           ),
           director: initialData.director || "",
           actors: initialData.actors || "",
@@ -86,7 +93,7 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
         setSelectedGenres(
           Array.isArray(initialData.genres)
             ? initialData.genres.filter((genre) => typeof genre === "object")
-            : []
+            : [],
         );
       } else {
         setFormData(emptyFormData);
@@ -103,7 +110,7 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
     if (initialGenreIds.length === 0) return;
 
     setSelectedGenres(
-      genreOptions.filter((genre) => initialGenreIds.includes(genre._id))
+      genreOptions.filter((genre) => initialGenreIds.includes(genre._id)),
     );
   }, [isOpen, initialData, genreOptions]);
 
@@ -135,7 +142,8 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
       const submitData = {
         ...formData,
         duration: Number(formData.duration),
-        age_limit: formData.age_limit === "" ? null : Number(formData.age_limit),
+        age_limit:
+          formData.age_limit === "" ? null : Number(formData.age_limit),
         genreIds: selectedGenres.map((g) => g._id),
       };
       onSubmit(submitData);
@@ -146,6 +154,10 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+    if (apiErrors && apiErrors[field]) {
+      // clear API error for this field when user edits it
+      if (apiErrors[field]) apiErrors[field] = "";
     }
   };
 
@@ -305,9 +317,7 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
                 onChange={handleGenreChange}
                 isLoading={genresLoading}
               />
-              {errors.genres && (
-                <p className="form-error">{errors.genres}</p>
-              )}
+              {errors.genres && <p className="form-error">{errors.genres}</p>}
             </div>
 
             {/* Diễn viên */}
@@ -378,6 +388,11 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
                 onChange={(e) => handleChange("trailer_url", e.target.value)}
                 id="input-movie-trailer-url"
               />
+              {(errors.trailer_url || (apiErrors && apiErrors.trailer_url)) && (
+                <p className="form-error">
+                  {errors.trailer_url || apiErrors.trailer_url}
+                </p>
+              )}
             </div>
 
             {/* Banner URL */}
@@ -395,15 +410,23 @@ const MovieModal = ({ isOpen, onClose, onSubmit, initialData, isLoading }) => {
           </div>
 
           <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onClose}
+            >
               Hủy bỏ
             </button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={isLoading}
+            >
               {isLoading
                 ? "Đang xử lý..."
                 : isEditing
-                ? "Cập nhật"
-                : "Thêm mới"}
+                  ? "Cập nhật"
+                  : "Thêm mới"}
             </button>
           </div>
         </form>
