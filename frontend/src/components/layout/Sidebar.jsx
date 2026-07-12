@@ -15,7 +15,11 @@ const menuItems = [
   {
     section: "Tổng quan",
     items: [
-      { path: "/admin/dashboard", icon: <HiOutlineViewGrid />, label: "Dashboard" },
+      {
+        path: "/admin/dashboard",
+        icon: <HiOutlineViewGrid />,
+        label: "Dashboard",
+      },
     ],
   },
   {
@@ -23,7 +27,11 @@ const menuItems = [
     items: [
       { path: "/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/movies", icon: <HiOutlineFilm />, label: "Phim" },
-      { path: "/cinemas", icon: <HiOutlineOfficeBuilding />, label: "Rạp chiếu" },
+      {
+        path: "/cinemas",
+        icon: <HiOutlineOfficeBuilding />,
+        label: "Rạp chiếu",
+      },
       { path: "/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
     ],
   },
@@ -81,7 +89,9 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
               {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
             </div>
             <div className="sidebar-footer-details">
-              <div className="sidebar-footer-name">{user?.full_name || "Admin"}</div>
+              <div className="sidebar-footer-name">
+                {user?.full_name || "Admin"}
+              </div>
               <div className="sidebar-footer-role">Quản trị viên</div>
             </div>
           </div>
