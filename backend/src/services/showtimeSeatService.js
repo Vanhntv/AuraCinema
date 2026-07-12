@@ -3,11 +3,13 @@ import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 import {
+  bulkUpsertShowtimeSeats,
   createManyShowtimeSeats,
   createShowtimeSeat as createShowtimeSeatRecord,
   findAllShowtimeSeats,
   findOneShowtimeSeat,
   findShowtimeSeatById,
+  findShowtimeSeatsByShowtimeId,
   softDeleteShowtimeSeatById,
   updateShowtimeSeatById,
 } from "../repositories/showtimeSeatRepository.js";
@@ -54,7 +56,10 @@ const resolveDefaultPrice = async ({ showtime, seat, price }) => {
     return numericPrice;
   }
 
-  const seatType = await SeatType.findById(seat.seat_type_id);
+  const seatType =
+    seat.seat_type_id && typeof seat.seat_type_id === "object"
+      ? seat.seat_type_id
+      : await SeatType.findById(seat.seat_type_id);
 
   if (!seatType) {
     const error = new Error("Khong tim thay seat type");
@@ -293,18 +298,64 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
   const seats = await Seat.find({
     room_id: showtime.room_id,
     deleted_at: null,
-  }).select("_id");
+  })
+    .populate("seat_type_id", "name description price_multiplier")
+    .select("_id room_id seat_type_id");
 
   if (!seats.length) {
-    return [];
+    return {
+      upsertedCount: 0,
+      matchedCount: 0,
+      modifiedCount: 0,
+    };
   }
 
-  return createShowtimeSeatsService(
-    seats.map((seat) => ({
-      showtime_id: showtime._id,
-      seat_id: seat._id,
-    }))
+  const operations = await Promise.all(
+    seats.map(async (seat) => {
+      const price = await resolveDefaultPrice({
+        showtime,
+        seat,
+        price: null,
+      });
+
+      return {
+        updateOne: {
+          filter: {
+            showtime_id: showtime._id,
+            seat_id: seat._id,
+            deleted_at: null,
+          },
+          update: {
+            $setOnInsert: {
+              showtime_id: showtime._id,
+              seat_id: seat._id,
+              status: "available",
+            },
+            $set: {
+              price,
+            },
+          },
+          upsert: true,
+        },
+      };
+    })
   );
+
+  const result = await bulkUpsertShowtimeSeats(operations);
+
+  return {
+    upsertedCount: result.upsertedCount ?? 0,
+    matchedCount: result.matchedCount ?? 0,
+    modifiedCount: result.modifiedCount ?? 0,
+  };
+};
+
+export const countShowtimeSeatsForShowtimeService = async (showtimeId) => {
+  const seats = await findShowtimeSeatsByShowtimeId(showtimeId, {
+    populate: false,
+  });
+
+  return seats.length;
 };
 
 export const updateShowtimeSeatService = async (id, payload) => {
@@ -383,7 +434,7 @@ export const updateShowtimeSeatService = async (id, payload) => {
       status: parseShowtimeSeatStatus(normalizedPayload.status, existingShowtimeSeat.status),
     },
     {
-      populate: undefined,
+      populate: false,
     }
   );
 

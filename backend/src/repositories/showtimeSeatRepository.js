@@ -69,6 +69,15 @@ export const findAllShowtimeSeats = async (filter = {}, options = {}) => {
   return query;
 };
 
+export const findShowtimeSeatsByShowtimeId = async (showtimeId, options = {}) => {
+  const query = ShowtimeSeat.find({
+    showtime_id: showtimeId,
+    deleted_at: null,
+  });
+  applyQueryOptions(query, options);
+  return query;
+};
+
 export const findShowtimeSeatById = async (id, options = {}) => {
   const query = ShowtimeSeat.findOne({ _id: id, deleted_at: null });
   applyQueryOptions(query, options);
@@ -93,6 +102,20 @@ export const createShowtimeSeat = async (payload) => {
 
 export const createManyShowtimeSeats = async (payloads) => {
   return ShowtimeSeat.insertMany(payloads);
+};
+
+export const bulkUpsertShowtimeSeats = async (operations = []) => {
+  if (!operations.length) {
+    return {
+      upsertedCount: 0,
+      matchedCount: 0,
+      modifiedCount: 0,
+    };
+  }
+
+  return ShowtimeSeat.bulkWrite(operations, {
+    ordered: false,
+  });
 };
 
 export const updateShowtimeSeatById = async (id, updates, options = {}) => {
@@ -122,4 +145,3 @@ export const softDeleteShowtimeSeatById = async (id) => {
 export const countShowtimeSeats = async (filter = {}) => {
   return ShowtimeSeat.countDocuments(filter);
 };
-
