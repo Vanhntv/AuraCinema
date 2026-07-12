@@ -1,6 +1,7 @@
 import Movie from "../models/Movie.js";
 import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
+import { generateShowtimeSeatsForShowtimeService } from "../services/showtimeSeatService.js";
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -251,6 +252,8 @@ export const createShowtime = async (req, res) => {
       base_price: base_price !== undefined && base_price !== null ? Number(base_price) : null,
     });
 
+    const generatedShowtimeSeats = await generateShowtimeSeatsForShowtimeService(showtime._id);
+
     const populatedShowtime = await Showtime.findById(showtime._id)
       .populate("movie_id", "title poster duration release_date status")
       .populate({
@@ -266,6 +269,7 @@ export const createShowtime = async (req, res) => {
       success: true,
       message: "Them showtime thanh cong",
       data: mapShowtime(populatedShowtime),
+      showtime_seats_created: generatedShowtimeSeats.length,
     });
   } catch (error) {
     res.status(500).json({

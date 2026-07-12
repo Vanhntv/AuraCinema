@@ -278,6 +278,35 @@ export const createShowtimeSeatsService = async (payloads = []) => {
   return Promise.all(createdShowtimeSeats.map((item) => findShowtimeSeatById(item._id)));
 };
 
+export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
+  const showtime = await Showtime.findOne({
+    _id: showtimeId,
+    deleted_at: null,
+  });
+
+  if (!showtime) {
+    const error = new Error("Khong tim thay showtime");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const seats = await Seat.find({
+    room_id: showtime.room_id,
+    deleted_at: null,
+  }).select("_id");
+
+  if (!seats.length) {
+    return [];
+  }
+
+  return createShowtimeSeatsService(
+    seats.map((seat) => ({
+      showtime_id: showtime._id,
+      seat_id: seat._id,
+    }))
+  );
+};
+
 export const updateShowtimeSeatService = async (id, payload) => {
   const existingShowtimeSeat = await findShowtimeSeatById(id);
 
@@ -372,4 +401,3 @@ export const deleteShowtimeSeatService = async (id) => {
 
   return softDeleteShowtimeSeatById(id);
 };
-
