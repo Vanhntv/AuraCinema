@@ -19,7 +19,7 @@ const normalizeVoucherCode = (value) => {
 };
 
 const buildVoucherFilter = (query = {}) => {
-  const { q, status, discount_type } = query;
+  const { q, search, status, discount_type } = query;
   const filter = {
     deleted_at: null,
   };
@@ -40,10 +40,12 @@ const buildVoucherFilter = (query = {}) => {
     }
   }
 
-  if (!isMissing(q)) {
+  const keyword = (q ?? search ?? "").trim();
+
+  if (!isMissing(keyword)) {
     filter.$or = [
-      { code: { $regex: q, $options: "i" } },
-      { discount_type: { $regex: q, $options: "i" } },
+      { code: { $regex: keyword, $options: "i" } },
+      { discount_type: { $regex: keyword, $options: "i" } },
     ];
   }
 
@@ -159,6 +161,8 @@ export const listVouchers = async (query = {}) => {
       limit: pageSize,
       totalItems,
       totalPages: Math.max(Math.ceil(totalItems / pageSize), 1),
+      hasNextPage: currentPage * pageSize < totalItems,
+      hasPrevPage: currentPage > 1,
     },
   };
 };
