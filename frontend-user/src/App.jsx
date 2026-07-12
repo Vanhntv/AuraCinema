@@ -13,10 +13,13 @@ import PublicRoute from "./routes/PublicRoute";
 function LandingPage() {
   return (
     <>
-      <HeroSlider />
-      <NowShowingMovies />
+      <Header />
+      <main>
+        <HeroSlider />
+        <NowShowingMovies />
+      </main>
       <Footer />
-    </main>
+    </>
   );
 }
 
