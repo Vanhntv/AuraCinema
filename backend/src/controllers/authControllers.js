@@ -4,6 +4,11 @@ import User from "../models/User.js";
 import { signJwt } from "../utils/jwt.js";
 
 const scrypt = promisify(scryptCallback);
+const DEFAULT_ROLE = "user";
+
+const resolveUserRole = (user) => {
+  return user.role === "admin" || user.role_id === 1 ? "admin" : DEFAULT_ROLE;
+};
 
 const hashPassword = async (password) => {
   const salt = randomBytes(16).toString("hex");
@@ -75,12 +80,14 @@ export const register = async (req, res) => {
       full_name: full_name.trim(),
       email: normalizedEmail,
       password: hashedPassword,
+      role: DEFAULT_ROLE,
       phone: phone?.trim() || null,
       avatar: avatar || null,
     });
 
     const userResponse = user.toObject();
     delete userResponse.password;
+    userResponse.role = resolveUserRole(user);
 
     return res.status(201).json({
       success: true,
@@ -145,11 +152,13 @@ export const login = async (req, res) => {
 
     const userResponse = user.toObject();
     delete userResponse.password;
+    userResponse.role = resolveUserRole(user);
 
     const token = signJwt(
       {
         id: user._id.toString(),
         role_id: user.role_id,
+        role: resolveUserRole(user),
       },
       process.env.JWT_SECRET,
       7 * 24 * 60 * 60
@@ -185,7 +194,10 @@ export const profile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: user,
+      data: {
+        ...user.toObject(),
+        role: resolveUserRole(user),
+      },
     });
   } catch (error) {
     return res.status(500).json({

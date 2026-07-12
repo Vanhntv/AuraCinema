@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export const ADMIN_ACCESS_TOKEN_KEY = "adminAccessToken";
+export const ACCESS_TOKEN_KEY = "accessToken";
 
 const axiosClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5001/api",
@@ -11,7 +11,7 @@ const axiosClient = axios.create({
 
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY);
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

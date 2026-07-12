@@ -87,7 +87,7 @@ const attachTrailerUrl = async (movies) => {
 
 export const getAllMovies = async (req, res) => {
   try {
-    const { status, q, search } = req.query;
+    const { status, q, search, page = 1, limit = 10 } = req.query;
     const filter = {
       deleted_at: null,
     };
@@ -96,19 +96,35 @@ export const getAllMovies = async (req, res) => {
       filter.status = status;
     }
 
-    const keyword = q || search;
-    if (keyword) {
-      filter.title = { $regex: keyword, $options: "i" };
+    const searchQuery = q || search;
+    if (searchQuery) {
+      filter.title = { $regex: searchQuery, $options: "i" };
     }
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+    const skip = (pageNum - 1) * limitNum;
 
     const movies = await Movie.find(filter)
       .populate("genres", "name")
-      .sort({ created_at: -1 });
-    const data = await attachTrailerUrl(movies);
+      .populate("genreIds", "name")
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const total = await Movie.countDocuments(filter);
+    const totalPages = Math.ceil(total / limitNum);
 
     res.status(200).json({
       success: true,
-      data,
+      data: movies,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages,
+      },
+      totalPages,
     });
   } catch (error) {
     res.status(500).json({
@@ -125,7 +141,9 @@ export const getMovieById = async (req, res) => {
     const movie = await Movie.findOne({
       _id: id,
       deleted_at: null,
-    }).populate("genres", "name");
+    })
+      .populate("genres", "name")
+      .populate("genreIds", "name")
 
     if (!movie) {
       return res.status(404).json({
@@ -155,24 +173,37 @@ export const createMovie = async (req, res) => {
     await syncMovieTrailer(movie, getTrailerUrlFromPayload(req.body));
     const data = await attachTrailerUrl(movie);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Thêm phim thành công",
       data,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-
 export const updateMovie = async (req, res) => {
   try {
     const { id } = req.params;
+    const { genreIds, ...movieData } = req.body;
 
-    const movie = await Movie.findOneAndUpdate(
+    // Normalize field names
+    if (!movieData.releaseDate && movieData.release_date) {
+      movieData.releaseDate = movieData.release_date;
+    }
+    if (!movieData.ageLimit && movieData.age_limit) {
+      movieData.ageLimit = movieData.age_limit;
+    }
+
+    const updateData = {
+      ...movieData,
+      ...(genreIds && { genres: genreIds, genreIds: genreIds }),
+    };
+
+     const movie = await Movie.findOneAndUpdate(
       { _id: id, deleted_at: null },
       normalizeMoviePayload(req.body),
       { new: true }

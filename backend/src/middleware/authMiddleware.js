@@ -25,6 +25,7 @@ export const authMiddleware = (req, res, next) => {
     req.user = {
       id: payload.id,
       role_id: payload.role_id,
+      role: payload.role === "admin" || payload.role_id === 1 ? "admin" : "user",
       iat: payload.iat,
       exp: payload.exp,
     };
@@ -36,4 +37,24 @@ export const authMiddleware = (req, res, next) => {
       message: error.message === "Token expired" ? "Token đã hết hạn" : "Token không hợp lệ",
     });
   }
+};
+
+export const authorizeRoles = (...allowedRoles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Vui lòng đăng nhập",
+      });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền thực hiện hành động này",
+      });
+    }
+
+    next();
+  };
 };
