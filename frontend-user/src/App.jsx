@@ -12,6 +12,7 @@ import Register from './components/RegisterModal';
 import LoginModal from './components/LoginModal';
 
 import { AboutPage, FilmFestivalPage, NotFoundPage, TicketPricePage } from './pages/InfoPages';
+import MovieDetailModal from './components/MovieDetailModal';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -22,7 +23,6 @@ function ScrollToTop() {
 
   return null;
 }
-main
 
 function HomePage() {
   return (
@@ -82,7 +82,7 @@ function App() {
           <Route path="/lien-hoan-phim" element={<FilmFestivalPage />} />
           <Route path="/gioi-thieu" element={<AboutPage />} />
           <Route path="*" element={<NotFoundPage />} />
-
+          <Route path="/xem-chi-tiet-phim" element={<MovieDetailModal />} />
         </Routes>
         <Footer />
       </main>
