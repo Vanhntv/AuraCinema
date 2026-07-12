@@ -1,6 +1,10 @@
 import Movie from "../models/Movie.js";
 import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
+import {
+  countShowtimeSeatsForShowtimeService,
+  generateShowtimeSeatsForShowtimeService,
+} from "../services/showtimeSeatService.js";
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -251,6 +255,8 @@ export const createShowtime = async (req, res) => {
       base_price: base_price !== undefined && base_price !== null ? Number(base_price) : null,
     });
 
+    const generatedShowtimeSeats = await generateShowtimeSeatsForShowtimeService(showtime._id);
+
     const populatedShowtime = await Showtime.findById(showtime._id)
       .populate("movie_id", "title poster duration release_date status")
       .populate({
@@ -266,6 +272,7 @@ export const createShowtime = async (req, res) => {
       success: true,
       message: "Them showtime thanh cong",
       data: mapShowtime(populatedShowtime),
+      showtime_seats_created: generatedShowtimeSeats.upsertedCount,
     });
   } catch (error) {
     res.status(500).json({
@@ -314,6 +321,17 @@ export const updateShowtime = async (req, res) => {
     }
 
     if (room_id !== undefined) {
+      if (String(room_id) !== String(showtime.room_id)) {
+        const showtimeSeatCount = await countShowtimeSeatsForShowtimeService(showtime._id);
+
+        if (showtimeSeatCount > 0) {
+          return res.status(409).json({
+            success: false,
+            message: "Khong the thay doi room khi da ton tai showtime seats",
+          });
+        }
+      }
+
       const room = await Room.findOne({
         _id: room_id,
         deleted_at: null,
@@ -400,6 +418,10 @@ export const updateShowtime = async (req, res) => {
     }
 
     await showtime.save();
+
+    if (base_price !== undefined || room_id !== undefined) {
+      await generateShowtimeSeatsForShowtimeService(showtime._id);
+    }
 
     const populatedShowtime = await Showtime.findById(showtime._id)
       .populate("movie_id", "title poster duration release_date status")
