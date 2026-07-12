@@ -1,10 +1,11 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { navItems } from '../data/homeData'
 import { useAuth } from '../hooks/useAuth'
 import Logo from './Logo'
 
 function Header() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { isAuthenticated, logout, user } = useAuth()
 
   const handleLogout = () => {

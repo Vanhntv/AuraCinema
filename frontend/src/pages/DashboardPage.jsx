@@ -12,6 +12,7 @@ import {
   HiOutlineTicket,
 } from "react-icons/hi";
 import { getDashboardStats } from "../services/dashboardService";
+import { useAuth } from "../hooks/useAuth";
 
 const emptyDashboard = {
   stats: {
@@ -36,6 +37,7 @@ const numberFormatter = new Intl.NumberFormat("vi-VN");
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -100,10 +102,8 @@ const DashboardPage = () => {
   );
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.clear();
-    navigate("/admin/dashboard", { replace: true });
+    logout();
+    navigate("/login", { replace: true });
   };
 
   return (
