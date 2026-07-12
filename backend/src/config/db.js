@@ -1,12 +1,22 @@
 import mongoose from "mongoose";
-export const connectDB =async()=>{
-    try {
-       await mongoose.connect(
-        "mongodb+srv://taovohoang2k6_db_user:9LC0km6R29C50pW9@cluster0.hdnuiwm.mongodb.net/?appName=Cluster0"
-       );
-       console.log("Liên kết csdl thành công")
-    } catch (error) {
-        console.error("lỗi kết lối csdl", error)
-        process.exit(1)
+
+export const connectDB = async () => {
+  try {
+    const uri = process.env.MONGODB_URI;
+
+    if (!uri) {
+      throw new Error(
+        "Missing MONGODB_URI. Create backend/.env.local on your machine."
+      );
     }
-}
+
+    await mongoose.connect(uri, {
+      serverSelectionTimeoutMS: 10000,
+    });
+
+    console.log("Lien ket csdl thanh cong");
+  } catch (error) {
+    console.error("loi ket noi csdl", error);
+    process.exit(1);
+  }
+};

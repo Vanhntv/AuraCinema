@@ -12,7 +12,16 @@ import seatTypesRoute from "./router/seatTypesRouters.js";
 import seatsRoute from "./router/seatsRouters.js";
 import showtimesRoute from "./router/showtimesRouters.js";
 import showtimeSeatsRoute from "./router/showtimeSeatsRouters.js";
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "node:path";
+
+dotenv.config({
+  path: path.resolve(process.cwd(), ".env.local"),
+  override: true,
+});
+dotenv.config({
+  path: path.resolve(process.cwd(), ".env"),
+});
 
 
 const app = express();
