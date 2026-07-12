@@ -11,9 +11,6 @@ import dashboardRoute from "./router/dashboardRouters.js";
 import seatTypesRoute from "./router/seatTypesRouters.js";
 import seatsRoute from "./router/seatsRouters.js";
 import showtimesRoute from "./router/showtimesRouters.js";
-import bookingsRoute from "./router/bookingsRouters.js";
-import Booking from "./models/Booking.js";
-import BookedSeat from "./models/BookedSeat.js";
 import "dotenv/config";
 
 
@@ -32,10 +29,7 @@ app.use("/seat-types", seatTypesRoute)
 app.use("/api/seats", seatsRoute)
 app.use("/seats", seatsRoute)
 app.use("/api/showtimes", showtimesRoute)
-app.use("/api/bookings", bookingsRoute)
-connectDB().then(async()=>{
-await Booking.syncIndexes()
-await BookedSeat.syncIndexes()
+connectDB().then(()=>{
 app.listen(5001, () =>{
     console.log("5001")
 })

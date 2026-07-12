@@ -1,5 +1,4 @@
-import { BrowserRouter as Router, Link, Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
@@ -7,17 +6,6 @@ import NowShowingMovies from './components/NowShowingMovies';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import PromotionPage from './pages/PromotionPage';
-import { AboutPage, FilmFestivalPage, NotFoundPage, TicketPricePage } from './pages/InfoPages';
-
-function ScrollToTop() {
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [pathname]);
-
-  return null;
-}
 
 function HomePage() {
   return (
@@ -31,7 +19,7 @@ function HomePage() {
             <div>
               <div className="mb-6 flex items-center justify-between border-b-2 border-[#ff6070] pb-2">
                 <h2 className="text-base font-black uppercase text-white">Khuyến mãi</h2>
-                <Link to="/khuyen-mai" className="text-xs text-slate-400 hover:text-[#ff6070]">Xem tất cả →</Link>
+                <a href="/khuyen-mai" className="text-xs text-slate-400 hover:text-[#ff6070]">Xem tất cả →</a>
               </div>
               <div className="flex flex-col gap-4">
                 <div className="aspect-[16/9] w-full cursor-pointer overflow-hidden rounded-[16px] border border-white/10 transition-all hover:border-[#ff6070]">
@@ -62,17 +50,12 @@ function App() {
   return (
     <Router>
       <main className="min-h-screen bg-[#0f141c] text-white">
-        <ScrollToTop />
         <Header />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/lich-chieu" element={<MovieSchedule />} />
           <Route path="/tin-tuc" element={<NewsPage />} />
           <Route path="/khuyen-mai" element={<PromotionPage />} />
-          <Route path="/gia-ve" element={<TicketPricePage />} />
-          <Route path="/lien-hoan-phim" element={<FilmFestivalPage />} />
-          <Route path="/gioi-thieu" element={<AboutPage />} />
-          <Route path="*" element={<NotFoundPage />} />
         </Routes>
         <Footer />
       </main>
