@@ -6,6 +6,8 @@ import {
   HiOutlineTicket,
   HiOutlineUsers,
   HiOutlineCog,
+  HiOutlineOfficeBuilding,
+  HiOutlineVideoCamera,
 } from "react-icons/hi";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -21,6 +23,8 @@ const menuItems = [
     items: [
       { path: "/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/movies", icon: <HiOutlineFilm />, label: "Phim" },
+      { path: "/trailers", icon: <HiOutlineVideoCamera />, label: "Trailer" },
+      { path: "/cinemas", icon: <HiOutlineOfficeBuilding />, label: "Rạp chiếu" },
       { path: "/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
     ],
   },

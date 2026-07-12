@@ -4,6 +4,7 @@ const API_BASE_URL =
 export async function getTrailersByMovie(movieId) {
   const params = new URLSearchParams({
     movie_id: movieId,
+    status: 'true',
   })
 
   const response = await fetch(`${API_BASE_URL}/trailers?${params.toString()}`)

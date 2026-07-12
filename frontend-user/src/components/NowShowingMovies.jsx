@@ -147,7 +147,7 @@ function NowShowingMovies() {
   const comingSoonMovies = movies.filter((movie) => movie.status === 'coming_soon')
 
   return (
-    <section className="mx-auto mt-16 w-[min(1760px,calc(100%_-_120px))] max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
+    <section className="w-full">
       <div className="mb-8 flex items-end justify-between gap-5 max-sm:block">
         <div>
           <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold uppercase tracking-[0.24em] text-[#ff6070]">
