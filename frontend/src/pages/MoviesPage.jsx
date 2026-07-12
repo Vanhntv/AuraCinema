@@ -16,6 +16,7 @@ import MovieTable from "../components/movies/MovieTable";
 import MovieModal from "../components/movies/MovieModal";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
+import TrailerModal from "../components/common/TrailerModal";
 
 const MoviesPage = () => {
   const navigate = useNavigate();
@@ -35,6 +36,7 @@ const MoviesPage = () => {
   // Confirm dialog state
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deletingMovie, setDeletingMovie] = useState(null);
+  const [trailerMovie, setTrailerMovie] = useState(null);
 
   // Toast helpers
   const addToast = useCallback((type, message) => {
@@ -202,6 +204,7 @@ const MoviesPage = () => {
               movies={movies}
               onEdit={handleEdit}
               onDelete={handleDeleteClick}
+              onViewTrailer={setTrailerMovie}
             />
 
             {/* Pagination */}
@@ -258,6 +261,13 @@ const MoviesPage = () => {
 
       {/* Toasts */}
       <Toast toasts={toasts} onRemove={removeToast} />
+
+      <TrailerModal
+        isOpen={!!trailerMovie}
+        title={trailerMovie ? `${trailerMovie.title} - Trailer` : "Trailer"}
+        trailerUrl={trailerMovie?.trailer_url}
+        onClose={() => setTrailerMovie(null)}
+      />
     </div>
   );
 };

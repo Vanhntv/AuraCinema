@@ -1,10 +1,11 @@
 import logoImage from '../assets/aura-cinema-logo-transparent.png'
+import { Link } from 'react-router-dom'
 
 function Logo({ compact = false }) {
   return (
-    <a
+    <Link
       className="inline-flex items-center text-white no-underline"
-      href="/"
+      to="/"
       aria-label="Aura Cinema"
     >
       <img
@@ -12,7 +13,7 @@ function Logo({ compact = false }) {
         src={logoImage}
         alt="Aura Cinema"
       />
-    </a>
+    </Link>
   )
 }
 

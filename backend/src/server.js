@@ -8,6 +8,12 @@ import cinemasRoute from "./router/cinemasRouters.js";
 import roomsRoute from "./router/roomsRouters.js";
 import trailersRoute from "./router/trailersRouters.js";
 import dashboardRoute from "./router/dashboardRouters.js";
+import seatTypesRoute from "./router/seatTypesRouters.js";
+import seatsRoute from "./router/seatsRouters.js";
+import showtimesRoute from "./router/showtimesRouters.js";
+import bookingsRoute from "./router/bookingsRouters.js";
+import Booking from "./models/Booking.js";
+import BookedSeat from "./models/BookedSeat.js";
 import "dotenv/config";
 
 
@@ -21,7 +27,15 @@ app.use("/api/cinemas", cinemasRoute)
 app.use("/api/rooms", roomsRoute)
 app.use("/api/trailers", trailersRoute)
 app.use("/api/dashboard", dashboardRoute)
-connectDB().then(()=>{
+app.use("/api/seat-types", seatTypesRoute)
+app.use("/seat-types", seatTypesRoute)
+app.use("/api/seats", seatsRoute)
+app.use("/seats", seatsRoute)
+app.use("/api/showtimes", showtimesRoute)
+app.use("/api/bookings", bookingsRoute)
+connectDB().then(async()=>{
+await Booking.syncIndexes()
+await BookedSeat.syncIndexes()
 app.listen(5001, () =>{
     console.log("5001")
 })

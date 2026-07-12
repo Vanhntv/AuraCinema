@@ -1,4 +1,5 @@
 import Cinema from "../models/Cinema.js";
+import mongoose from "mongoose";
 
 export const getAllCinemas = async (req, res) => {
   try {
@@ -23,6 +24,41 @@ export const getAllCinemas = async (req, res) => {
     res.status(200).json({
       success: true,
       data: cinemas,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getCinemaById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID cinema không hợp lệ",
+      });
+    }
+
+    const cinema = await Cinema.findOne({
+      _id: id,
+      deleted_at: null,
+    });
+
+    if (!cinema) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy cinema",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: cinema,
     });
   } catch (error) {
     res.status(500).json({
