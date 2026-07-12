@@ -6,6 +6,21 @@ import {
 } from "react-icons/hi";
 import axiosClient from "../api/axiosClient";
 
+const normalizeText = (value = "") =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const matchesSearchQuery = (value, query) => {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return true;
+
+  const normalizedValue = normalizeText(value);
+  return normalizedValue.includes(normalizedQuery);
+};
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,20 +46,22 @@ const ShowtimesPage = () => {
   }, []);
 
   const filteredShowtimes = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = searchQuery.trim();
 
     if (!query) return showtimes;
 
-    return showtimes.filter((showtime) => {
-      const movieTitle = showtime.movieTitle?.toLowerCase() || "";
-      const roomName = showtime.roomName?.toLowerCase() || "";
-      const cinemaName = showtime.cinemaName?.toLowerCase() || "";
+    const searchTerms = normalizeText(query).split(/\s+/).filter(Boolean);
 
-      return (
-        movieTitle.includes(query) ||
-        roomName.includes(query) ||
-        cinemaName.includes(query)
-      );
+    return showtimes.filter((showtime) => {
+      const movieTitle = showtime.movieTitle || "";
+      const roomName = showtime.roomName || "";
+      const cinemaName = showtime.cinemaName || "";
+
+      return searchTerms.every((term) => {
+        return [movieTitle, roomName, cinemaName].some((value) =>
+          matchesSearchQuery(value, term),
+        );
+      });
     });
   }, [searchQuery, showtimes]);
 
