@@ -4,6 +4,7 @@ import {
   getVoucherByIdService,
   listVouchers,
   toggleVoucherStatusService,
+  verifyVoucherService,
   updateVoucherService,
 } from "../services/voucherService.js";
 
@@ -110,6 +111,24 @@ export const toggleVoucherStatus = async (req, res) => {
       success: true,
       message: "Cap nhat trang thai voucher thanh cong",
       data: voucher,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const verifyVoucher = async (req, res) => {
+  try {
+    const payload = {
+      ...req.query,
+      ...req.body,
+    };
+
+    const result = await verifyVoucherService(payload);
+
+    res.status(200).json({
+      success: true,
+      data: result,
     });
   } catch (error) {
     sendError(res, error);

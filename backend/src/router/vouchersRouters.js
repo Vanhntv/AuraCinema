@@ -4,6 +4,7 @@ import {
   deleteVoucher,
   getAllVouchers,
   getVoucherById,
+  verifyVoucher,
   toggleVoucherStatus,
   updateVoucher,
 } from "../controllers/voucherControllers.js";
@@ -12,6 +13,8 @@ import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js"
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
 
+router.post("/verify", verifyVoucher);
+router.get("/verify", verifyVoucher);
 router.get("/", adminOnly, getAllVouchers);
 router.get("/:id", adminOnly, getVoucherById);
 router.post("/", adminOnly, createVoucher);

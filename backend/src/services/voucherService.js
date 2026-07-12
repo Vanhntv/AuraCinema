@@ -18,6 +18,48 @@ const normalizeVoucherCode = (value) => {
   return String(value).trim().toUpperCase();
 };
 
+const parseVoucherAmount = (value) => {
+  if (isMissing(value)) {
+    return null;
+  }
+
+  const amount = Number(value);
+  if (Number.isNaN(amount) || amount < 0) {
+    const error = new Error("order_amount khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return amount;
+};
+
+const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
+  if (orderAmount === null) {
+    return {
+      discount_amount: null,
+      final_amount: null,
+    };
+  }
+
+  const discountType = voucher.discount_type;
+  const discountValue = Number(voucher.discount_value ?? 0);
+
+  let discountAmount = 0;
+
+  if (discountType === "percent") {
+    discountAmount = (orderAmount * discountValue) / 100;
+  } else {
+    discountAmount = discountValue;
+  }
+
+  discountAmount = Math.min(Math.max(discountAmount, 0), orderAmount);
+
+  return {
+    discount_amount: discountAmount,
+    final_amount: Math.max(orderAmount - discountAmount, 0),
+  };
+};
+
 const buildVoucherFilter = (query = {}) => {
   const { q, search, status, discount_type } = query;
   const filter = {
@@ -138,6 +180,32 @@ const prepareUpdatePayload = (payload) => {
   }
 
   return updatePayload;
+};
+
+const buildVoucherVerificationResponse = (voucher, orderAmount = null) => {
+  const { discount_amount, final_amount } = calculateVoucherDiscount({
+    voucher,
+    orderAmount,
+  });
+
+  return {
+    valid: true,
+    message: "Voucher hop le",
+    voucher: {
+      id: voucher._id,
+      code: voucher.code,
+      discount_type: voucher.discount_type,
+      discount_value: voucher.discount_value,
+      min_order: voucher.min_order,
+      quantity: voucher.quantity,
+      start_date: voucher.start_date,
+      end_date: voucher.end_date,
+      status: voucher.status,
+    },
+    order_amount: orderAmount,
+    discount_amount,
+    final_amount,
+  };
 };
 
 export const listVouchers = async (query = {}) => {
@@ -293,4 +361,65 @@ export const toggleVoucherStatusService = async (id) => {
   await voucher.save();
 
   return voucher;
+};
+
+export const verifyVoucherService = async (payload = {}) => {
+  const code = normalizeVoucherCode(payload.code ?? payload.voucher_code);
+  const orderAmount = parseVoucherAmount(
+    payload.order_amount ?? payload.amount ?? payload.subtotal ?? payload.total_amount
+  );
+
+  if (isMissing(code)) {
+    const error = new Error("code la bat buoc");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const voucher = await Voucher.findOne({ code, deleted_at: null });
+
+  if (!voucher) {
+    return {
+      valid: false,
+      message: "Khong tim thay voucher",
+    };
+  }
+
+  if (!voucher.status) {
+    return {
+      valid: false,
+      message: "Voucher dang bi vo hieu hoa",
+    };
+  }
+
+  if (voucher.quantity <= 0) {
+    return {
+      valid: false,
+      message: "Voucher da het luot su dung",
+    };
+  }
+
+  const now = new Date();
+  if (voucher.start_date && now < voucher.start_date) {
+    return {
+      valid: false,
+      message: "Voucher chua den thoi gian ap dung",
+    };
+  }
+
+  if (voucher.end_date && now > voucher.end_date) {
+    return {
+      valid: false,
+      message: "Voucher da het han",
+    };
+  }
+
+  if (orderAmount !== null && orderAmount < Number(voucher.min_order ?? 0)) {
+    return {
+      valid: false,
+      message: `Don hang toi thieu phai dat ${voucher.min_order}`,
+      min_order: voucher.min_order,
+    };
+  }
+
+  return buildVoucherVerificationResponse(voucher, orderAmount);
 };
