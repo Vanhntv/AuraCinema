@@ -363,6 +363,75 @@ export const toggleVoucherStatusService = async (id) => {
   return voucher;
 };
 
+export const consumeVoucherQuantityService = async ({
+  voucherId,
+  voucherCode,
+  quantity = 1,
+} = {}) => {
+  const consumeQuantity = Number(quantity);
+
+  if (!Number.isInteger(consumeQuantity) || consumeQuantity <= 0) {
+    const error = new Error("quantity khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const filter = {
+    deleted_at: null,
+    quantity: { $gte: consumeQuantity },
+  };
+
+  if (voucherId) {
+    if (!mongoose.Types.ObjectId.isValid(voucherId)) {
+      const error = new Error("voucherId khong hop le");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    filter._id = voucherId;
+  } else if (!isMissing(voucherCode)) {
+    filter.code = normalizeVoucherCode(voucherCode);
+  } else {
+    const error = new Error("voucherId hoac voucherCode la bat buoc");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const updatedVoucher = await Voucher.findOneAndUpdate(
+    filter,
+    {
+      $inc: {
+        quantity: -consumeQuantity,
+      },
+    },
+    { new: true, runValidators: true }
+  );
+
+  if (!updatedVoucher) {
+    const existingVoucher = voucherId
+      ? await Voucher.findOne({ _id: voucherId, deleted_at: null })
+      : await Voucher.findOne({
+          code: normalizeVoucherCode(voucherCode),
+          deleted_at: null,
+        });
+
+    if (!existingVoucher) {
+      const error = new Error("Khong tim thay voucher");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const error = new Error("Voucher khong con du so luong");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  return {
+    voucher: updatedVoucher,
+    remaining_quantity: updatedVoucher.quantity,
+  };
+};
+
 export const verifyVoucherService = async (payload = {}) => {
   const code = normalizeVoucherCode(payload.code ?? payload.voucher_code);
   const orderAmount = parseVoucherAmount(

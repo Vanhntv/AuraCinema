@@ -1,5 +1,6 @@
 import {
   createVoucherService,
+  consumeVoucherQuantityService,
   deleteVoucherService,
   getVoucherByIdService,
   listVouchers,
@@ -111,6 +112,25 @@ export const toggleVoucherStatus = async (req, res) => {
       success: true,
       message: "Cap nhat trang thai voucher thanh cong",
       data: voucher,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const consumeVoucherQuantity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await consumeVoucherQuantityService({
+      voucherId: id,
+      voucherCode: req.body?.voucher_code ?? req.body?.code,
+      quantity: req.body?.quantity ?? 1,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Cap nhat voucher quantity thanh cong",
+      data: result,
     });
   } catch (error) {
     sendError(res, error);
