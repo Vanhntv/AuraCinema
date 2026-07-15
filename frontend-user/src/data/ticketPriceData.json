@@ -1,0 +1,178 @@
+{
+  "page": {
+    "eyebrow": "Bảng giá vé",
+    "title": "Giá vé 2D, 3D, ưu đãi và điều khoản sử dụng",
+    "description": "Thông tin dưới đây mang tính mẫu cho giao diện AuraCinema, được tổ chức theo dữ liệu để dễ cập nhật, bảo trì và tái sử dụng trên nhiều thiết bị."
+  },
+  "sections": {
+    "surcharges": "Chính sách phụ thu",
+    "offers": "Chương trình ưu đãi",
+    "ageRules": "Quy định độ tuổi xem phim",
+    "paymentWarnings": "Lưu ý thanh toán",
+    "terms": "Điều khoản sử dụng"
+  },
+  "highlights": [
+    {
+      "label": "2D phổ thông",
+      "value": "Từ 45.000đ"
+    },
+    {
+      "label": "3D",
+      "value": "Từ 60.000đ"
+    },
+    {
+      "label": "U22 đồng giá",
+      "value": "55.000đ / vé 2D"
+    },
+    {
+      "label": "Đối tượng ưu đãi",
+      "value": "Giảm theo chính sách"
+    }
+  ],
+  "pricingTables": [
+    {
+      "name": "2D",
+      "subtitle": "Giá vé tham khảo theo suất chiếu",
+      "currency": "đ",
+      "columns": [
+        "Đối tượng",
+        "Ngày thường",
+        "Cuối tuần / lễ"
+      ],
+      "rows": [
+        {
+          "label": "Người lớn",
+          "weekday": "50.000",
+          "weekend": "55.000",
+          "badge": "Tiêu chuẩn"
+        },
+        {
+          "label": "Học sinh / sinh viên",
+          "weekday": "45.000",
+          "weekend": "50.000",
+          "badge": "Có thể cần xác minh"
+        },
+        {
+          "label": "U22 đồng giá",
+          "weekday": "55.000",
+          "weekend": "55.000",
+          "badge": "Áp dụng cho vé 2D"
+        },
+        {
+          "label": "Trẻ em",
+          "weekday": "40.000",
+          "weekend": "45.000",
+          "badge": "Theo chiều cao / độ tuổi"
+        },
+        {
+          "label": "Người cao tuổi",
+          "weekday": "40.000",
+          "weekend": "45.000",
+          "badge": "Có ưu đãi riêng"
+        },
+        {
+          "label": "Người khuyết tật",
+          "weekday": "40.000",
+          "weekend": "45.000",
+          "badge": "Áp dụng theo giấy tờ"
+        }
+      ]
+    },
+    {
+      "name": "3D",
+      "subtitle": "Phụ thu trải nghiệm 3D và kính 3D",
+      "currency": "đ",
+      "columns": [
+        "Đối tượng",
+        "Ngày thường",
+        "Cuối tuần / lễ"
+      ],
+      "rows": [
+        {
+          "label": "Người lớn",
+          "weekday": "65.000",
+          "weekend": "70.000",
+          "badge": "Đã gồm phụ thu 3D"
+        },
+        {
+          "label": "Học sinh / sinh viên",
+          "weekday": "60.000",
+          "weekend": "65.000",
+          "badge": "Có thể cần xác minh"
+        },
+        {
+          "label": "U22",
+          "weekday": "65.000",
+          "weekend": "65.000",
+          "badge": "Không áp dụng đồng giá"
+        },
+        {
+          "label": "Trẻ em",
+          "weekday": "55.000",
+          "weekend": "60.000",
+          "badge": "Tùy xếp hạng phim"
+        }
+      ]
+    }
+  ],
+  "surcharges": [
+    {
+      "title": "Phụ thu ghế đôi / ghế VIP",
+      "value": "+10.000đ đến +30.000đ",
+      "description": "Tùy vị trí ghế, khung giờ và loại phòng chiếu."
+    },
+    {
+      "title": "Phụ thu suất muộn",
+      "value": "+5.000đ",
+      "description": "Áp dụng cho một số suất sau 22:00 khi được công bố."
+    },
+    {
+      "title": "Phụ thu kính 3D",
+      "value": "Đã bao gồm / hoặc thu riêng",
+      "description": "Tùy phim và chính sách rạp tại thời điểm mua vé."
+    }
+  ],
+  "offers": [
+    {
+      "title": "U22 đồng giá 2D",
+      "description": "Khách hàng dưới 22 tuổi có thể mua vé 2D đồng giá 55.000đ theo điều kiện từng suất chiếu."
+    },
+    {
+      "title": "Ưu đãi cho nhóm đặc biệt",
+      "description": "Trẻ em, người cao tuổi và người khuyết tật được áp dụng mức giá ưu đãi riêng khi xuất trình giấy tờ hợp lệ."
+    },
+    {
+      "title": "Khuyến mãi theo chiến dịch",
+      "description": "Một số khung giờ, ngày trong tuần hoặc sự kiện ra mắt phim có thể có giảm giá bổ sung."
+    }
+  ],
+  "rules": {
+    "ageNotice": "Tất cả vé được bán theo phân loại độ tuổi của phim. Khách hàng cần tuân thủ quy định kiểm soát độ tuổi tại quầy hoặc cổng soát vé.",
+    "items": [
+      "Phim P: phù hợp cho mọi khán giả.",
+      "Phim K, T13, T16, T18: áp dụng đúng giới hạn tuổi theo phân loại.",
+      "Khách dưới độ tuổi tối thiểu sẽ không được vào rạp dù đã mua vé.",
+      "Rạp có thể yêu cầu giấy tờ tùy thân để xác minh tuổi hoặc đối tượng ưu đãi.",
+      "Một số suất đặc biệt có thể có yêu cầu riêng do nhà phát hành công bố."
+    ]
+  },
+  "paymentWarnings": [
+    "Vé đã thanh toán không hoàn tiền, không đổi trả trừ trường hợp lỗi từ hệ thống hoặc theo chính sách riêng được công bố.",
+    "Mọi điều chỉnh về suất chiếu, thời lượng và hạng ghế có thể phát sinh chênh lệch giá.",
+    "Khách hàng vui lòng kiểm tra kỹ số ghế, thời gian và loại vé trước khi xác nhận thanh toán."
+  ],
+  "terms": [
+    {
+      "title": "Áp dụng giá",
+      "description": "Giá vé trong bảng là dữ liệu mẫu cho giao diện và có thể được thay đổi theo phim, ngày chiếu, rạp hoặc chương trình khuyến mãi."
+    },
+    {
+      "title": "Xác minh ưu đãi",
+      "description": "Nhân viên có thể yêu cầu giấy tờ để xác minh U22, học sinh sinh viên, trẻ em, người cao tuổi hoặc người khuyết tật."
+    },
+    {
+      "title": "Thanh toán",
+      "description": "Thanh toán thành công đồng nghĩa với việc giữ chỗ theo quy định hiện hành của hệ thống."
+    }
+  ]
+}
