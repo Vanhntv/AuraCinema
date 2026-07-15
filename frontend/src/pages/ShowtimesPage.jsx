@@ -4,6 +4,7 @@ import {
   HiOutlineCash,
   HiOutlineClock,
   HiOutlineLocationMarker,
+  HiOutlinePencil,
   HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
@@ -18,6 +19,62 @@ const emptyForm = {
   start_time: "",
   end_time: "",
   base_price: "",
+};
+
+const text = {
+  addShowtime: "Th\u00eam su\u1ea5t chi\u1ebfu",
+  addShowtimeNew: "Th\u00eam su\u1ea5t chi\u1ebfu m\u1edbi",
+  basePrice: "Gi\u00e1 v\u00e9 c\u01a1 b\u1ea3n",
+  cancelEdit: "H\u1ee7y s\u1eeda",
+  chooseMovie: "Ch\u1ecdn phim",
+  chooseRoom: "Ch\u1ecdn ph\u00f2ng chi\u1ebfu",
+  close: "\u0110\u00f3ng",
+  closeForm: "\u0110\u00f3ng form",
+  createDescription:
+    "Ho\u00e0n thi\u1ec7n th\u00f4ng tin l\u1ecbch chi\u1ebfu tr\u01b0\u1edbc khi m\u1edf b\u00e1n v\u00e9.",
+  endTime: "K\u1ebft th\u00fac",
+  endTimeAfterStart:
+    "Th\u1eddi gian k\u1ebft th\u00fac ph\u1ea3i sau th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
+  endTimeHint:
+    "C\u00f3 th\u1ec3 b\u1ecf tr\u1ed1ng n\u1ebfu h\u1ec7 th\u1ed1ng t\u1ef1 t\u00ednh theo th\u1eddi l\u01b0\u1ee3ng phim.",
+  formInvalid: "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
+  loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
+  movie: "Phim",
+  noPrice: "Ch\u01b0a \u0111\u1eb7t",
+  noRoom: "Ch\u01b0a ch\u1ecdn ph\u00f2ng",
+  noShowtimes: "Ch\u01b0a c\u00f3 su\u1ea5t chi\u1ebfu n\u00e0o.",
+  notSelected: "Ch\u01b0a ch\u1ecdn",
+  preview: "Xem tr\u01b0\u1edbc",
+  priceHint:
+    "Nh\u1eadp gi\u00e1 m\u1eb7c \u0111\u1ecbnh tr\u01b0\u1edbc khi \u00e1p d\u1ee5ng ph\u1ee5 thu ho\u1eb7c khuy\u1ebfn m\u00e3i.",
+  refresh: "L\u00e0m m\u1edbi",
+  requiredMovie: "Vui l\u00f2ng ch\u1ecdn phim.",
+  requiredRoom: "Vui l\u00f2ng ch\u1ecdn ph\u00f2ng chi\u1ebfu.",
+  requiredStart: "Vui l\u00f2ng ch\u1ecdn th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
+  room: "Ph\u00f2ng",
+  roomLabel: "Ph\u00f2ng chi\u1ebfu",
+  saveShowtime: "L\u01b0u su\u1ea5t chi\u1ebfu",
+  saving: "\u0110ang l\u01b0u...",
+  searchPlaceholder: "T\u00ecm theo phim, ph\u00f2ng ho\u1eb7c r\u1ea1p...",
+  startTime: "B\u1eaft \u0111\u1ea7u",
+  successCreate: "\u0110\u00e3 th\u00eam su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
+  successUpdate:
+    "\u0110\u00e3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
+  tableActions: "Thao t\u00e1c",
+  tableCinema: "R\u1ea1p",
+  tableEnd: "Gi\u1edd k\u1ebft th\u00fac",
+  tableStart: "Gi\u1edd b\u1eaft \u0111\u1ea7u",
+  title: "Qu\u1ea3n l\u00fd Su\u1ea5t chi\u1ebfu",
+  updateDescription:
+    "\u0110i\u1ec1u ch\u1ec9nh phim, ph\u00f2ng, th\u1eddi gian ho\u1eb7c gi\u00e1 v\u00e9 cho su\u1ea5t \u0111ang ch\u1ecdn.",
+  updateShowtime: "C\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu",
+  updateFailed: "Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu.",
+  createFailed: "Kh\u00f4ng th\u1ec3 th\u00eam su\u1ea5t chi\u1ebfu.",
+  priceInvalid: "Gi\u00e1 v\u00e9 kh\u00f4ng \u0111\u01b0\u1ee3c nh\u1ecf h\u01a1n 0.",
+  resetInfo: "X\u00f3a th\u00f4ng tin",
+  subtitle:
+    "T\u1ea1o l\u1ecbch chi\u1ebfu, ch\u1ecdn ph\u00f2ng v\u00e0 ki\u1ec3m so\u00e1t gi\u00e1 v\u00e9 theo t\u1eebng su\u1ea5t",
+  edit: "Ch\u1ec9nh s\u1eeda",
 };
 
 const normalizeText = (value = "") =>
@@ -36,10 +93,10 @@ const matchesSearchQuery = (value, query) => {
 };
 
 const formatDateTime = (value) => {
-  if (!value) return "Chưa chọn";
+  if (!value) return text.notSelected;
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Chưa chọn";
+  if (Number.isNaN(date.getTime())) return text.notSelected;
 
   return new Intl.DateTimeFormat("vi-VN", {
     dateStyle: "medium",
@@ -49,7 +106,7 @@ const formatDateTime = (value) => {
 
 const formatCurrency = (value) => {
   const amount = Number(value);
-  if (!value || Number.isNaN(amount)) return "Chưa đặt";
+  if (!value || Number.isNaN(amount)) return text.noPrice;
 
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -63,6 +120,18 @@ const getRoomLabel = (room) => {
   return cinemaName ? `${room.name} - ${cinemaName}` : room.name;
 };
 
+const getShowtimeId = (showtime) => showtime.id || showtime._id;
+
+const toDateTimeLocalInput = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
+};
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
@@ -72,8 +141,11 @@ const ShowtimesPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
+  const [editingShowtime, setEditingShowtime] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
+
+  const isEditing = Boolean(editingShowtime);
 
   const fetchShowtimes = useCallback(async () => {
     try {
@@ -107,14 +179,17 @@ const ShowtimesPage = () => {
     }
   }, []);
 
-  const loadInitialData = useCallback(async (showSpinner = true) => {
-    if (showSpinner) setLoading(true);
-    try {
-      await Promise.all([fetchShowtimes(), fetchMovies(), fetchRooms()]);
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchMovies, fetchRooms, fetchShowtimes]);
+  const loadInitialData = useCallback(
+    async (showSpinner = true) => {
+      if (showSpinner) setLoading(true);
+      try {
+        await Promise.all([fetchShowtimes(), fetchMovies(), fetchRooms()]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchMovies, fetchRooms, fetchShowtimes],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -165,25 +240,58 @@ const ShowtimesPage = () => {
     setFeedback({ type: "", message: "" });
   };
 
+  const closeForm = () => {
+    resetForm();
+    setEditingShowtime(null);
+    setIsFormOpen(false);
+  };
+
+  const openCreateForm = () => {
+    if (isFormOpen && !isEditing) {
+      closeForm();
+      return;
+    }
+
+    resetForm();
+    setEditingShowtime(null);
+    setIsFormOpen(true);
+  };
+
+  const openEditForm = (showtime) => {
+    setEditingShowtime(showtime);
+    setFormData({
+      movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
+      room_id: showtime.room_id ? String(showtime.room_id) : "",
+      start_time: toDateTimeLocalInput(showtime.start_time),
+      end_time: toDateTimeLocalInput(showtime.end_time),
+      base_price:
+        showtime.base_price !== undefined && showtime.base_price !== null
+          ? String(showtime.base_price)
+          : "",
+    });
+    setFormErrors({});
+    setFeedback({ type: "", message: "" });
+    setIsFormOpen(true);
+  };
+
   const validateForm = () => {
     const errors = {};
 
-    if (!formData.movie_id) errors.movie_id = "Vui lòng chọn phim.";
-    if (!formData.room_id) errors.room_id = "Vui lòng chọn phòng chiếu.";
-    if (!formData.start_time)
-      errors.start_time = "Vui lòng chọn thời gian bắt đầu.";
+    if (!formData.movie_id) errors.movie_id = text.requiredMovie;
+    if (!formData.room_id) errors.room_id = text.requiredRoom;
+    if (!formData.start_time) errors.start_time = text.requiredStart;
 
     if (formData.end_time && formData.start_time) {
       const startTime = new Date(formData.start_time).getTime();
       const endTime = new Date(formData.end_time).getTime();
 
       if (endTime <= startTime) {
-        errors.end_time = "Thời gian kết thúc phải sau thời gian bắt đầu.";
+        errors.end_time = text.endTimeAfterStart;
       }
     }
 
     if (formData.base_price && Number(formData.base_price) < 0) {
-      errors.base_price = "Giá vé không được nhỏ hơn 0.";
+      errors.base_price = text.priceInvalid;
     }
 
     setFormErrors(errors);
@@ -194,10 +302,7 @@ const ShowtimesPage = () => {
     event.preventDefault();
 
     if (!validateForm()) {
-      setFeedback({
-        type: "error",
-        message: "Vui lòng kiểm tra lại thông tin suất chiếu.",
-      });
+      setFeedback({ type: "error", message: text.formInvalid });
       return;
     }
 
@@ -217,14 +322,27 @@ const ShowtimesPage = () => {
           : {}),
       };
 
-      await axiosClient.post("/showtimes", payload);
-      setFeedback({ type: "success", message: "Đã thêm suất chiếu thành công." });
+      if (isEditing) {
+        await axiosClient.put(
+          `/showtimes/${getShowtimeId(editingShowtime)}`,
+          payload,
+        );
+      } else {
+        await axiosClient.post("/showtimes", payload);
+      }
+
       resetForm();
+      setEditingShowtime(null);
+      setFeedback({
+        type: "success",
+        message: isEditing ? text.successUpdate : text.successCreate,
+      });
       setIsFormOpen(false);
       await fetchShowtimes();
     } catch (error) {
       const message =
-        error.response?.data?.message || "Không thể thêm suất chiếu.";
+        error.response?.data?.message ||
+        (isEditing ? text.updateFailed : text.createFailed);
       setFeedback({ type: "error", message });
     } finally {
       setSubmitting(false);
@@ -237,26 +355,18 @@ const ShowtimesPage = () => {
         <div>
           <h1 className="page-title">
             <HiOutlineCalendar style={{ marginRight: "12px" }} />
-            Quản lý Suất chiếu
+            {text.title}
           </h1>
-          <p className="page-subtitle">
-            Tạo lịch chiếu, chọn phòng và kiểm soát giá vé theo từng suất
-          </p>
+          <p className="page-subtitle">{text.subtitle}</p>
         </div>
         <div className="page-actions">
           <button className="btn btn-secondary" onClick={loadInitialData}>
             <HiOutlineRefresh />
-            Làm mới
+            {text.refresh}
           </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setIsFormOpen((prev) => !prev);
-              setFeedback({ type: "", message: "" });
-            }}
-          >
-            {isFormOpen ? <HiOutlineX /> : <HiOutlinePlus />}
-            {isFormOpen ? "Đóng form" : "Thêm suất chiếu"}
+          <button className="btn btn-primary" onClick={openCreateForm}>
+            {isFormOpen && !isEditing ? <HiOutlineX /> : <HiOutlinePlus />}
+            {isFormOpen && !isEditing ? text.closeForm : text.addShowtime}
           </button>
         </div>
       </div>
@@ -267,7 +377,7 @@ const ShowtimesPage = () => {
           <input
             type="text"
             className="search-input"
-            placeholder="Tìm theo phim, phòng hoặc rạp..."
+            placeholder={text.searchPlaceholder}
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
@@ -288,18 +398,17 @@ const ShowtimesPage = () => {
                 <HiOutlineSparkles />
               </span>
               <div>
-                <h2>Thêm suất chiếu mới</h2>
-                <p>Hoàn thiện thông tin lịch chiếu trước khi mở bán vé.</p>
+                <h2>{isEditing ? text.updateShowtime : text.addShowtimeNew}</h2>
+                <p>
+                  {isEditing ? text.updateDescription : text.createDescription}
+                </p>
               </div>
             </div>
             <button
               type="button"
               className="btn btn-ghost btn-icon"
-              onClick={() => {
-                setIsFormOpen(false);
-                resetForm();
-              }}
-              title="Đóng"
+              onClick={closeForm}
+              title={text.close}
             >
               <HiOutlineX />
             </button>
@@ -309,7 +418,7 @@ const ShowtimesPage = () => {
             <div className="showtime-form-grid">
               <label className="form-group">
                 <span className="form-label">
-                  Phim <span className="required">*</span>
+                  {text.movie} <span className="required">*</span>
                 </span>
                 <select
                   className={`form-input ${formErrors.movie_id ? "error" : ""}`}
@@ -317,7 +426,7 @@ const ShowtimesPage = () => {
                   onChange={(event) => updateField("movie_id", event.target.value)}
                   required
                 >
-                  <option value="">Chọn phim</option>
+                  <option value="">{text.chooseMovie}</option>
                   {movies.map((movie) => (
                     <option key={movie._id} value={movie._id}>
                       {movie.title}
@@ -331,7 +440,7 @@ const ShowtimesPage = () => {
 
               <label className="form-group">
                 <span className="form-label">
-                  Phòng chiếu <span className="required">*</span>
+                  {text.roomLabel} <span className="required">*</span>
                 </span>
                 <select
                   className={`form-input ${formErrors.room_id ? "error" : ""}`}
@@ -339,7 +448,7 @@ const ShowtimesPage = () => {
                   onChange={(event) => updateField("room_id", event.target.value)}
                   required
                 >
-                  <option value="">Chọn phòng chiếu</option>
+                  <option value="">{text.chooseRoom}</option>
                   {rooms.map((room) => (
                     <option key={room._id} value={room._id}>
                       {getRoomLabel(room)}
@@ -353,7 +462,7 @@ const ShowtimesPage = () => {
 
               <label className="form-group">
                 <span className="form-label">
-                  Bắt đầu <span className="required">*</span>
+                  {text.startTime} <span className="required">*</span>
                 </span>
                 <input
                   className={`form-input ${formErrors.start_time ? "error" : ""}`}
@@ -370,7 +479,7 @@ const ShowtimesPage = () => {
               </label>
 
               <label className="form-group">
-                <span className="form-label">Kết thúc</span>
+                <span className="form-label">{text.endTime}</span>
                 <input
                   className={`form-input ${formErrors.end_time ? "error" : ""}`}
                   type="datetime-local"
@@ -380,14 +489,12 @@ const ShowtimesPage = () => {
                 {formErrors.end_time ? (
                   <span className="form-error">{formErrors.end_time}</span>
                 ) : (
-                  <span className="form-hint">
-                    Có thể bỏ trống nếu hệ thống tự tính theo thời lượng phim.
-                  </span>
+                  <span className="form-hint">{text.endTimeHint}</span>
                 )}
               </label>
 
               <label className="form-group">
-                <span className="form-label">Giá vé cơ bản</span>
+                <span className="form-label">{text.basePrice}</span>
                 <input
                   className={`form-input ${formErrors.base_price ? "error" : ""}`}
                   type="number"
@@ -397,25 +504,23 @@ const ShowtimesPage = () => {
                   onChange={(event) =>
                     updateField("base_price", event.target.value)
                   }
-                  placeholder="Ví dụ: 70000"
+                  placeholder="Vi du: 70000"
                 />
                 {formErrors.base_price ? (
                   <span className="form-error">{formErrors.base_price}</span>
                 ) : (
-                  <span className="form-hint">
-                    Nhập giá mặc định trước khi áp dụng phụ thu hoặc khuyến mãi.
-                  </span>
+                  <span className="form-hint">{text.priceHint}</span>
                 )}
               </label>
             </div>
 
             <aside className="showtime-preview">
-              <div className="showtime-preview-eyebrow">Xem trước</div>
-              <h3>{selectedMovie?.title || "Chưa chọn phim"}</h3>
+              <div className="showtime-preview-eyebrow">{text.preview}</div>
+              <h3>{selectedMovie?.title || text.notSelected}</h3>
               <div className="showtime-preview-list">
                 <span>
                   <HiOutlineLocationMarker />
-                  {selectedRoom ? getRoomLabel(selectedRoom) : "Chưa chọn phòng"}
+                  {selectedRoom ? getRoomLabel(selectedRoom) : text.noRoom}
                 </span>
                 <span>
                   <HiOutlineClock />
@@ -432,17 +537,21 @@ const ShowtimesPage = () => {
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={resetForm}
+                onClick={isEditing ? closeForm : resetForm}
                 disabled={submitting}
               >
-                Xóa thông tin
+                {isEditing ? text.cancelEdit : text.resetInfo}
               </button>
               <button
                 type="submit"
                 className="btn btn-primary"
                 disabled={submitting}
               >
-                {submitting ? "Đang lưu..." : "Lưu suất chiếu"}
+                {submitting
+                  ? text.saving
+                  : isEditing
+                    ? text.updateShowtime
+                    : text.saveShowtime}
               </button>
             </div>
           </form>
@@ -453,30 +562,50 @@ const ShowtimesPage = () => {
         {loading ? (
           <div className="loading-spinner">
             <div className="spinner"></div>
-            <p>Đang tải dữ liệu...</p>
+            <p>{text.loading}</p>
           </div>
         ) : filteredShowtimes.length === 0 ? (
-          <div className="empty-state">Chưa có suất chiếu nào.</div>
+          <div className="empty-state">{text.noShowtimes}</div>
         ) : (
           <div className="table-container">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Phim</th>
-                  <th>Phòng</th>
-                  <th>Rạp</th>
-                  <th>Giờ bắt đầu</th>
-                  <th>Giờ kết thúc</th>
+                  <th>{text.movie}</th>
+                  <th>{text.room}</th>
+                  <th>{text.tableCinema}</th>
+                  <th>{text.tableStart}</th>
+                  <th>{text.tableEnd}</th>
+                  <th style={{ width: "110px", textAlign: "center" }}>
+                    {text.tableActions}
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredShowtimes.map((showtime) => (
-                  <tr key={showtime.id || showtime._id}>
-                    <td>{showtime.movieTitle || "—"}</td>
-                    <td>{showtime.roomName || "—"}</td>
-                    <td>{showtime.cinemaName || "—"}</td>
-                    <td>{showtime.startTime || "—"}</td>
-                    <td>{showtime.endTime || "—"}</td>
+                  <tr key={getShowtimeId(showtime)}>
+                    <td>{showtime.movieTitle || "-"}</td>
+                    <td>{showtime.roomName || "-"}</td>
+                    <td>{showtime.cinemaName || "-"}</td>
+                    <td>{showtime.startTime || "-"}</td>
+                    <td>{showtime.endTime || "-"}</td>
+                    <td>
+                      <div
+                        className="table-actions"
+                        style={{ justifyContent: "center" }}
+                      >
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-ghost"
+                          style={{ color: "var(--color-info)" }}
+                          onClick={() => openEditForm(showtime)}
+                          title={text.edit}
+                          id={`btn-edit-showtime-${getShowtimeId(showtime)}`}
+                        >
+                          <HiOutlinePencil />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
