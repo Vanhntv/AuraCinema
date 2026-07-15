@@ -3,6 +3,7 @@ import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
 import {
   countShowtimeSeatsForShowtimeService,
+  deleteShowtimeSeatsForShowtimeService,
   generateShowtimeSeatsForShowtimeService,
 } from "../services/showtimeSeatService.js";
 
@@ -497,6 +498,7 @@ export const deleteShowtime = async (req, res) => {
 
     showtime.deleted_at = new Date();
     await showtime.save();
+    await deleteShowtimeSeatsForShowtimeService(showtime._id);
 
     res.status(200).json({
       success: true,

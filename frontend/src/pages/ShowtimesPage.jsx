@@ -9,6 +9,7 @@ import {
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineSparkles,
+  HiOutlineTrash,
   HiOutlineX,
 } from "react-icons/hi";
 import axiosClient from "../api/axiosClient";
@@ -37,7 +38,8 @@ const text = {
     "Th\u1eddi gian k\u1ebft th\u00fac ph\u1ea3i sau th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
   endTimeHint:
     "C\u00f3 th\u1ec3 b\u1ecf tr\u1ed1ng n\u1ebfu h\u1ec7 th\u1ed1ng t\u1ef1 t\u00ednh theo th\u1eddi l\u01b0\u1ee3ng phim.",
-  formInvalid: "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
+  formInvalid:
+    "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
   loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
   movie: "Phim",
   noPrice: "Ch\u01b0a \u0111\u1eb7t",
@@ -50,14 +52,16 @@ const text = {
   refresh: "L\u00e0m m\u1edbi",
   requiredMovie: "Vui l\u00f2ng ch\u1ecdn phim.",
   requiredRoom: "Vui l\u00f2ng ch\u1ecdn ph\u00f2ng chi\u1ebfu.",
-  requiredStart: "Vui l\u00f2ng ch\u1ecdn th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
+  requiredStart:
+    "Vui l\u00f2ng ch\u1ecdn th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
   room: "Ph\u00f2ng",
   roomLabel: "Ph\u00f2ng chi\u1ebfu",
   saveShowtime: "L\u01b0u su\u1ea5t chi\u1ebfu",
   saving: "\u0110ang l\u01b0u...",
   searchPlaceholder: "T\u00ecm theo phim, ph\u00f2ng ho\u1eb7c r\u1ea1p...",
   startTime: "B\u1eaft \u0111\u1ea7u",
-  successCreate: "\u0110\u00e3 th\u00eam su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
+  successCreate:
+    "\u0110\u00e3 th\u00eam su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
   successUpdate:
     "\u0110\u00e3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
   tableActions: "Thao t\u00e1c",
@@ -70,7 +74,8 @@ const text = {
   updateShowtime: "C\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu",
   updateFailed: "Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu.",
   createFailed: "Kh\u00f4ng th\u1ec3 th\u00eam su\u1ea5t chi\u1ebfu.",
-  priceInvalid: "Gi\u00e1 v\u00e9 kh\u00f4ng \u0111\u01b0\u1ee3c nh\u1ecf h\u01a1n 0.",
+  priceInvalid:
+    "Gi\u00e1 v\u00e9 kh\u00f4ng \u0111\u01b0\u1ee3c nh\u1ecf h\u01a1n 0.",
   resetInfo: "X\u00f3a th\u00f4ng tin",
   subtitle:
     "T\u1ea1o l\u1ecbch chi\u1ebfu, ch\u1ecdn ph\u00f2ng v\u00e0 ki\u1ec3m so\u00e1t gi\u00e1 v\u00e9 theo t\u1eebng su\u1ea5t",
@@ -128,7 +133,9 @@ const toDateTimeLocalInput = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
 
-  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  const offsetDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60000,
+  );
   return offsetDate.toISOString().slice(0, 16);
 };
 
@@ -138,6 +145,7 @@ const ShowtimesPage = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingShowtimeId, setDeletingShowtimeId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
@@ -349,6 +357,29 @@ const ShowtimesPage = () => {
     }
   };
 
+  const handleDeleteShowtime = async (showtime) => {
+    const showtimeId = getShowtimeId(showtime);
+    const showtimeLabel =
+      showtime.movieTitle || showtime.roomName || "suất chiếu";
+
+    if (!window.confirm(`${text.deleteConfirm}\n\n${showtimeLabel}`)) {
+      return;
+    }
+
+    try {
+      setDeletingShowtimeId(showtimeId);
+      setFeedback({ type: "", message: "" });
+      await axiosClient.delete(`/showtimes/${showtimeId}`);
+      setFeedback({ type: "success", message: text.deleteSuccess });
+      await fetchShowtimes();
+    } catch (error) {
+      const message = error.response?.data?.message || text.deleteFailed;
+      setFeedback({ type: "error", message });
+    } finally {
+      setDeletingShowtimeId(null);
+    }
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -423,7 +454,9 @@ const ShowtimesPage = () => {
                 <select
                   className={`form-input ${formErrors.movie_id ? "error" : ""}`}
                   value={formData.movie_id}
-                  onChange={(event) => updateField("movie_id", event.target.value)}
+                  onChange={(event) =>
+                    updateField("movie_id", event.target.value)
+                  }
                   required
                 >
                   <option value="">{text.chooseMovie}</option>
@@ -445,7 +478,9 @@ const ShowtimesPage = () => {
                 <select
                   className={`form-input ${formErrors.room_id ? "error" : ""}`}
                   value={formData.room_id}
-                  onChange={(event) => updateField("room_id", event.target.value)}
+                  onChange={(event) =>
+                    updateField("room_id", event.target.value)
+                  }
                   required
                 >
                   <option value="">{text.chooseRoom}</option>
@@ -484,7 +519,9 @@ const ShowtimesPage = () => {
                   className={`form-input ${formErrors.end_time ? "error" : ""}`}
                   type="datetime-local"
                   value={formData.end_time}
-                  onChange={(event) => updateField("end_time", event.target.value)}
+                  onChange={(event) =>
+                    updateField("end_time", event.target.value)
+                  }
                 />
                 {formErrors.end_time ? (
                   <span className="form-error">{formErrors.end_time}</span>
@@ -603,6 +640,23 @@ const ShowtimesPage = () => {
                           id={`btn-edit-showtime-${getShowtimeId(showtime)}`}
                         >
                           <HiOutlinePencil />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-icon btn-ghost"
+                          style={{ color: "var(--color-danger)" }}
+                          onClick={() => handleDeleteShowtime(showtime)}
+                          disabled={
+                            deletingShowtimeId === getShowtimeId(showtime)
+                          }
+                          title={text.deleteShowtime}
+                          id={`btn-delete-showtime-${getShowtimeId(showtime)}`}
+                        >
+                          {deletingShowtimeId === getShowtimeId(showtime) ? (
+                            text.deleting
+                          ) : (
+                            <HiOutlineTrash />
+                          )}
                         </button>
                       </div>
                     </td>
