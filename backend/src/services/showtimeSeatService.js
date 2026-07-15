@@ -11,6 +11,7 @@ import {
   findShowtimeSeatById,
   findShowtimeSeatsByShowtimeId,
   softDeleteShowtimeSeatById,
+  softDeleteShowtimeSeatsByShowtimeId,
   updateShowtimeSeatById,
 } from "../repositories/showtimeSeatRepository.js";
 import {
@@ -19,7 +20,8 @@ import {
   validateShowtimeSeatPayload,
 } from "../modules/showtimeSeats/showtimeSeat.validation.js";
 
-const isMissing = (value) => value === undefined || value === null || value === "";
+const isMissing = (value) =>
+  value === undefined || value === null || value === "";
 
 const buildShowtimeSeatFilter = (query = {}) => {
   const { q, showtime_id, seat_id, status } = query;
@@ -177,7 +179,7 @@ export const createShowtimeSeatService = async (payload) => {
     buildDuplicateFilter({
       showtime_id: normalizedPayload.showtime_id,
       seat_id: normalizedPayload.seat_id,
-    })
+    }),
   );
 
   if (existingShowtimeSeat) {
@@ -212,11 +214,14 @@ export const createShowtimeSeatsService = async (payloads = []) => {
   const normalizedPayloads = payloads.map((payload) =>
     normalizeShowtimeSeatPayload(payload, {
       status: "available",
-    })
+    }),
   );
 
   for (let i = 0; i < normalizedPayloads.length; i += 1) {
-    const validationError = validateShowtimeSeatPayload(normalizedPayloads[i], i);
+    const validationError = validateShowtimeSeatPayload(
+      normalizedPayloads[i],
+      i,
+    );
     if (validationError) {
       const error = new Error(validationError);
       error.statusCode = 400;
@@ -236,7 +241,7 @@ export const createShowtimeSeatsService = async (payloads = []) => {
   }
 
   const relationPairs = await Promise.all(
-    normalizedPayloads.map((payload) => loadShowtimeSeatRelations(payload))
+    normalizedPayloads.map((payload) => loadShowtimeSeatRelations(payload)),
   );
 
   for (let i = 0; i < relationPairs.length; i += 1) {
@@ -256,7 +261,11 @@ export const createShowtimeSeatsService = async (payloads = []) => {
     }
 
     assertShowtimeAndSeatAreCompatible(showtime, seat);
-    payload.price = await resolveDefaultPrice({ showtime, seat, price: payload.price });
+    payload.price = await resolveDefaultPrice({
+      showtime,
+      seat,
+      price: payload.price,
+    });
     payload.status = parseShowtimeSeatStatus(payload.status, "available");
   }
 
@@ -266,9 +275,9 @@ export const createShowtimeSeatsService = async (payloads = []) => {
         buildDuplicateFilter({
           showtime_id: payload.showtime_id,
           seat_id: payload.seat_id,
-        })
-      )
-    )
+        }),
+      ),
+    ),
   );
 
   const duplicateIndex = duplicatesInDb.findIndex(Boolean);
@@ -278,9 +287,12 @@ export const createShowtimeSeatsService = async (payloads = []) => {
     throw error;
   }
 
-  const createdShowtimeSeats = await createManyShowtimeSeats(normalizedPayloads);
+  const createdShowtimeSeats =
+    await createManyShowtimeSeats(normalizedPayloads);
 
-  return Promise.all(createdShowtimeSeats.map((item) => findShowtimeSeatById(item._id)));
+  return Promise.all(
+    createdShowtimeSeats.map((item) => findShowtimeSeatById(item._id)),
+  );
 };
 
 export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
@@ -338,7 +350,7 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
           upsert: true,
         },
       };
-    })
+    }),
   );
 
   const result = await bulkUpsertShowtimeSeats(operations);
@@ -367,7 +379,8 @@ export const updateShowtimeSeatService = async (id, payload) => {
     throw error;
   }
 
-  const nextShowtimeId = payload.showtime_id ?? existingShowtimeSeat.showtime_id;
+  const nextShowtimeId =
+    payload.showtime_id ?? existingShowtimeSeat.showtime_id;
   const nextSeatId = payload.seat_id ?? existingShowtimeSeat.seat_id;
   const nextPrice = payload.price ?? existingShowtimeSeat.price;
   const nextStatus = payload.status ?? existingShowtimeSeat.status;
@@ -410,7 +423,7 @@ export const updateShowtimeSeatService = async (id, payload) => {
       showtime_id: normalizedPayload.showtime_id,
       seat_id: normalizedPayload.seat_id,
       excludeId: id,
-    })
+    }),
   );
 
   if (duplicateShowtimeSeat) {
@@ -431,11 +444,14 @@ export const updateShowtimeSeatService = async (id, payload) => {
       showtime_id: normalizedPayload.showtime_id,
       seat_id: normalizedPayload.seat_id,
       price: resolvedPrice,
-      status: parseShowtimeSeatStatus(normalizedPayload.status, existingShowtimeSeat.status),
+      status: parseShowtimeSeatStatus(
+        normalizedPayload.status,
+        existingShowtimeSeat.status,
+      ),
     },
     {
       populate: false,
-    }
+    },
   );
 
   return findShowtimeSeatById(updatedShowtimeSeat._id);
@@ -451,4 +467,12 @@ export const deleteShowtimeSeatService = async (id) => {
   }
 
   return softDeleteShowtimeSeatById(id);
+};
+
+export const deleteShowtimeSeatsForShowtimeService = async (showtimeId) => {
+  if (!showtimeId) {
+    return { deletedCount: 0 };
+  }
+
+  return softDeleteShowtimeSeatsByShowtimeId(showtimeId);
 };

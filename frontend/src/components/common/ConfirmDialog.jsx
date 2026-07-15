@@ -14,10 +14,10 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
           <p className="confirm-message">{message}</p>
           <div className="confirm-actions">
             <button className="btn btn-secondary" onClick={onCancel}>
-              Hủy bỏ
+              {"H\u1ee7y b\u1ecf"}
             </button>
             <button className="btn btn-danger" onClick={onConfirm}>
-              Xác nhận xóa
+              {"X\u00e1c nh\u1eadn x\u00f3a"}
             </button>
           </div>
         </div>

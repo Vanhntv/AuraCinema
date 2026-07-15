@@ -3,7 +3,8 @@ import ShowtimeSeat from "../models/ShowtimeSeat.js";
 const defaultPopulate = [
   {
     path: "showtime_id",
-    select: "movie_id room_id start_time end_time base_price created_at updated_at",
+    select:
+      "movie_id room_id start_time end_time base_price created_at updated_at",
     populate: [
       {
         path: "movie_id",
@@ -21,7 +22,8 @@ const defaultPopulate = [
   },
   {
     path: "seat_id",
-    select: "room_id seat_type_id seat_row seat_number status created_at updated_at",
+    select:
+      "room_id seat_type_id seat_row seat_number status created_at updated_at",
     populate: [
       {
         path: "room_id",
@@ -69,7 +71,10 @@ export const findAllShowtimeSeats = async (filter = {}, options = {}) => {
   return query;
 };
 
-export const findShowtimeSeatsByShowtimeId = async (showtimeId, options = {}) => {
+export const findShowtimeSeatsByShowtimeId = async (
+  showtimeId,
+  options = {},
+) => {
   const query = ShowtimeSeat.find({
     showtime_id: showtimeId,
     deleted_at: null,
@@ -84,7 +89,10 @@ export const findShowtimeSeatById = async (id, options = {}) => {
   return query;
 };
 
-export const findShowtimeSeatByIdIncludingDeleted = async (id, options = {}) => {
+export const findShowtimeSeatByIdIncludingDeleted = async (
+  id,
+  options = {},
+) => {
   const query = ShowtimeSeat.findById(id);
   applyQueryOptions(query, options);
   return query;
@@ -138,7 +146,19 @@ export const softDeleteShowtimeSeatById = async (id) => {
     },
     {
       new: true,
-    }
+    },
+  );
+};
+
+export const softDeleteShowtimeSeatsByShowtimeId = async (showtimeId) => {
+  return ShowtimeSeat.updateMany(
+    {
+      showtime_id: showtimeId,
+      deleted_at: null,
+    },
+    {
+      deleted_at: new Date(),
+    },
   );
 };
 

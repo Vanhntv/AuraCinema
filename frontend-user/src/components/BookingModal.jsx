@@ -1,38 +1,134 @@
-import { useMemo, useState } from 'react'
-
-const showDates = [
-  'Hôm nay',
-  'Ngày mai',
-  'Thứ 6',
-  'Thứ 7',
-]
-
-const showtimes = ['09:30', '13:15', '16:45', '19:30', '21:45']
+import { useEffect, useMemo, useState } from "react";
+import { getShowtimesByMovie } from "../services/showtimeService";
 
 const seats = Array.from({ length: 36 }, (_, index) => {
-  const row = String.fromCharCode(65 + Math.floor(index / 6))
-  const number = (index % 6) + 1
-  return `${row}${number}`
-})
+  const row = String.fromCharCode(65 + Math.floor(index / 6));
+  const number = (index % 6) + 1;
+  return `${row}${number}`;
+});
+
+function buildDateOptions() {
+  const options = [];
+  const baseDate = new Date();
+
+  for (let index = 0; index < 4; index += 1) {
+    const date = new Date(baseDate);
+    date.setDate(baseDate.getDate() + index);
+
+    const displayDate = date.toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+
+    const value = date.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Jakarta",
+    });
+
+    const label =
+      index === 0
+        ? "Hôm nay"
+        : index === 1
+          ? "Ngày mai"
+          : `Thứ ${date.getDay() === 0 ? 7 : date.getDay()}`;
+
+    options.push({
+      label,
+      value,
+      displayDate,
+    });
+  }
+
+  return options;
+}
 
 function BookingModal({ movie, onClose }) {
-  const [selectedDate, setSelectedDate] = useState(showDates[0])
-  const [selectedTime, setSelectedTime] = useState(showtimes[0])
-  const [selectedSeats, setSelectedSeats] = useState([])
-  const [customerName, setCustomerName] = useState('')
-  const [customerPhone, setCustomerPhone] = useState('')
+  const [dateOptions] = useState(() => buildDateOptions());
+  const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
+  const [showtimes, setShowtimes] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [selectedShowtime, setSelectedShowtime] = useState(null);
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [step, setStep] = useState("select-showtime");
 
-  const totalPrice = useMemo(() => selectedSeats.length * 45000, [selectedSeats])
+  const totalPrice = useMemo(() => {
+    const price = Number(selectedShowtime?.base_price ?? 45000);
+    return selectedSeats.length * price;
+  }, [selectedSeats, selectedShowtime]);
 
-  if (!movie) return null
+  useEffect(() => {
+    if (!movie?._id) {
+      setShowtimes([]);
+      setSelectedShowtime(null);
+      setStep("select-showtime");
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const loadShowtimes = async () => {
+      try {
+        setIsLoading(true);
+        setError("");
+
+        const response = await getShowtimesByMovie(movie._id, {
+          date: selectedDate.value,
+        });
+        const data = response?.data || [];
+
+        if (!isMounted) return;
+
+        setShowtimes(data);
+        setSelectedShowtime((current) => {
+          if (current && data.some((item) => item.id === current.id)) {
+            return current;
+          }
+
+          return null;
+        });
+      } catch (err) {
+        if (isMounted) {
+          setShowtimes([]);
+          setError(err.message || "Không thể tải suất chiếu");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadShowtimes();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [movie?._id, selectedDate.value]);
+
+  if (!movie) return null;
 
   const toggleSeat = (seat) => {
     setSelectedSeats((current) =>
       current.includes(seat)
         ? current.filter((item) => item !== seat)
         : [...current, seat],
-    )
-  }
+    );
+  };
+
+  const handleDateChange = (dateOption) => {
+    setSelectedDate(dateOption);
+    setSelectedShowtime(null);
+    setSelectedSeats([]);
+    setStep("select-showtime");
+  };
+
+  const handleShowtimeSelect = (showtime) => {
+    setSelectedShowtime(showtime);
+    setSelectedSeats([]);
+    setStep("select-seat");
+  };
 
   return (
     <div
@@ -72,18 +168,18 @@ function BookingModal({ movie, onClose }) {
                 Chọn ngày
               </h3>
               <div className="mt-4 flex flex-wrap gap-3">
-                {showDates.map((date) => (
+                {dateOptions.map((dateOption) => (
                   <button
                     className={`rounded-full px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold transition-colors ${
-                      selectedDate === date
-                        ? 'bg-[#ff6070] text-white'
-                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
+                      selectedDate.value === dateOption.value
+                        ? "bg-[#ff6070] text-white"
+                        : "bg-white/10 text-slate-200 hover:bg-white/15"
                     }`}
-                    key={date}
+                    key={dateOption.value}
                     type="button"
-                    onClick={() => setSelectedDate(date)}
+                    onClick={() => handleDateChange(dateOption)}
                   >
-                    {date}
+                    {dateOption.label} · {dateOption.displayDate}
                   </button>
                 ))}
               </div>
@@ -91,49 +187,83 @@ function BookingModal({ movie, onClose }) {
 
             <div>
               <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
-                Chọn suất chiếu
+                {step === "select-seat" ? "Chọn ghế" : "Chọn suất chiếu"}
               </h3>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {showtimes.map((time) => (
-                  <button
-                    className={`rounded-full px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold transition-colors ${
-                      selectedTime === time
-                        ? 'bg-[#ff6070] text-white'
-                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
-                    }`}
-                    key={time}
-                    type="button"
-                    onClick={() => setSelectedTime(time)}
-                  >
-                    {time}
-                  </button>
-                ))}
-              </div>
-            </div>
 
-            <div>
-              <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
-                Chọn ghế
-              </h3>
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                <div className="mx-auto mb-5 h-2 w-2/3 rounded-full bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
-                <div className="grid grid-cols-6 gap-3">
-                  {seats.map((seat) => (
-                    <button
-                      className={`h-10 rounded-lg font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-black transition-colors ${
-                        selectedSeats.includes(seat)
-                          ? 'bg-[#ff6070] text-white'
-                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
-                      }`}
-                      key={seat}
-                      type="button"
-                      onClick={() => toggleSeat(seat)}
-                    >
-                      {seat}
-                    </button>
-                  ))}
+              {step === "select-seat" ? (
+                <div className="mt-4 space-y-3">
+                  <button
+                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-[#ff6070] hover:text-white"
+                    type="button"
+                    onClick={() => {
+                      setSelectedShowtime(null);
+                      setSelectedSeats([]);
+                      setStep("select-showtime");
+                    }}
+                  >
+                    ← Chọn suất khác
+                  </button>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                    <div className="mx-auto mb-5 h-2 w-2/3 rounded-full bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+                    <div className="grid grid-cols-6 gap-3">
+                      {seats.map((seat) => (
+                        <button
+                          className={`h-10 rounded-lg font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-black transition-colors ${
+                            selectedSeats.includes(seat)
+                              ? "bg-[#ff6070] text-white"
+                              : "bg-white/10 text-slate-300 hover:bg-white/20"
+                          }`}
+                          key={seat}
+                          type="button"
+                          onClick={() => toggleSeat(seat)}
+                        >
+                          {seat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {isLoading && (
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                      Đang tải suất chiếu...
+                    </p>
+                  )}
+
+                  {!isLoading && error && (
+                    <p className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      {error}
+                    </p>
+                  )}
+
+                  {!isLoading && !error && !showtimes.length && (
+                    <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                      Không có suất chiếu cho ngày này.
+                    </p>
+                  )}
+
+                  {!isLoading && !error && showtimes.length > 0 && (
+                    <div className="flex flex-wrap gap-3">
+                      {showtimes.map((showtime) => (
+                        <button
+                          className={`rounded-full px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold transition-colors ${
+                            selectedShowtime?.id === showtime.id
+                              ? "bg-[#ff6070] text-white"
+                              : "bg-white/10 text-slate-200 hover:bg-white/15"
+                          }`}
+                          key={showtime.id}
+                          type="button"
+                          onClick={() => handleShowtimeSelect(showtime)}
+                        >
+                          {showtime.startTime}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -143,19 +273,25 @@ function BookingModal({ movie, onClose }) {
             </h3>
             <div className="mt-5 grid gap-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-300">
               <p>
-                <span className="text-slate-500">Ngày:</span> {selectedDate}
+                <span className="text-slate-500">Ngày:</span>{" "}
+                {selectedDate.label} · {selectedDate.displayDate}
               </p>
               <p>
-                <span className="text-slate-500">Suất:</span> {selectedTime}
+                <span className="text-slate-500">Suất:</span>{" "}
+                {selectedShowtime?.startTime || "Chưa chọn"}
               </p>
               <p>
-                <span className="text-slate-500">Ghế:</span>{' '}
-                {selectedSeats.length ? selectedSeats.join(', ') : 'Chưa chọn'}
+                <span className="text-slate-500">Phòng:</span>{" "}
+                {selectedShowtime?.roomName || "Chưa chọn"}
               </p>
               <p>
-                <span className="text-slate-500">Tổng:</span>{' '}
+                <span className="text-slate-500">Ghế:</span>{" "}
+                {selectedSeats.length ? selectedSeats.join(", ") : "Chưa chọn"}
+              </p>
+              <p>
+                <span className="text-slate-500">Tổng:</span>{" "}
                 <strong className="text-[#ff9aa5]">
-                  {totalPrice.toLocaleString('vi-VN')}đ
+                  {totalPrice.toLocaleString("vi-VN")}đ
                 </strong>
               </p>
             </div>
@@ -178,7 +314,12 @@ function BookingModal({ movie, onClose }) {
             <button
               className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
-              disabled={!selectedSeats.length || !customerName || !customerPhone}
+              disabled={
+                !selectedSeats.length ||
+                !customerName ||
+                !customerPhone ||
+                !selectedShowtime
+              }
             >
               Xác nhận đặt vé
             </button>
@@ -186,7 +327,7 @@ function BookingModal({ movie, onClose }) {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
-export default BookingModal
+export default BookingModal;

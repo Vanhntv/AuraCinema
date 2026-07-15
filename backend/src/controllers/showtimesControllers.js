@@ -3,6 +3,7 @@ import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
 import {
   countShowtimeSeatsForShowtimeService,
+  deleteShowtimeSeatsForShowtimeService,
   generateShowtimeSeatsForShowtimeService,
 } from "../services/showtimeSeatService.js";
 
@@ -38,6 +39,22 @@ const formatTime = (value) => {
   return jakartaTimeFormatter.format(new Date(value));
 };
 
+const normalizeSearchText = (value = "") =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const matchesSearchQuery = (value, query) => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return normalizeSearchText(value).includes(normalizedQuery);
+};
+
 const mapShowtime = (showtime) => ({
   id: showtime._id,
   movie_id: showtime.movie_id?._id ?? showtime.movie_id ?? null,
@@ -45,7 +62,8 @@ const mapShowtime = (showtime) => ({
   moviePoster: showtime.movie_id?.poster ?? null,
   room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
   roomName: showtime.room_id?.name ?? null,
-  cinema_id: showtime.room_id?.cinema_id?._id ?? showtime.room_id?.cinema_id ?? null,
+  cinema_id:
+    showtime.room_id?.cinema_id?._id ?? showtime.room_id?.cinema_id ?? null,
   cinemaName: showtime.room_id?.cinema_id?.name ?? null,
   cinemaCity: showtime.room_id?.cinema_id?.city ?? null,
   start_time: showtime.start_time,
@@ -57,7 +75,12 @@ const mapShowtime = (showtime) => ({
   updated_at: showtime.updated_at,
 });
 
-const hasShowtimeConflict = async ({ room_id, startTime, endTime, excludeId }) => {
+const hasShowtimeConflict = async ({
+  room_id,
+  startTime,
+  endTime,
+  excludeId,
+}) => {
   const filter = {
     deleted_at: null,
     room_id,
@@ -141,7 +164,8 @@ export const getAllShowtimes = async (req, res) => {
       showtimes = showtimes.filter((showtime) => {
         const movieTitle = showtime.movie_id?.title?.toLowerCase() ?? "";
         const roomName = showtime.room_id?.name?.toLowerCase() ?? "";
-        const cinemaName = showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
+        const cinemaName =
+          showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
 
         return (
           movieTitle.includes(keyword) ||
@@ -252,10 +276,14 @@ export const createShowtime = async (req, res) => {
       room_id,
       start_time: startDate,
       end_time: finalEndTime,
-      base_price: base_price !== undefined && base_price !== null ? Number(base_price) : null,
+      base_price:
+        base_price !== undefined && base_price !== null
+          ? Number(base_price)
+          : null,
     });
 
-    const generatedShowtimeSeats = await generateShowtimeSeatsForShowtimeService(showtime._id);
+    const generatedShowtimeSeats =
+      await generateShowtimeSeatsForShowtimeService(showtime._id);
 
     const populatedShowtime = await Showtime.findById(showtime._id)
       .populate("movie_id", "title poster duration release_date status")
@@ -322,7 +350,9 @@ export const updateShowtime = async (req, res) => {
 
     if (room_id !== undefined) {
       if (String(room_id) !== String(showtime.room_id)) {
-        const showtimeSeatCount = await countShowtimeSeatsForShowtimeService(showtime._id);
+        const showtimeSeatCount = await countShowtimeSeatsForShowtimeService(
+          showtime._id,
+        );
 
         if (showtimeSeatCount > 0) {
           return res.status(409).json({
@@ -384,7 +414,9 @@ export const updateShowtime = async (req, res) => {
         });
       }
 
-      nextEndTime = new Date(nextStartTime.getTime() + movieForDuration.duration * 60 * 1000);
+      nextEndTime = new Date(
+        nextStartTime.getTime() + movieForDuration.duration * 60 * 1000,
+      );
     }
 
     if (nextEndTime <= nextStartTime) {
@@ -414,7 +446,8 @@ export const updateShowtime = async (req, res) => {
     showtime.end_time = nextEndTime;
 
     if (base_price !== undefined) {
-      showtime.base_price = base_price !== null && base_price !== "" ? Number(base_price) : null;
+      showtime.base_price =
+        base_price !== null && base_price !== "" ? Number(base_price) : null;
     }
 
     await showtime.save();
@@ -465,6 +498,7 @@ export const deleteShowtime = async (req, res) => {
 
     showtime.deleted_at = new Date();
     await showtime.save();
+    await deleteShowtimeSeatsForShowtimeService(showtime._id);
 
     res.status(200).json({
       success: true,
@@ -539,18 +573,18 @@ export const getShowtimesByMovie = async (req, res) => {
       .sort({ start_time: 1, created_at: -1 });
 
     if (q) {
-      const keyword = q.trim().toLowerCase();
+      const searchTerms = normalizeSearchText(q).split(/\s+/).filter(Boolean);
 
       showtimes = showtimes.filter((showtime) => {
-        const movieTitle = showtime.movie_id?.title?.toLowerCase() ?? "";
-        const roomName = showtime.room_id?.name?.toLowerCase() ?? "";
-        const cinemaName = showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
+        const movieTitle = showtime.movie_id?.title ?? "";
+        const roomName = showtime.room_id?.name ?? "";
+        const cinemaName = showtime.room_id?.cinema_id?.name ?? "";
 
-        return (
-          movieTitle.includes(keyword) ||
-          roomName.includes(keyword) ||
-          cinemaName.includes(keyword)
-        );
+        return searchTerms.every((term) => {
+          return [movieTitle, roomName, cinemaName].some((value) =>
+            matchesSearchQuery(value, term),
+          );
+        });
       });
     }
 
@@ -625,18 +659,18 @@ export const getShowtimesByRoom = async (req, res) => {
       .sort({ start_time: 1, created_at: -1 });
 
     if (q) {
-      const keyword = q.trim().toLowerCase();
+      const searchTerms = normalizeSearchText(q).split(/\s+/).filter(Boolean);
 
       showtimes = showtimes.filter((showtime) => {
-        const movieTitle = showtime.movie_id?.title?.toLowerCase() ?? "";
-        const roomName = showtime.room_id?.name?.toLowerCase() ?? "";
-        const cinemaName = showtime.room_id?.cinema_id?.name?.toLowerCase() ?? "";
+        const movieTitle = showtime.movie_id?.title ?? "";
+        const roomName = showtime.room_id?.name ?? "";
+        const cinemaName = showtime.room_id?.cinema_id?.name ?? "";
 
-        return (
-          movieTitle.includes(keyword) ||
-          roomName.includes(keyword) ||
-          cinemaName.includes(keyword)
-        );
+        return searchTerms.every((term) => {
+          return [movieTitle, roomName, cinemaName].some((value) =>
+            matchesSearchQuery(value, term),
+          );
+        });
       });
     }
 
