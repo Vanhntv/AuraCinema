@@ -7,6 +7,7 @@ import NowShowingMovies from './components/NowShowingMovies';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import PromotionPage from './pages/PromotionPage';
+import TicketPricePage from './pages/ticket-price/TicketPricePage';
 
 import Register from './components/RegisterModal';
 import LoginModal from './components/LoginModal';
@@ -40,6 +41,7 @@ function App() {
         <Route path="/lich-chieu" element={<MovieSchedule />} />
         <Route path="/tin-tuc" element={<NewsPage />} />
         <Route path="/khuyen-mai" element={<PromotionPage />} />
+        <Route path="/gia-ve" element={<TicketPricePage />} />
         <Route path="/dang-ky" element={<Register />} />
         <Route path="/dang-nhap" element={<LoginModal />} />
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
