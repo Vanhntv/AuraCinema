@@ -11,7 +11,7 @@ import PromotionPage from './pages/PromotionPage';
 import Register from './components/RegisterModal';
 import LoginModal from './components/LoginModal';
 
-import { AboutPage, FilmFestivalPage, NotFoundPage, TicketPricePage } from './pages/InfoPages';
+import { AboutPage, FilmFestivalPage, NotFoundPage, TicketPricePage } from './pages/InfoPages'
 
 function ScrollToTop() {
   const { pathname } = useLocation();
