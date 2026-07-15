@@ -151,6 +151,8 @@ const ShowtimesPage = () => {
   const [formErrors, setFormErrors] = useState({});
   const [editingShowtime, setEditingShowtime] = useState(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
 
   const isEditing = Boolean(editingShowtime);
@@ -357,24 +359,36 @@ const ShowtimesPage = () => {
     }
   };
 
-  const handleDeleteShowtime = async (showtime) => {
-    const showtimeId = getShowtimeId(showtime);
-    const showtimeLabel =
-      showtime.movieTitle || showtime.roomName || "suất chiếu";
+  const openDeleteModal = (showtime) => {
+    setDeleteTarget(showtime);
+    setDeleteModalOpen(true);
+  };
 
-    if (!window.confirm(`${text.deleteConfirm}\n\n${showtimeLabel}`)) {
-      return;
-    }
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setDeleteTarget(null);
+  };
+
+  const handleDeleteShowtime = async () => {
+    if (!deleteTarget) return;
+
+    const showtimeId = getShowtimeId(deleteTarget);
 
     try {
       setDeletingShowtimeId(showtimeId);
       setFeedback({ type: "", message: "" });
       await axiosClient.delete(`/showtimes/${showtimeId}`);
-      setFeedback({ type: "success", message: text.deleteSuccess });
+      setFeedback({
+        type: "success",
+        message: "Đã xóa suất chiếu thành công.",
+      });
+      closeDeleteModal();
       await fetchShowtimes();
     } catch (error) {
-      const message = error.response?.data?.message || text.deleteFailed;
+      const message =
+        error.response?.data?.message || "Không thể xóa suất chiếu.";
       setFeedback({ type: "error", message });
+      closeDeleteModal();
     } finally {
       setDeletingShowtimeId(null);
     }
@@ -416,8 +430,16 @@ const ShowtimesPage = () => {
       </div>
 
       {feedback.message ? (
-        <div className={`showtime-alert ${feedback.type}`}>
-          {feedback.message}
+        <div className={`showtime-alert ${feedback.type}`} role="alert">
+          <span className="showtime-alert-icon">
+            {feedback.type === "success" ? "✓" : "!"}
+          </span>
+          <div>
+            <strong>
+              {feedback.type === "success" ? "Thành công" : "Thông báo"}
+            </strong>
+            <div>{feedback.message}</div>
+          </div>
         </div>
       ) : null}
 
@@ -595,6 +617,46 @@ const ShowtimesPage = () => {
         </section>
       ) : null}
 
+      {deleteModalOpen ? (
+        <div className="showtime-delete-overlay" onClick={closeDeleteModal}>
+          <div
+            className="showtime-delete-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="showtime-delete-icon">🗑️</div>
+            <h3>Xác nhận xóa suất chiếu</h3>
+            <p>
+              Bạn có chắc chắn muốn xóa suất chiếu này?
+              <br />
+              Hành động này sẽ ẩn suất chiếu khỏi danh sách và không thể hoàn
+              tác.
+            </p>
+            <div className="showtime-delete-meta">
+              <strong>{deleteTarget?.movieTitle || "Suất chiếu"}</strong>
+              <span>{deleteTarget?.roomName || ""}</span>
+            </div>
+            <div className="showtime-delete-actions">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={closeDeleteModal}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                onClick={handleDeleteShowtime}
+              >
+                {deletingShowtimeId === getShowtimeId(deleteTarget)
+                  ? "Đang xóa..."
+                  : "Xác nhận xóa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="card">
         {loading ? (
           <div className="loading-spinner">
@@ -645,7 +707,7 @@ const ShowtimesPage = () => {
                           type="button"
                           className="btn btn-icon btn-ghost"
                           style={{ color: "var(--color-danger)" }}
-                          onClick={() => handleDeleteShowtime(showtime)}
+                          onClick={() => openDeleteModal(showtime)}
                           disabled={
                             deletingShowtimeId === getShowtimeId(showtime)
                           }
