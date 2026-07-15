@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiOutlineCalendar,
+  HiOutlineCash,
+  HiOutlineClock,
+  HiOutlineLocationMarker,
   HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
+  HiOutlineSparkles,
+  HiOutlineX,
 } from "react-icons/hi";
 import axiosClient from "../api/axiosClient";
 
@@ -30,6 +35,34 @@ const matchesSearchQuery = (value, query) => {
   return normalizedValue.includes(normalizedQuery);
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "Chưa chọn";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Chưa chọn";
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+};
+
+const formatCurrency = (value) => {
+  const amount = Number(value);
+  if (!value || Number.isNaN(amount)) return "Chưa đặt";
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(amount);
+};
+
+const getRoomLabel = (room) => {
+  const cinemaName = room.cinema_id?.name || room.cinemaName;
+  return cinemaName ? `${room.name} - ${cinemaName}` : room.name;
+};
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
@@ -38,10 +71,11 @@ const ShowtimesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [formData, setFormData] = useState(emptyForm);
+  const [formErrors, setFormErrors] = useState({});
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
 
-  const fetchShowtimes = async () => {
+  const fetchShowtimes = useCallback(async () => {
     try {
       const response = await axiosClient.get("/showtimes");
       setShowtimes(response.data?.data || []);
@@ -49,9 +83,9 @@ const ShowtimesPage = () => {
       console.error(error);
       setShowtimes([]);
     }
-  };
+  }, []);
 
-  const fetchMovies = async () => {
+  const fetchMovies = useCallback(async () => {
     try {
       const response = await axiosClient.get("/movies", {
         params: { page: 1, limit: 100 },
@@ -61,9 +95,9 @@ const ShowtimesPage = () => {
       console.error(error);
       setMovies([]);
     }
-  };
+  }, []);
 
-  const fetchRooms = async () => {
+  const fetchRooms = useCallback(async () => {
     try {
       const response = await axiosClient.get("/rooms");
       setRooms(response.data?.data || []);
@@ -71,20 +105,34 @@ const ShowtimesPage = () => {
       console.error(error);
       setRooms([]);
     }
-  };
+  }, []);
 
-  const loadInitialData = async () => {
-    setLoading(true);
+  const loadInitialData = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true);
     try {
       await Promise.all([fetchShowtimes(), fetchMovies(), fetchRooms()]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchMovies, fetchRooms, fetchShowtimes]);
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      loadInitialData(false);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [loadInitialData]);
+
+  const selectedMovie = useMemo(
+    () => movies.find((movie) => movie._id === formData.movie_id),
+    [formData.movie_id, movies],
+  );
+
+  const selectedRoom = useMemo(
+    () => rooms.find((room) => room._id === formData.room_id),
+    [formData.room_id, rooms],
+  );
 
   const filteredShowtimes = useMemo(() => {
     const query = searchQuery.trim();
@@ -106,13 +154,49 @@ const ShowtimesPage = () => {
     });
   }, [searchQuery, showtimes]);
 
+  const updateField = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormErrors((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const resetForm = () => {
+    setFormData(emptyForm);
+    setFormErrors({});
+    setFeedback({ type: "", message: "" });
+  };
+
+  const validateForm = () => {
+    const errors = {};
+
+    if (!formData.movie_id) errors.movie_id = "Vui lòng chọn phim.";
+    if (!formData.room_id) errors.room_id = "Vui lòng chọn phòng chiếu.";
+    if (!formData.start_time)
+      errors.start_time = "Vui lòng chọn thời gian bắt đầu.";
+
+    if (formData.end_time && formData.start_time) {
+      const startTime = new Date(formData.start_time).getTime();
+      const endTime = new Date(formData.end_time).getTime();
+
+      if (endTime <= startTime) {
+        errors.end_time = "Thời gian kết thúc phải sau thời gian bắt đầu.";
+      }
+    }
+
+    if (formData.base_price && Number(formData.base_price) < 0) {
+      errors.base_price = "Giá vé không được nhỏ hơn 0.";
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!formData.movie_id || !formData.room_id || !formData.start_time) {
+    if (!validateForm()) {
       setFeedback({
         type: "error",
-        message: "Vui lòng chọn phim, phòng và thời gian bắt đầu.",
+        message: "Vui lòng kiểm tra lại thông tin suất chiếu.",
       });
       return;
     }
@@ -134,13 +218,13 @@ const ShowtimesPage = () => {
       };
 
       await axiosClient.post("/showtimes", payload);
-      setFeedback({ type: "success", message: "Thêm suất chiếu thành công." });
-      setFormData(emptyForm);
+      setFeedback({ type: "success", message: "Đã thêm suất chiếu thành công." });
+      resetForm();
       setIsFormOpen(false);
       await fetchShowtimes();
     } catch (error) {
       const message =
-        error.response?.data?.message || "Không thể thêm suất chiếu";
+        error.response?.data?.message || "Không thể thêm suất chiếu.";
       setFeedback({ type: "error", message });
     } finally {
       setSubmitting(false);
@@ -156,19 +240,22 @@ const ShowtimesPage = () => {
             Quản lý Suất chiếu
           </h1>
           <p className="page-subtitle">
-            Danh sách các suất chiếu đã được tạo trong hệ thống
+            Tạo lịch chiếu, chọn phòng và kiểm soát giá vé theo từng suất
           </p>
         </div>
-        <div style={{ display: "flex", gap: "12px" }}>
+        <div className="page-actions">
           <button className="btn btn-secondary" onClick={loadInitialData}>
             <HiOutlineRefresh />
             Làm mới
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => setIsFormOpen((prev) => !prev)}
+            onClick={() => {
+              setIsFormOpen((prev) => !prev);
+              setFeedback({ type: "", message: "" });
+            }}
           >
-            <HiOutlinePlus />
+            {isFormOpen ? <HiOutlineX /> : <HiOutlinePlus />}
             {isFormOpen ? "Đóng form" : "Thêm suất chiếu"}
           </button>
         </div>
@@ -180,7 +267,7 @@ const ShowtimesPage = () => {
           <input
             type="text"
             className="search-input"
-            placeholder="Tìm kiếm suất chiếu..."
+            placeholder="Tìm theo phim, phòng hoặc rạp..."
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
           />
@@ -188,164 +275,167 @@ const ShowtimesPage = () => {
       </div>
 
       {feedback.message ? (
-        <div
-          style={{
-            marginBottom: "16px",
-            padding: "12px 14px",
-            borderRadius: "10px",
-            background: feedback.type === "error" ? "#fff1f2" : "#ecfdf3",
-            color: feedback.type === "error" ? "#b91c1c" : "#166534",
-            border: `1px solid ${feedback.type === "error" ? "#fecdd3" : "#a7f3d0"}`,
-          }}
-        >
+        <div className={`showtime-alert ${feedback.type}`}>
           {feedback.message}
         </div>
       ) : null}
 
       {isFormOpen ? (
-        <div className="card" style={{ marginBottom: "16px" }}>
-          <h3 style={{ marginBottom: "12px" }}>Thêm suất chiếu mới</h3>
-          <form
-            onSubmit={handleSubmit}
-            style={{ display: "grid", gap: "12px" }}
-          >
-            <div
-              style={{
-                display: "grid",
-                gap: "12px",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+        <section className="showtime-form-panel">
+          <div className="showtime-form-header">
+            <div className="showtime-form-title">
+              <span className="showtime-form-icon">
+                <HiOutlineSparkles />
+              </span>
+              <div>
+                <h2>Thêm suất chiếu mới</h2>
+                <p>Hoàn thiện thông tin lịch chiếu trước khi mở bán vé.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-icon"
+              onClick={() => {
+                setIsFormOpen(false);
+                resetForm();
               }}
+              title="Đóng"
             >
-              <label style={{ display: "grid", gap: "6px" }}>
-                <span>Phim</span>
+              <HiOutlineX />
+            </button>
+          </div>
+
+          <form className="showtime-form" onSubmit={handleSubmit}>
+            <div className="showtime-form-grid">
+              <label className="form-group">
+                <span className="form-label">
+                  Phim <span className="required">*</span>
+                </span>
                 <select
+                  className={`form-input ${formErrors.movie_id ? "error" : ""}`}
                   value={formData.movie_id}
-                  onChange={(event) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      movie_id: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => updateField("movie_id", event.target.value)}
                   required
-                  style={{
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                  }}
                 >
-                  <option value="">-- Chọn phim --</option>
+                  <option value="">Chọn phim</option>
                   {movies.map((movie) => (
                     <option key={movie._id} value={movie._id}>
                       {movie.title}
                     </option>
                   ))}
                 </select>
+                {formErrors.movie_id ? (
+                  <span className="form-error">{formErrors.movie_id}</span>
+                ) : null}
               </label>
 
-              <label style={{ display: "grid", gap: "6px" }}>
-                <span>Phòng</span>
+              <label className="form-group">
+                <span className="form-label">
+                  Phòng chiếu <span className="required">*</span>
+                </span>
                 <select
+                  className={`form-input ${formErrors.room_id ? "error" : ""}`}
                   value={formData.room_id}
-                  onChange={(event) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      room_id: event.target.value,
-                    }))
-                  }
+                  onChange={(event) => updateField("room_id", event.target.value)}
                   required
-                  style={{
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                  }}
                 >
-                  <option value="">-- Chọn phòng --</option>
+                  <option value="">Chọn phòng chiếu</option>
                   {rooms.map((room) => (
                     <option key={room._id} value={room._id}>
-                      {room.name}{" "}
-                      {room.cinema_id ? `- ${room.cinema_id.name}` : ""}
+                      {getRoomLabel(room)}
                     </option>
                   ))}
                 </select>
+                {formErrors.room_id ? (
+                  <span className="form-error">{formErrors.room_id}</span>
+                ) : null}
               </label>
 
-              <label style={{ display: "grid", gap: "6px" }}>
-                <span>Thời gian bắt đầu</span>
+              <label className="form-group">
+                <span className="form-label">
+                  Bắt đầu <span className="required">*</span>
+                </span>
                 <input
+                  className={`form-input ${formErrors.start_time ? "error" : ""}`}
                   type="datetime-local"
                   value={formData.start_time}
                   onChange={(event) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      start_time: event.target.value,
-                    }))
+                    updateField("start_time", event.target.value)
                   }
                   required
-                  style={{
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                  }}
                 />
+                {formErrors.start_time ? (
+                  <span className="form-error">{formErrors.start_time}</span>
+                ) : null}
               </label>
 
-              <label style={{ display: "grid", gap: "6px" }}>
-                <span>Thời gian kết thúc</span>
+              <label className="form-group">
+                <span className="form-label">Kết thúc</span>
                 <input
+                  className={`form-input ${formErrors.end_time ? "error" : ""}`}
                   type="datetime-local"
                   value={formData.end_time}
-                  onChange={(event) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      end_time: event.target.value,
-                    }))
-                  }
-                  style={{
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                  }}
+                  onChange={(event) => updateField("end_time", event.target.value)}
                 />
+                {formErrors.end_time ? (
+                  <span className="form-error">{formErrors.end_time}</span>
+                ) : (
+                  <span className="form-hint">
+                    Có thể bỏ trống nếu hệ thống tự tính theo thời lượng phim.
+                  </span>
+                )}
               </label>
 
-              <label style={{ display: "grid", gap: "6px" }}>
-                <span>Giá vé cơ bản</span>
+              <label className="form-group">
+                <span className="form-label">Giá vé cơ bản</span>
                 <input
+                  className={`form-input ${formErrors.base_price ? "error" : ""}`}
                   type="number"
                   min="0"
+                  step="1000"
                   value={formData.base_price}
                   onChange={(event) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      base_price: event.target.value,
-                    }))
+                    updateField("base_price", event.target.value)
                   }
                   placeholder="Ví dụ: 70000"
-                  style={{
-                    padding: "10px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1d5db",
-                  }}
                 />
+                {formErrors.base_price ? (
+                  <span className="form-error">{formErrors.base_price}</span>
+                ) : (
+                  <span className="form-hint">
+                    Nhập giá mặc định trước khi áp dụng phụ thu hoặc khuyến mãi.
+                  </span>
+                )}
               </label>
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                justifyContent: "flex-end",
-              }}
-            >
+            <aside className="showtime-preview">
+              <div className="showtime-preview-eyebrow">Xem trước</div>
+              <h3>{selectedMovie?.title || "Chưa chọn phim"}</h3>
+              <div className="showtime-preview-list">
+                <span>
+                  <HiOutlineLocationMarker />
+                  {selectedRoom ? getRoomLabel(selectedRoom) : "Chưa chọn phòng"}
+                </span>
+                <span>
+                  <HiOutlineClock />
+                  {formatDateTime(formData.start_time)}
+                </span>
+                <span>
+                  <HiOutlineCash />
+                  {formatCurrency(formData.base_price)}
+                </span>
+              </div>
+            </aside>
+
+            <div className="showtime-form-actions">
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => {
-                  setIsFormOpen(false);
-                  setFeedback({ type: "", message: "" });
-                }}
+                onClick={resetForm}
+                disabled={submitting}
               >
-                Hủy
+                Xóa thông tin
               </button>
               <button
                 type="submit"
@@ -356,7 +446,7 @@ const ShowtimesPage = () => {
               </button>
             </div>
           </form>
-        </div>
+        </section>
       ) : null}
 
       <div className="card">
