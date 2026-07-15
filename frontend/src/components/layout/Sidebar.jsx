@@ -9,12 +9,17 @@ import {
   HiOutlineOfficeBuilding,
   HiOutlineVideoCamera,
 } from "react-icons/hi";
+import { useAuth } from "../../hooks/useAuth";
 
 const menuItems = [
   {
     section: "Tổng quan",
     items: [
-      { path: "/admin/dashboard", icon: <HiOutlineViewGrid />, label: "Dashboard" },
+      {
+        path: "/admin/dashboard",
+        icon: <HiOutlineViewGrid />,
+        label: "Dashboard",
+      },
     ],
   },
   {
@@ -22,10 +27,12 @@ const menuItems = [
     items: [
       { path: "/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/movies", icon: <HiOutlineFilm />, label: "Phim" },
-      { path: "/trailers", icon: <HiOutlineVideoCamera />, label: "Trailer" },
-      { path: "/cinemas", icon: <HiOutlineOfficeBuilding />, label: "Rạp chiếu" },
+      {
+        path: "/cinemas",
+        icon: <HiOutlineOfficeBuilding />,
+        label: "Rạp chiếu",
+      },
       { path: "/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
-      { path: "/bookings", icon: <HiOutlineTicket />, label: "Đặt vé" },
     ],
   },
   {
@@ -38,6 +45,7 @@ const menuItems = [
 ];
 
 const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
+  const { user } = useAuth();
   const sidebarClasses = [
     "sidebar",
     isCollapsed ? "collapsed" : "",
@@ -77,9 +85,13 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
 
         <div className="sidebar-footer">
           <div className="sidebar-footer-info">
-            <div className="sidebar-footer-avatar">A</div>
+            <div className="sidebar-footer-avatar">
+              {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
+            </div>
             <div className="sidebar-footer-details">
-              <div className="sidebar-footer-name">Admin</div>
+              <div className="sidebar-footer-name">
+                {user?.full_name || "Admin"}
+              </div>
               <div className="sidebar-footer-role">Quản trị viên</div>
             </div>
           </div>

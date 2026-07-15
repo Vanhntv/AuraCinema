@@ -7,7 +7,14 @@ import LoginModal from "./LoginModal";
 import RegisterModal from "./RegisterModal";
 
 function Header() {
-  const location = useLocation();
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { isAuthenticated, logout, user } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/')
+  }
 
   const [openLogin, setOpenLogin] = useState(false);
   const [openRegister, setOpenRegister] = useState(false);

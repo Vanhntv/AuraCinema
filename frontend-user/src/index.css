@@ -2,11 +2,30 @@
 
 @layer base {
   :root {
-    font-family:
+    --text: #b0b6c2;
+    --text-h: #f3f4f6;
+    --bg: #0f141c;
+    --panel-bg: #191c23;
+    --input-bg: #111318;
+    --border: #303542;
+    --accent: #ff5364;
+    --accent-bg: rgba(255, 83, 100, 0.16);
+    --error-bg: #451c21;
+    --error-text: #ffc4c4;
+    --success-bg: #173723;
+    --success-text: #b7f0c8;
+    --shadow:
+      rgba(0, 0, 0, 0.4) 0 10px 15px -3px,
+      rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+    --sans:
       'Be Vietnam Pro', Montserrat, Arial, ui-sans-serif, system-ui,
       -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: #f8fafc;
-    background: #0f141c;
+    --heading: var(--sans);
+
+    font: 16px/145% var(--sans);
+    letter-spacing: 0;
+    color: var(--text);
+    background: var(--bg);
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -20,6 +39,33 @@
   body {
     min-width: 320px;
     min-height: 100vh;
+    margin: 0;
+  }
+
+  #root {
+    min-height: 100svh;
+  }
+
+  h1,
+  h2 {
+    font-family: var(--heading);
+    font-weight: 700;
+    color: var(--text-h);
+  }
+
+  h1 {
+    font-size: clamp(32px, 6vw, 44px);
+    line-height: 1.05;
+    margin: 0;
+  }
+
+  h2 {
+    font-size: 24px;
+    line-height: 118%;
+    margin: 0 0 8px;
+  }
+
+  p {
     margin: 0;
   }
 

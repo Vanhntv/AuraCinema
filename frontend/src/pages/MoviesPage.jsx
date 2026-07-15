@@ -23,6 +23,7 @@ const MoviesPage = () => {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [apiErrors, setApiErrors] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -64,7 +65,7 @@ const MoviesPage = () => {
         setLoading(false);
       }
     },
-    [pageSize, addToast]
+    [pageSize, addToast],
   );
 
   useEffect(() => {
@@ -105,12 +106,18 @@ const MoviesPage = () => {
       }
       setIsModalOpen(false);
       setEditingMovie(null);
+      setApiErrors({});
       fetchMovies(1, searchQuery);
       setTimeout(() => navigate("/movies"), 500);
     } catch (error) {
       const msg =
         error.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại";
-      addToast("error", msg);
+      // If server returns URL format error, show inline in form
+      if (msg === "url không đúng định dạng") {
+        setApiErrors({ trailer_url: msg });
+      } else {
+        addToast("error", msg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -241,10 +248,12 @@ const MoviesPage = () => {
         onClose={() => {
           setIsModalOpen(false);
           setEditingMovie(null);
+          setApiErrors({});
         }}
         onSubmit={handleSubmit}
         initialData={editingMovie}
         isLoading={submitting}
+        apiErrors={apiErrors}
       />
 
       {/* Confirm Delete Dialog */}

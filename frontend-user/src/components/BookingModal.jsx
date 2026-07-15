@@ -1,70 +1,192 @@
-import { useEffect, useMemo, useState } from 'react'
-import { bookTickets, getAvailability, getMovieShowtimes } from '../services/bookingService'
+import { useMemo, useState } from 'react'
 
-const dateKey = (value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
-const dateLabel = (value) => new Date(`${value}T12:00:00`).toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })
-const timeLabel = (value) => new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Bangkok' })
-const money = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`
+const showDates = [
+  'Hôm nay',
+  'Ngày mai',
+  'Thứ 6',
+  'Thứ 7',
+]
 
-function BookingContent({ movie, onClose }) {
-  const [showtimes, setShowtimes] = useState([]), [selectedDate, setSelectedDate] = useState(''), [showtime, setShowtime] = useState(null)
-  const [seats, setSeats] = useState([]), [booked, setBooked] = useState([]), [selected, setSelected] = useState([])
-  const [name, setName] = useState(''), [phone, setPhone] = useState(''), [loading, setLoading] = useState(true), [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState(''), [booking, setBooking] = useState(null)
+const showtimes = ['09:30', '13:15', '16:45', '19:30', '21:45']
 
-  useEffect(() => {
-    let active = true
-    getMovieShowtimes(movie._id).then((items) => {
-      if (!active) return
-      const upcoming = items.filter((item) => new Date(item.start_time) > new Date())
-      setShowtimes(upcoming)
-      if (upcoming[0]) setSelectedDate(dateKey(upcoming[0].start_time))
-    }).catch((err) => active && setError(err.message)).finally(() => active && setLoading(false))
-    return () => { active = false }
-  }, [movie._id])
+const seats = Array.from({ length: 36 }, (_, index) => {
+  const row = String.fromCharCode(65 + Math.floor(index / 6))
+  const number = (index % 6) + 1
+  return `${row}${number}`
+})
 
-  useEffect(() => {
-    if (!showtime) return
-    let active = true
-    getAvailability(showtime.id).then((data) => { if (active) { setSeats(data.seats); setBooked(data.bookedSeatIds); setError('') } }).catch((err) => active && setError(err.message)).finally(() => active && setLoading(false))
-    return () => { active = false }
-  }, [showtime])
+function BookingModal({ movie, onClose }) {
+  const [selectedDate, setSelectedDate] = useState(showDates[0])
+  const [selectedTime, setSelectedTime] = useState(showtimes[0])
+  const [selectedSeats, setSelectedSeats] = useState([])
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
 
-  const dates = useMemo(() => [...new Set(showtimes.map((item) => dateKey(item.start_time)))], [showtimes])
-  const chosenSeats = seats.filter((seat) => selected.includes(seat._id))
-  const total = chosenSeats.reduce((sum, seat) => sum + Math.round(Number(showtime?.base_price || 0) * Number(seat.seat_type_id?.price_multiplier || 1)), 0)
+  const totalPrice = useMemo(() => selectedSeats.length * 45000, [selectedSeats])
 
-  const chooseShowtime = (item) => { setLoading(true); setShowtime(item); setSelected([]); setSeats([]) }
-  const submit = async () => {
-    try {
-      setSubmitting(true); setError('')
-      setBooking(await bookTickets({ showtime_id: showtime.id, seat_ids: selected, customer_name: name, customer_phone: phone }))
-    } catch (err) {
-      setError(err.message)
-      if (err.message.includes('người khác')) { const data = await getAvailability(showtime.id); setBooked(data.bookedSeatIds); setSelected((ids) => ids.filter((id) => !data.bookedSeatIds.includes(id))) }
-    } finally { setSubmitting(false) }
+  if (!movie) return null
+
+  const toggleSeat = (seat) => {
+    setSelectedSeats((current) =>
+      current.includes(seat)
+        ? current.filter((item) => item !== seat)
+        : [...current, seat],
+    )
   }
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-black/75 px-5 py-8 backdrop-blur-sm" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="max-h-[90vh] w-[min(960px,100%)] overflow-y-auto rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between gap-4"><div><p className="text-sm font-bold uppercase tracking-[.2em] text-[#ff6070]">Đặt vé</p><h2 className="mt-2 text-3xl font-black">{movie.title}</h2></div><button className="h-10 w-10 rounded-full bg-white/10 text-xl hover:bg-[#ff6070]" onClick={onClose}>×</button></div>
-        {booking ? <div className="mt-8 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-9 text-center"><div className="text-5xl">✓</div><h3 className="mt-3 text-2xl font-black">Đặt vé thành công</h3><p className="mt-3 text-slate-300">Mã vé</p><p className="mt-2 text-2xl font-black text-emerald-300">{booking.booking_code}</p><p className="mt-4 text-slate-300">Ghế {booking.seats.map((seat) => seat.label).join(', ')} · {money(booking.total_price)}</p><button className="mt-6 rounded-full bg-[#ff6070] px-7 py-3 font-bold" onClick={onClose}>Hoàn tất</button></div> :
-        <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_320px]">
-          <div className="grid content-start gap-7">
-            <section><h3 className="text-lg font-black">Chọn ngày</h3><div className="mt-3 flex flex-wrap gap-2">{dates.map((date) => <button className={`rounded-full px-4 py-2 text-sm font-bold ${selectedDate === date ? 'bg-[#ff6070]' : 'bg-white/10'}`} key={date} onClick={() => { setSelectedDate(date); setShowtime(null); setSeats([]) }}>{dateLabel(date)}</button>)}</div></section>
-            <section><h3 className="text-lg font-black">Chọn suất chiếu</h3><div className="mt-3 flex flex-wrap gap-2">{showtimes.filter((item) => dateKey(item.start_time) === selectedDate).map((item) => <button className={`rounded-xl px-4 py-3 text-sm font-bold ${showtime?.id === item.id ? 'bg-[#ff6070]' : 'bg-white/10'}`} key={item.id} onClick={() => chooseShowtime(item)}>{timeLabel(item.start_time)} · {item.cinemaName} / {item.roomName}</button>)}</div></section>
-            <section><h3 className="text-lg font-black">Chọn ghế</h3><div className="mt-3 rounded-2xl border border-white/10 p-5"><div className="mx-auto mb-2 h-2 w-2/3 rounded-full bg-gradient-to-r from-transparent via-white/60 to-transparent"/><p className="mb-5 text-center text-[10px] uppercase tracking-widest text-slate-500">Màn hình</p><div className="grid grid-cols-10 gap-2 max-sm:grid-cols-6">{seats.map((seat) => { const sold = booked.includes(seat._id), active = selected.includes(seat._id); return <button disabled={sold} key={seat._id} className={`h-9 rounded text-xs font-black ${sold ? 'cursor-not-allowed bg-slate-800 text-slate-600' : active ? 'bg-[#ff6070]' : 'bg-white/10 hover:bg-white/20'}`} onClick={() => setSelected((ids) => ids.includes(seat._id) ? ids.filter((id) => id !== seat._id) : [...ids, seat._id])}>{seat.seat_row}{seat.seat_number}</button> })}</div>{!showtime && <p className="py-8 text-center text-sm text-slate-400">Chọn suất chiếu để xem ghế.</p>}</div></section>
+    <div
+      className="fixed inset-0 z-[60] grid place-items-center bg-black/75 px-5 py-8 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Đặt vé phim ${movie.title}`}
+    >
+      <div
+        className="max-h-[90vh] w-[min(920px,100%)] overflow-y-auto rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-[0_30px_90px_rgba(0,0,0,0.55)] md:p-8"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-5">
+          <div>
+            <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">
+              Đặt vé
+            </p>
+            <h2 className="mt-2 font-[Montserrat,Arial,sans-serif] text-3xl font-black text-white max-sm:text-2xl">
+              {movie.title}
+            </h2>
           </div>
-          <aside className="h-fit rounded-2xl border border-white/10 bg-white/[.04] p-5"><h3 className="text-lg font-black">Thông tin vé</h3><div className="mt-5 grid gap-3 text-sm text-slate-300"><p>Suất: {showtime ? `${dateLabel(selectedDate)} · ${timeLabel(showtime.start_time)}` : 'Chưa chọn'}</p><p>Ghế: {chosenSeats.length ? chosenSeats.map((seat) => `${seat.seat_row}${seat.seat_number}`).join(', ') : 'Chưa chọn'}</p><p>Tổng: <strong className="text-[#ff9aa5]">{money(total)}</strong></p></div><div className="mt-5 grid gap-3"><input className="h-11 rounded-xl border border-white/10 bg-black/20 px-4 outline-none focus:border-[#ff6070]" placeholder="Họ tên" value={name} onChange={(e) => setName(e.target.value)}/><input className="h-11 rounded-xl border border-white/10 bg-black/20 px-4 outline-none focus:border-[#ff6070]" placeholder="Số điện thoại" value={phone} onChange={(e) => setPhone(e.target.value)}/></div>{loading && <p className="mt-4 text-sm text-slate-400">Đang tải...</p>}{error && <p className="mt-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}{!loading && !showtimes.length && !error && <p className="mt-4 text-sm text-amber-300">Phim chưa có suất chiếu sắp tới.</p>}<button disabled={submitting || !showtime || !selected.length || !name.trim() || !phone.trim()} className="mt-6 h-12 w-full rounded-full bg-[#ff6070] font-extrabold disabled:opacity-50" onClick={submit}>{submitting ? 'Đang đặt...' : 'Xác nhận đặt vé'}</button></aside>
-        </div>}
+          <button
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+            type="button"
+            aria-label="Đóng đặt vé"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_320px]">
+          <div className="grid gap-7">
+            <div>
+              <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+                Chọn ngày
+              </h3>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {showDates.map((date) => (
+                  <button
+                    className={`rounded-full px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold transition-colors ${
+                      selectedDate === date
+                        ? 'bg-[#ff6070] text-white'
+                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
+                    }`}
+                    key={date}
+                    type="button"
+                    onClick={() => setSelectedDate(date)}
+                  >
+                    {date}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+                Chọn suất chiếu
+              </h3>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {showtimes.map((time) => (
+                  <button
+                    className={`rounded-full px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold transition-colors ${
+                      selectedTime === time
+                        ? 'bg-[#ff6070] text-white'
+                        : 'bg-white/10 text-slate-200 hover:bg-white/15'
+                    }`}
+                    key={time}
+                    type="button"
+                    onClick={() => setSelectedTime(time)}
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+                Chọn ghế
+              </h3>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                <div className="mx-auto mb-5 h-2 w-2/3 rounded-full bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+                <div className="grid grid-cols-6 gap-3">
+                  {seats.map((seat) => (
+                    <button
+                      className={`h-10 rounded-lg font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-black transition-colors ${
+                        selectedSeats.includes(seat)
+                          ? 'bg-[#ff6070] text-white'
+                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                      }`}
+                      key={seat}
+                      type="button"
+                      onClick={() => toggleSeat(seat)}
+                    >
+                      {seat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+              Thông tin vé
+            </h3>
+            <div className="mt-5 grid gap-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-300">
+              <p>
+                <span className="text-slate-500">Ngày:</span> {selectedDate}
+              </p>
+              <p>
+                <span className="text-slate-500">Suất:</span> {selectedTime}
+              </p>
+              <p>
+                <span className="text-slate-500">Ghế:</span>{' '}
+                {selectedSeats.length ? selectedSeats.join(', ') : 'Chưa chọn'}
+              </p>
+              <p>
+                <span className="text-slate-500">Tổng:</span>{' '}
+                <strong className="text-[#ff9aa5]">
+                  {totalPrice.toLocaleString('vi-VN')}đ
+                </strong>
+              </p>
+            </div>
+
+            <div className="mt-6 grid gap-3">
+              <input
+                className="h-11 rounded-xl border border-white/10 bg-black/20 px-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
+                placeholder="Họ tên"
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+              />
+              <input
+                className="h-11 rounded-xl border border-white/10 bg-black/20 px-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
+                placeholder="Số điện thoại"
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+              />
+            </div>
+
+            <button
+              className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              disabled={!selectedSeats.length || !customerName || !customerPhone}
+            >
+              Xác nhận đặt vé
+            </button>
+          </aside>
+        </div>
       </div>
     </div>
   )
 }
 
-function BookingModal({ movie, onClose }) {
-  if (!movie) return null
-  return <BookingContent key={movie._id} movie={movie} onClose={onClose} />
-}
 export default BookingModal

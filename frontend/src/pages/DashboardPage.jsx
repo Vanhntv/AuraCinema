@@ -12,6 +12,7 @@ import {
   HiOutlineTicket,
 } from "react-icons/hi";
 import { getDashboardStats } from "../services/dashboardService";
+import { useAuth } from "../hooks/useAuth";
 
 const emptyDashboard = {
   stats: {
@@ -19,8 +20,6 @@ const emptyDashboard = {
     movies: 0,
     cinemas: 0,
     bookings: 0,
-    todayBookings: 0,
-    revenue: 0,
     todayShowtimes: 0,
     nowShowingMovies: 0,
   },
@@ -38,6 +37,7 @@ const numberFormatter = new Intl.NumberFormat("vi-VN");
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -64,7 +64,7 @@ const DashboardPage = () => {
   }, []);
 
   useEffect(() => {
-    Promise.resolve().then(fetchDashboard);
+    fetchDashboard();
   }, [fetchDashboard]);
 
   const statCards = useMemo(
@@ -95,17 +95,15 @@ const DashboardPage = () => {
         value: dashboard.stats.bookings,
         icon: <HiOutlineTicket />,
         tone: "orange",
-        hint: `${numberFormatter.format(dashboard.stats.todayBookings || 0)} vé hôm nay`,
+        hint: "Chờ module đặt vé",
       },
     ],
     [dashboard.stats],
   );
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    sessionStorage.clear();
-    navigate("/admin/dashboard", { replace: true });
+    logout();
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -186,7 +184,7 @@ const DashboardPage = () => {
                     </td>
                     <td>
                       <span className="status-badge status-now-showing">
-                        {booking.status === "cancelled" ? "Đã hủy" : booking.paymentStatus === "paid" ? "Đã thanh toán" : "Đã xác nhận"}
+                        {booking.status || "Đã đặt"}
                       </span>
                     </td>
                   </tr>
@@ -263,9 +261,9 @@ const DashboardPage = () => {
                 <HiOutlineCalendar />
                 Lịch chiếu
               </Link>
-              <Link className="quick-action" to="/bookings">
+              <Link className="quick-action" to="/movies">
                 <HiOutlineCash />
-                {currencyFormatter.format(dashboard.stats.revenue || 0)} doanh thu
+                Doanh thu
               </Link>
             </div>
           </section>

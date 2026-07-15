@@ -90,40 +90,6 @@ export const getRoomsByCinema = async (req, res) => {
   }
 };
 
-export const ensureDefaultRooms = async (req, res) => {
-  try {
-    const { cinema_id } = req.params;
-    const cinema = await Cinema.findOne({ _id: cinema_id, deleted_at: null });
-
-    if (!cinema) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy rạp chiếu" });
-    }
-
-    const defaultNames = Array.from({ length: 8 }, (_, index) => `Phòng ${index + 1}`);
-    const existingRooms = await Room.find({ cinema_id, deleted_at: null });
-    const existingNames = new Set(existingRooms.map((room) => room.name.trim().toLowerCase()));
-    const missingRooms = defaultNames
-      .filter((name) => !existingNames.has(name.toLowerCase()))
-      .map((name) => ({ cinema_id, name, capacity: 60 }));
-
-    if (missingRooms.length) {
-      await Room.insertMany(missingRooms);
-    }
-
-    const rooms = await Room.find({ cinema_id, deleted_at: null })
-      .populate("cinema_id", "name city address")
-      .sort({ name: 1 });
-
-    return res.status(200).json({
-      success: true,
-      message: missingRooms.length ? `Đã tạo ${missingRooms.length} phòng mặc định` : "Phòng mặc định đã sẵn sàng",
-      data: rooms,
-    });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
 export const createRoom = async (req, res) => {
   try {
     const { cinema_id, name, capacity } = req.body;
