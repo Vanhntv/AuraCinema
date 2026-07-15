@@ -22,7 +22,7 @@ function ScrollToTop() {
 
   return null;
 }
-main
+
 
 function HomePage() {
   return (
