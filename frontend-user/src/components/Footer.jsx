@@ -23,7 +23,7 @@ function Footer() {
         <div>
           <Logo compact />
 
-          <p className="mt-5 max-w-md font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm leading-6 text-slate-400">
+          <p className="mt-5 max-w-md font-[var(--sans)] text-sm leading-6 text-slate-400">
             Trung tâm chiếu phim với lịch chiếu cập nhật mỗi ngày, ưu đãi đặt vé
             trực tuyến và không gian xem phim dành cho mọi khán giả.
           </p>
@@ -43,14 +43,14 @@ function Footer() {
         </div>
 
         <div>
-          <h2 className="font-[Montserrat,Arial,sans-serif] text-base font-black uppercase text-white">
+          <h2 className="font-[var(--display)] text-base font-black uppercase text-white">
             Liên kết
           </h2>
           <ul className="mt-5 grid gap-3">
             {quickLinks.map((item) => (
               <li key={item}>
                 <a
-                  className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
+                  className="font-[var(--sans)] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
                   href="/"
                 >
                   {item}
@@ -61,14 +61,14 @@ function Footer() {
         </div>
 
         <div>
-          <h2 className="font-[Montserrat,Arial,sans-serif] text-base font-black uppercase text-white">
+          <h2 className="font-[var(--display)] text-base font-black uppercase text-white">
             Hỗ trợ
           </h2>
           <ul className="mt-5 grid gap-3">
             {supportLinks.map((item) => (
               <li key={item}>
                 <a
-                  className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
+                  className="font-[var(--sans)] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
                   href="/"
                 >
                   {item}
@@ -79,10 +79,10 @@ function Footer() {
         </div>
 
         <div>
-          <h2 className="font-[Montserrat,Arial,sans-serif] text-base font-black uppercase text-white">
+          <h2 className="font-[var(--display)] text-base font-black uppercase text-white">
             Liên hệ
           </h2>
-          <div className="mt-5 grid gap-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm leading-6 text-slate-400">
+          <div className="mt-5 grid gap-3 font-[var(--sans)] text-sm leading-6 text-slate-400">
             <p>87 Láng Hạ, Ba Đình, Hà Nội</p>
             <p>Hotline: 1900 1234</p>
             <p>Email: support@auracinema.vn</p>
@@ -92,7 +92,7 @@ function Footer() {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="mx-auto flex w-[min(1760px,calc(100%_-_96px))] items-center justify-between gap-4 py-5 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs text-slate-500 max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)] max-sm:flex-col max-sm:items-start">
+        <div className="mx-auto flex w-[min(1760px,calc(100%_-_96px))] items-center justify-between gap-4 py-5 font-[var(--sans)] text-xs text-slate-500 max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)] max-sm:flex-col max-sm:items-start">
           <span>© 2026 Aura Cinema. All rights reserved.</span>
           <span>Thiết kế cho trải nghiệm đặt vé nhanh và rõ ràng.</span>
         </div>

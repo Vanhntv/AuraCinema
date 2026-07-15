@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { login as loginApi, register as registerApi, getProfile } from "../api/authApi";
+import {
+  login as loginApi,
+  register as registerApi,
+  getProfile,
+  updateProfile as updateProfileApi,
+} from "../api/authApi";
 import { ACCESS_TOKEN_KEY } from "../api/axiosClient";
 import { AuthContext } from "./AuthContext";
 
@@ -89,6 +94,12 @@ function AuthProvider({ children }) {
     [saveToken]
   );
 
+  const updateProfile = useCallback(async (payload) => {
+    const response = await updateProfileApi(payload);
+    setUser(response.data || null);
+    return response;
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -97,9 +108,10 @@ function AuthProvider({ children }) {
       isAuthenticated: Boolean(token && user),
       login,
       register,
+      updateProfile,
       logout,
     }),
-    [loading, login, logout, register, token, user]
+    [loading, login, logout, register, token, updateProfile, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -17,6 +17,15 @@ const hashPassword = async (password) => {
 };
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
+const normalizePhone = (phone) => {
+  if (phone === undefined || phone === null || phone === "") {
+    return null;
+  }
+
+  return String(phone).replace(/\D/g, "");
+};
+
+const isValidVietnamPhone = (phone) => /^0\d{9}$/.test(phone);
 
 const verifyPassword = async (password, storedPassword) => {
   const [salt, key] = storedPassword.split(":");
@@ -74,6 +83,15 @@ export const register = async (req, res) => {
       });
     }
 
+    const normalizedPhone = normalizePhone(phone);
+
+    if (normalizedPhone && !isValidVietnamPhone(normalizedPhone)) {
+      return res.status(400).json({
+        success: false,
+        message: "So dien thoai phai gom 10 chu so va bat dau bang 0",
+      });
+    }
+
     const hashedPassword = await hashPassword(password);
 
     const user = await User.create({
@@ -81,7 +99,7 @@ export const register = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       role: DEFAULT_ROLE,
-      phone: phone?.trim() || null,
+      phone: normalizedPhone,
       avatar: avatar || null,
     });
 
@@ -194,6 +212,80 @@ export const profile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      data: {
+        ...user.toObject(),
+        role: resolveUserRole(user),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { full_name, phone, avatar } = req.body;
+    const updatePayload = {};
+
+    if (full_name !== undefined) {
+      const normalizedName = full_name.trim();
+
+      if (!normalizedName) {
+        return res.status(400).json({
+          success: false,
+          message: "Ho ten khong duoc de trong",
+        });
+      }
+
+      updatePayload.full_name = normalizedName;
+    }
+
+    if (phone !== undefined) {
+      const normalizedPhone = normalizePhone(phone);
+
+      if (normalizedPhone && !isValidVietnamPhone(normalizedPhone)) {
+        return res.status(400).json({
+          success: false,
+          message: "So dien thoai phai gom 10 chu so va bat dau bang 0",
+        });
+      }
+
+      updatePayload.phone = normalizedPhone;
+    }
+
+    if (avatar !== undefined) {
+      updatePayload.avatar = avatar || null;
+    }
+
+    if (!Object.keys(updatePayload).length) {
+      return res.status(400).json({
+        success: false,
+        message: "Khong co thong tin can cap nhat",
+      });
+    }
+
+    const user = await User.findOneAndUpdate(
+      {
+        _id: req.user.id,
+        deleted_at: null,
+      },
+      updatePayload,
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay nguoi dung",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Cap nhat thong tin thanh cong",
       data: {
         ...user.toObject(),
         role: resolveUserRole(user),

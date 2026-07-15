@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getMovies } from '../services/movieService'
 import BookingModal from './BookingModal'
 import MovieDetailModal from './MovieDetailModal'
@@ -23,7 +24,7 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
 
   return (
     <article
-      className="group cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_18px_45px_rgba(0,0,0,0.22)] transition-transform duration-300 hover:-translate-y-1"
+      className="group cursor-pointer overflow-hidden rounded-[18px] border border-white/10 bg-white/[0.035] shadow-[0_18px_45px_rgba(0,0,0,0.22)] transition-all duration-300 hover:-translate-y-1 hover:border-[#ff6070]/40 hover:bg-white/[0.055]"
       onClick={() => onOpenDetail(movie)}
     >
       <div className="aspect-[2/3] overflow-hidden bg-[#151b26]">
@@ -37,11 +38,11 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
         />
       </div>
 
-      <div className="p-5">
-        <h3 className="line-clamp-2 min-h-14 font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+      <div className="p-4">
+        <h3 className="line-clamp-2 min-h-12 font-[var(--display)] text-base font-black uppercase leading-6 text-white">
           {movie.title}
         </h3>
-        <div className="mt-3 flex flex-wrap gap-2 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-bold text-slate-300">
+        <div className="mt-3 flex flex-wrap gap-2 font-[var(--sans)] text-xs font-bold text-slate-300">
           <span className="rounded-full bg-white/10 px-3 py-1">
             {formatDuration(movie.duration)}
           </span>
@@ -55,7 +56,7 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
           ) : null}
         </div>
         <button
-          className="mt-5 h-11 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
+          className="mt-5 h-10 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-[var(--sans)] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)] transition-transform active:scale-[0.98]"
           type="button"
           onClick={(event) => {
             event.stopPropagation()
@@ -71,22 +72,22 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
 
 function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
   return (
-    <div className="mt-10 first:mt-0">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <h3 className="font-[Montserrat,Arial,sans-serif] text-2xl font-black text-white max-sm:text-xl">
+    <div className="mt-12 first:mt-0">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h3 className="font-[var(--display)] text-2xl font-black uppercase text-white max-sm:text-xl">
           {title}
         </h3>
-        <span className="rounded-full bg-white/10 px-4 py-2 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-bold text-slate-300">
+        <span className="rounded-full bg-white/10 px-4 py-2 font-[var(--sans)] text-xs font-bold text-slate-300">
           {movies.length} phim
         </span>
       </div>
 
       {movies.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-slate-300">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center font-[var(--sans)] text-slate-300">
           {emptyText}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+        <div className="grid grid-cols-5 gap-5 max-2xl:grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
           {movies.map((movie) => (
             <MovieCard
               key={movie._id}
@@ -147,29 +148,32 @@ function NowShowingMovies() {
   const comingSoonMovies = movies.filter((movie) => movie.status === 'coming_soon')
 
   return (
-    <section className="w-full">
+    <section
+      className="mx-auto w-[min(1760px,calc(100%_-_96px))] py-16 max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)] max-sm:py-12"
+      id="phim"
+    >
       <div className="mb-8 flex items-end justify-between gap-5 max-sm:block">
         <div>
-          <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold uppercase tracking-[0.24em] text-[#ff6070]">
+          <p className="font-[var(--sans)] text-sm font-bold uppercase tracking-[0.24em] text-[#ff6070]">
             Aura Cinema
           </p>
-          <h2 className="mt-2 font-[Montserrat,Arial,sans-serif] text-3xl font-black text-white max-sm:text-2xl">
-            Phim
+          <h2 className="mt-2 font-[var(--display)] text-4xl font-black uppercase text-white max-sm:text-3xl">
+            Phim đang nổi bật
           </h2>
         </div>
-        <a
-          className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold text-slate-300 no-underline transition-colors hover:text-[#ff6070] max-sm:mt-4 max-sm:inline-block"
-          href="/"
+        <Link
+          className="rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 font-[var(--sans)] text-sm font-bold text-slate-200 no-underline transition-colors hover:border-[#ff6070] hover:text-white max-sm:mt-4 max-sm:inline-flex"
+          to="/lich-chieu"
         >
-          Xem tất cả
-        </a>
+          Xem lịch chiếu
+        </Link>
       </div>
 
       {isLoading && (
-        <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
-          {Array.from({ length: 4 }).map((_, index) => (
+        <div className="grid grid-cols-5 gap-5 max-2xl:grid-cols-4 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+          {Array.from({ length: 5 }).map((_, index) => (
             <div
-              className="h-[430px] animate-pulse rounded-2xl bg-white/[0.06]"
+              className="h-[420px] animate-pulse rounded-[18px] bg-white/[0.06]"
               key={index}
             ></div>
           ))}
@@ -177,7 +181,7 @@ function NowShowingMovies() {
       )}
 
       {!isLoading && error && (
-        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-6 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-red-100">
+        <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-6 font-[var(--sans)] text-sm text-red-100">
           {error}
         </div>
       )}

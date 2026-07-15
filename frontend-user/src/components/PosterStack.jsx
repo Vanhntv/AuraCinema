@@ -1,5 +1,5 @@
 const posterClass =
-  'flex min-h-44 items-end overflow-hidden rounded-xl p-4 font-[Montserrat,Arial,sans-serif] text-xl font-black text-[#fff9d0] shadow-[inset_0_-80px_70px_rgba(0,0,0,0.44)] [text-shadow:0_3px_8px_rgba(0,0,0,0.55)] max-xl:min-h-36'
+  'flex min-h-44 items-end overflow-hidden rounded-xl p-4 font-[var(--display)] text-xl font-black text-[#fff9d0] shadow-[inset_0_-80px_70px_rgba(0,0,0,0.44)] [text-shadow:0_3px_8px_rgba(0,0,0,0.55)] max-xl:min-h-36'
 
 function PosterStack({ side }) {
   const posters =

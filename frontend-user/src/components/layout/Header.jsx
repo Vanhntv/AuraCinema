@@ -16,23 +16,23 @@ function Header() {
         AuraCinema
       </Link>
 
-      <nav className="site-nav" aria-label="Tai khoan">
+      <nav className="site-nav" aria-label="Tài khoản">
         {loading ? (
-          <span className="nav-status">Dang tai...</span>
+          <span className="nav-status">Đang tải...</span>
         ) : isAuthenticated ? (
           <>
             <span className="nav-user">{user?.full_name || user?.email}</span>
             <button className="nav-button" type="button" onClick={handleLogout}>
-              Dang xuat
+              Đăng xuất
             </button>
           </>
         ) : (
           <>
             <Link className="nav-link" to="/login">
-              Dang nhap
+              Đăng nhập
             </Link>
             <Link className="nav-button" to="/register">
-              Dang ky
+              Đăng ký
             </Link>
           </>
         )}

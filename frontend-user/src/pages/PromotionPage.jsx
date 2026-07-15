@@ -11,7 +11,7 @@ const promotions = [
 
 function PromotionPage() {
   return (
-    <div className="w-full text-white pb-24 pt-6 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif]">
+    <div className="w-full text-white pb-24 pt-6 font-[var(--sans)]">
       <div className="w-[min(1760px,calc(100%_-_96px))] mx-auto max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
         
         <div className="flex items-center justify-between border-b border-white/5 pb-6 mb-10">

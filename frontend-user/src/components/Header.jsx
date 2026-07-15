@@ -27,7 +27,7 @@ function Header() {
           return (
             <Link
               key={item.name}
-              className={`relative whitespace-nowrap font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
+              className={`relative whitespace-nowrap font-[var(--sans)] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
                 isActive
                   ? 'text-[#ff6070] after:absolute after:-bottom-3 after:left-0 after:right-0 after:h-0.5 after:bg-[#ff6070] after:content-[""]'
                   : ''
@@ -44,13 +44,13 @@ function Header() {
         {isAuthenticated ? (
           <>
             <Link
-              className="flex h-[54px] min-w-32 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white no-underline shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
+              className="flex h-[54px] min-w-32 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 font-[var(--sans)] text-base font-extrabold text-white no-underline shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
               to="/profile"
             >
               {user?.full_name || 'Tài khoản'}
             </Link>
             <button
-              className="h-[54px] min-w-[154px] rounded-full border border-transparent bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white shadow-[0_16px_40px_rgba(255,83,100,0.36)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
+              className="h-[54px] min-w-[154px] rounded-full border border-transparent bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-[var(--sans)] text-base font-extrabold text-white shadow-[0_16px_40px_rgba(255,83,100,0.36)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
               type="button"
               onClick={handleLogout}
             >
@@ -60,13 +60,13 @@ function Header() {
         ) : (
           <>
             <Link
-              className="flex h-[54px] min-w-32 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white no-underline shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
+              className="flex h-[54px] min-w-32 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] px-7 font-[var(--sans)] text-base font-extrabold text-white no-underline shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
               to="/register"
             >
               Đăng ký
             </Link>
             <Link
-              className="flex h-[54px] min-w-[154px] items-center justify-center rounded-full border border-transparent bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white no-underline shadow-[0_16px_40px_rgba(255,83,100,0.36)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
+              className="flex h-[54px] min-w-[154px] items-center justify-center rounded-full border border-transparent bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-[var(--sans)] text-base font-extrabold text-white no-underline shadow-[0_16px_40px_rgba(255,83,100,0.36)] max-sm:flex-1 max-sm:px-4 max-sm:text-sm"
               to="/login"
             >
               Đăng nhập

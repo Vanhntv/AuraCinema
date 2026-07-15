@@ -52,10 +52,10 @@ function getYoutubeEmbedUrl(url) {
 function InfoItem({ label, value }) {
   return (
     <div>
-      <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+      <p className="font-[var(--sans)] text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
         {label}
       </p>
-      <p className="mt-1 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-slate-100">
+      <p className="mt-1 font-[var(--sans)] text-sm font-semibold text-slate-100">
         {value || 'Đang cập nhật'}
       </p>
     </div>
@@ -83,11 +83,11 @@ function TrailerModal({ trailer, onClose }) {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
-          <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+          <h3 className="font-[var(--display)] text-lg font-black text-white">
             {trailer.title || 'Trailer'}
           </h3>
           <button
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 font-[var(--sans)] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
             type="button"
             aria-label="Đóng trailer"
             onClick={onClose}
@@ -106,7 +106,7 @@ function TrailerModal({ trailer, onClose }) {
               allowFullScreen
             />
           ) : (
-            <div className="grid h-full place-items-center px-6 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-300">
+            <div className="grid h-full place-items-center px-6 text-center font-[var(--sans)] text-sm text-slate-300">
               Trailer không hợp lệ
             </div>
           )}
@@ -174,25 +174,25 @@ function MovieTrailerButton({ movie }) {
 
   return (
     <div className="mt-7">
-      <h3 className="font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
+      <h3 className="font-[var(--display)] text-lg font-black text-white">
         Trailer
       </h3>
 
       <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-5">
         {isLoading && (
-          <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400">
+          <p className="font-[var(--sans)] text-sm text-slate-400">
             Đang tải trailer...
           </p>
         )}
 
         {!isLoading && error && (
-          <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-red-100">
+          <p className="font-[var(--sans)] text-sm text-red-100">
             {error}
           </p>
         )}
 
         {!isLoading && !error && !trailer?.youtube_url && (
-          <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400">
+          <p className="font-[var(--sans)] text-sm text-slate-400">
             Phim này chưa có trailer.
           </p>
         )}
@@ -200,15 +200,15 @@ function MovieTrailerButton({ movie }) {
         {!isLoading && !error && trailer?.youtube_url && (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-slate-200">
+              <p className="font-[var(--sans)] text-sm font-semibold text-slate-200">
                 {trailer.title}
               </p>
-              <p className="mt-1 break-all font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs text-slate-500">
+              <p className="mt-1 break-all font-[var(--sans)] text-xs text-slate-500">
                 {trailer.youtube_url}
               </p>
             </div>
             <button
-              className="inline-flex rounded-full bg-white/10 px-5 py-3 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white transition-colors hover:bg-[#ff6070]"
+              className="inline-flex rounded-full bg-white/10 px-5 py-3 font-[var(--sans)] text-sm font-extrabold text-white transition-colors hover:bg-[#ff6070]"
               type="button"
               onClick={() => setIsPlayerOpen(true)}
             >
@@ -245,7 +245,7 @@ function MovieDetailModal({ movie, onClose, onBook }) {
         onClick={(event) => event.stopPropagation()}
       >
         <button
-          className="absolute right-4 top-4 z-20 grid h-10 w-10 place-items-center rounded-full bg-black/45 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+          className="absolute right-4 top-4 z-20 grid h-10 w-10 place-items-center rounded-full bg-black/45 font-[var(--sans)] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
           type="button"
           aria-label="Đóng chi tiết phim"
           onClick={onClose}
@@ -276,14 +276,14 @@ function MovieDetailModal({ movie, onClose, onBook }) {
           </div>
 
           <div>
-            <span className="inline-flex rounded-full bg-[#ff6070]/20 px-4 py-2 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xs font-black uppercase tracking-[0.14em] text-[#ff9aa5]">
+            <span className="inline-flex rounded-full bg-[#ff6070]/20 px-4 py-2 font-[var(--sans)] text-xs font-black uppercase tracking-[0.14em] text-[#ff9aa5]">
               {getStatusLabel(movie.status)}
             </span>
-            <h2 className="mt-4 font-[Montserrat,Arial,sans-serif] text-3xl font-black leading-tight text-white max-sm:text-2xl">
+            <h2 className="mt-4 font-[var(--display)] text-3xl font-black leading-tight text-white max-sm:text-2xl">
               {movie.title}
             </h2>
 
-            <p className="mt-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm leading-7 text-slate-300">
+            <p className="mt-4 font-[var(--sans)] text-sm leading-7 text-slate-300">
               {movie.description || 'Phim chưa có mô tả.'}
             </p>
 
@@ -306,14 +306,14 @@ function MovieDetailModal({ movie, onClose, onBook }) {
 
             <div className="mt-8 flex gap-3 max-sm:flex-col">
               <button
-                className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-8 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
+                className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-8 font-[var(--sans)] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
                 type="button"
                 onClick={() => onBook(movie)}
               >
                 Đặt vé
               </button>
               <button
-                className="h-12 rounded-full border border-white/10 bg-white/[0.04] px-8 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white"
+                className="h-12 rounded-full border border-white/10 bg-white/[0.04] px-8 font-[var(--sans)] text-sm font-extrabold text-white"
                 type="button"
                 onClick={onClose}
               >

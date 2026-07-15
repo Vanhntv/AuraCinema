@@ -8,7 +8,7 @@ function ProtectedRoute({ children }) {
   if (loading) {
     return (
       <main className="auth-shell">
-        <p className="auth-loading">Dang tai thong tin tai khoan...</p>
+        <p className="auth-loading">Đang tải thông tin tài khoản...</p>
       </main>
     );
   }

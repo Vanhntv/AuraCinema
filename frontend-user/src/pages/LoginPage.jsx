@@ -34,7 +34,7 @@ function LoginPage() {
       navigate(from, { replace: true });
     } catch (err) {
       setError(
-        err.response?.data?.message || "Dang nhap that bai. Vui long thu lai."
+        err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại."
       );
     } finally {
       setSubmitting(false);
@@ -46,8 +46,8 @@ function LoginPage() {
       <section className="auth-panel" aria-labelledby="login-title">
         <div className="auth-brand">
           <span>AuraCinema</span>
-          <h1 id="login-title">Dang nhap</h1>
-          <p>Truy cap tai khoan de dat ve va quan ly lich xem phim.</p>
+          <h1 id="login-title">Đăng nhập</h1>
+          <p>Truy cập tài khoản để đặt vé và quản lý lịch xem phim.</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
@@ -68,13 +68,13 @@ function LoginPage() {
           </label>
 
           <label>
-            Mat khau
+            Mật khẩu
             <input
               autoComplete="current-password"
               minLength={6}
               name="password"
               onChange={handleChange}
-              placeholder="Nhap mat khau"
+              placeholder="Nhập mật khẩu"
               required
               type="password"
               value={formData.password}
@@ -82,12 +82,12 @@ function LoginPage() {
           </label>
 
           <button className="auth-submit" disabled={submitting} type="submit">
-            {submitting ? "Dang dang nhap..." : "Dang nhap"}
+            {submitting ? "Đang đăng nhập..." : "Đăng nhập"}
           </button>
         </form>
 
         <p className="auth-switch">
-          Chua co tai khoan? <Link to="/register">Dang ky ngay</Link>
+          Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link>
         </p>
       </section>
     </main>

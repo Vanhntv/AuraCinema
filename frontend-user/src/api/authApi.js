@@ -28,10 +28,20 @@ export const getProfile = async () => {
   return response.data;
 };
 
+export const updateProfile = async ({ full_name, phone, avatar }) => {
+  const response = await axiosClient.put("/auth/profile", {
+    full_name,
+    phone,
+    avatar,
+  });
+  return response.data;
+};
+
 const authApi = {
   login,
   register,
   getProfile,
+  updateProfile,
 };
 
 export default authApi;

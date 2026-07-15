@@ -43,6 +43,8 @@ const mapShowtime = (showtime) => ({
   movie_id: showtime.movie_id?._id ?? showtime.movie_id ?? null,
   movieTitle: showtime.movie_id?.title ?? null,
   moviePoster: showtime.movie_id?.poster ?? null,
+  movieDuration: showtime.movie_id?.duration ?? null,
+  movieStatus: showtime.movie_id?.status ?? null,
   room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
   roomName: showtime.room_id?.name ?? null,
   cinema_id: showtime.room_id?.cinema_id?._id ?? showtime.room_id?.cinema_id ?? null,
