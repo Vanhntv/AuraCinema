@@ -8,6 +8,7 @@ import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
 import NewsDetailPage from './pages/NewsDetailPage';
 import PromotionPage from './pages/PromotionPage';
+import PromotionDetailPage from './pages/PromotionDetailPage';
 import TicketPricePage from './pages/ticket-price/TicketPricePage';
 import AboutPage from './pages/about/AboutPage';
 
@@ -44,6 +45,7 @@ function App() {
         <Route path="/tin-tuc" element={<NewsPage />} />
         <Route path="/tin-tuc/:slug" element={<NewsDetailPage />} />
         <Route path="/khuyen-mai" element={<PromotionPage />} />
+        <Route path="/khuyen-mai/:slug" element={<PromotionDetailPage />} />
         <Route path="/gia-ve" element={<TicketPricePage />} />
         <Route path="/gioi-thieu" element={<AboutPage />} />
         <Route path="/dang-ky" element={<Register />} />
