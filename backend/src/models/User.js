@@ -40,6 +40,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    password_reset_otp: {
+      type: String,
+      default: null,
+    },
+    password_reset_expires_at: {
+      type: Date,
+      default: null,
+    },
+    password_reset_attempts: {
+      type: Number,
+      default: 0,
+    },
     deleted_at: {
       type: Date,
       default: null,

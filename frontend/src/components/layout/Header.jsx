@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   HiOutlineMenu,
   HiOutlineSearch,
@@ -7,6 +7,7 @@ import {
   HiOutlineLogout,
 } from "react-icons/hi";
 import { useAuth } from "../../hooks/useAuth";
+import { getUserLoginUrl } from "../../utils/authRedirect";
 
 const pageTitles = {
   "/": "Dashboard",
@@ -22,13 +23,12 @@ const pageTitles = {
 
 const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
   const location = useLocation();
-  const navigate = useNavigate();
   const { logout, user } = useAuth();
   const currentTitle = pageTitles[location.pathname] || "Trang";
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    window.location.assign(getUserLoginUrl());
   };
 
   return (

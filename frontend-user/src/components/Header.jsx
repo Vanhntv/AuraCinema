@@ -1,23 +1,17 @@
-import { useState } from "react";
 import { navItems } from "../data/homeData";
 import Logo from "./Logo";
 import { Link, useLocation, useNavigate } from "react-router-dom"; // Gom chung import
-import LoginModal from "./LoginModal";
-import RegisterModal from "./RegisterModal";
 import { useAuth } from "../hooks/useAuth"; // Nhớ import hook này
 
 function Header() {
   const navigate = useNavigate(); // Chỉ để 1 lần duy nhất
   const location = useLocation();
-  const { isAuthenticated, logout, user } = useAuth(); // Bây giờ sẽ hoạt động
+  const { isAuthenticated, logout } = useAuth(); // Bây giờ sẽ hoạt động
 
   const handleLogout = () => {
     logout();
     navigate('/');
   }
-
-  const [openLogin, setOpenLogin] = useState(false);
-  const [openRegister, setOpenRegister] = useState(false);
 
   return (
     <>
@@ -60,7 +54,7 @@ function Header() {
             <>
               <button
                 type="button"
-                onClick={() => setOpenRegister(true)}
+                onClick={() => navigate("/dang-ky")}
                 className="h-[54px] min-w-32 rounded-full border border-white/10 bg-white/[0.04] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] transition hover:border-[#ff6070] hover:text-[#ff6070]"
               >
                 Đăng ký
@@ -68,7 +62,7 @@ function Header() {
 
               <button
                 type="button"
-                onClick={() => setOpenLogin(true)}
+                onClick={() => navigate("/dang-nhap")}
                 className="h-[54px] min-w-[154px] rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white shadow-[0_16px_40px_rgba(255,83,100,0.36)]"
               >
                 Đăng nhập
@@ -77,9 +71,6 @@ function Header() {
           )}
         </div>
       </header>
-
-      {openLogin && <LoginModal onClose={() => setOpenLogin(false)} />}
-      {openRegister && <RegisterModal onClose={() => setOpenRegister(false)} />}
     </>
   );
 }

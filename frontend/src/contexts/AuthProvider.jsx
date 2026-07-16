@@ -1,13 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getProfile, login as loginApi, register as registerApi } from "../api/authApi";
+import { getProfile, login as loginApi } from "../api/authApi";
 import { ADMIN_ACCESS_TOKEN_KEY } from "../api/axiosClient";
 import { AuthContext } from "./AuthContext";
 
 const isAdminUser = (user) => user?.role === "admin" || user?.role_id === 1;
 
+const consumeAdminTokenFromHash = () => {
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const hashToken = hashParams.get("adminToken");
+
+  if (!hashToken) {
+    return null;
+  }
+
+  hashParams.delete("adminToken");
+  const nextHash = hashParams.toString();
+  const nextUrl = `${window.location.pathname}${window.location.search}${nextHash ? `#${nextHash}` : ""}`;
+  window.history.replaceState(null, "", nextUrl);
+
+  localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, hashToken);
+  return hashToken;
+};
+
 function AuthProvider({ children }) {
   const [token, setToken] = useState(() =>
-    localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)
+    consumeAdminTokenFromHash() || localStorage.getItem(ADMIN_ACCESS_TOKEN_KEY)
   );
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(() =>
@@ -90,11 +107,6 @@ function AuthProvider({ children }) {
     [saveToken]
   );
 
-  const register = useCallback(async (payload) => {
-    const response = await registerApi(payload);
-    return response;
-  }, []);
-
   const value = useMemo(
     () => ({
       user,
@@ -103,10 +115,9 @@ function AuthProvider({ children }) {
       isAuthenticated: Boolean(token && user),
       isAdmin: isAdminUser(user),
       login,
-      register,
       logout,
     }),
-    [loading, login, logout, register, token, user]
+    [loading, login, logout, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

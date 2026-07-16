@@ -11,9 +11,9 @@ import PromotionPage from './pages/PromotionPage';
 import PromotionDetailPage from './pages/PromotionDetailPage';
 import TicketPricePage from './pages/ticket-price/TicketPricePage';
 import AboutPage from './pages/about/AboutPage';
-
-import Register from './components/RegisterModal';
-import LoginModal from './components/LoginModal';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -52,8 +52,12 @@ function App() {
         <Route path="/khuyen-mai/:slug" element={<PromotionDetailPage />} />
         <Route path="/gia-ve" element={<TicketPricePage />} />
         <Route path="/gioi-thieu" element={<AboutPage />} />
-        <Route path="/dang-ky" element={<Register />} />
-        <Route path="/dang-nhap" element={<LoginModal />} />
+        <Route path="/dang-ky" element={<RegisterPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/dang-nhap" element={<LoginPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
       </Routes>
       <Footer />

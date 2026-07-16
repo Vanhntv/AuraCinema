@@ -1,9 +1,15 @@
-import { Navigate, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
+import { getUserLoginUrl } from "../utils/authRedirect";
 
 function AdminRoute({ children }) {
   const { isAdmin, loading } = useAuth();
-  const location = useLocation();
+
+  useEffect(() => {
+    if (!loading && !isAdmin) {
+      window.location.assign(getUserLoginUrl());
+    }
+  }, [isAdmin, loading]);
 
   if (loading) {
     return (
@@ -14,7 +20,11 @@ function AdminRoute({ children }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    return (
+      <main className="auth-page">
+        <p className="auth-loading">Đang chuyển đến trang đăng nhập...</p>
+      </main>
+    );
   }
 
   return children;
