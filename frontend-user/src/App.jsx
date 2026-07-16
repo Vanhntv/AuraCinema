@@ -6,6 +6,7 @@ import HeroSlider from './components/HeroSlider';
 import NowShowingMovies from './components/NowShowingMovies';
 import MovieSchedule from './pages/MovieSchedule';
 import NewsPage from './pages/NewsPage';
+import NewsDetailPage from './pages/NewsDetailPage';
 import PromotionPage from './pages/PromotionPage';
 import TicketPricePage from './pages/ticket-price/TicketPricePage';
 import AboutPage from './pages/about/AboutPage';
@@ -41,6 +42,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/lich-chieu" element={<MovieSchedule />} />
         <Route path="/tin-tuc" element={<NewsPage />} />
+        <Route path="/tin-tuc/:slug" element={<NewsDetailPage />} />
         <Route path="/khuyen-mai" element={<PromotionPage />} />
         <Route path="/gia-ve" element={<TicketPricePage />} />
         <Route path="/gioi-thieu" element={<AboutPage />} />

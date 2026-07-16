@@ -73,4 +73,30 @@
   a {
     -webkit-tap-highlight-color: transparent;
   }
+
+  .news-content h2 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.35rem;
+    line-height: 1.25;
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .news-content p {
+    margin: 0;
+    color: #d8dee9;
+  }
+
+  .news-content ul,
+  .news-content ol {
+    margin: 0.75rem 0 0;
+    padding-left: 1.25rem;
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .news-content li {
+    color: #d8dee9;
+  }
 }
