@@ -95,6 +95,61 @@ const verifyPassword = async (password, storedPassword) => {
   return timingSafeEqual(storedKeyBuffer, derivedKeyBuffer);
 };
 
+const sanitizeUser = (user) => {
+  const userResponse = user.toObject ? user.toObject() : { ...user };
+  delete userResponse.password;
+  delete userResponse.password_reset_otp;
+  delete userResponse.password_reset_expires_at;
+  delete userResponse.password_reset_attempts;
+  userResponse.role = resolveUserRole(user);
+  return userResponse;
+};
+
+const parseBirthDate = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  const birthDate = new Date(value);
+  if (Number.isNaN(birthDate.getTime())) {
+    const error = new Error("Ngày sinh không hợp lệ");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (birthDate > today) {
+    const error = new Error("Ngày sinh không thể lớn hơn ngày hiện tại");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return birthDate;
+};
+
+const parseGender = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return null;
+  }
+
+  if (!["male", "female", "other"].includes(value)) {
+    const error = new Error("Giới tính không hợp lệ");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return value;
+};
+
 export const register = async (req, res) => {
   try {
     const { full_name, email, password, confirm_password, phone, avatar } = req.body;
@@ -151,9 +206,7 @@ export const register = async (req, res) => {
       avatar: avatar || null,
     });
 
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    userResponse.role = resolveUserRole(user);
+    const userResponse = sanitizeUser(user);
 
     const token = signJwt(
       {
@@ -229,9 +282,7 @@ export const login = async (req, res) => {
 
     resetLoginAttempts(req);
 
-    const userResponse = user.toObject();
-    delete userResponse.password;
-    userResponse.role = resolveUserRole(user);
+    const userResponse = sanitizeUser(user);
 
     const token = signJwt(
       {
@@ -407,10 +458,134 @@ export const profile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: {
-        ...user.toObject(),
-        role: resolveUserRole(user),
+      data: sanitizeUser(user),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const allowedFields = {};
+    const { full_name, birth_date, gender, address, avatar } = req.body;
+
+    if (full_name !== undefined) {
+      const normalizedName = String(full_name).trim();
+      if (!normalizedName) {
+        return res.status(400).json({
+          success: false,
+          message: "Họ tên không được để trống",
+        });
+      }
+      allowedFields.full_name = normalizedName;
+    }
+
+    if (birth_date !== undefined) {
+      allowedFields.birth_date = parseBirthDate(birth_date);
+    }
+
+    if (gender !== undefined) {
+      allowedFields.gender = parseGender(gender);
+    }
+
+    if (address !== undefined) {
+      allowedFields.address = String(address || "").trim() || null;
+    }
+
+    if (avatar !== undefined) {
+      allowedFields.avatar = String(avatar || "").trim() || null;
+    }
+
+    const user = await User.findOneAndUpdate(
+      {
+        _id: req.user.id,
+        deleted_at: null,
+        status: true,
       },
+      allowedFields,
+      {
+        new: true,
+        runValidators: true,
+      },
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy người dùng",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật thông tin thành công",
+      data: sanitizeUser(user),
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const changePassword = async (req, res) => {
+  try {
+    const { current_password, password, confirm_password } = req.body;
+
+    if (!current_password || !password || !confirm_password) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập mật khẩu hiện tại, mật khẩu mới và xác nhận mật khẩu",
+      });
+    }
+
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số",
+      });
+    }
+
+    if (password !== confirm_password) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu xác nhận không khớp",
+      });
+    }
+
+    const user = await User.findOne({
+      _id: req.user.id,
+      deleted_at: null,
+      status: true,
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy người dùng",
+      });
+    }
+
+    const isCurrentPasswordValid = await verifyPassword(current_password, user.password);
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Mật khẩu hiện tại không đúng",
+      });
+    }
+
+    user.password = await hashPassword(password);
+    user.password_changed_at = new Date(Date.now() + 1000);
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
     });
   } catch (error) {
     return res.status(500).json({

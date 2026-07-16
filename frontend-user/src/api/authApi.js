@@ -50,12 +50,32 @@ export const getProfile = async () => {
   return response.data;
 };
 
+export const updateProfile = async (payload) => {
+  const response = await axiosClient.patch("/auth/profile", payload);
+  return response.data;
+};
+
+export const changePassword = async ({
+  current_password,
+  password,
+  confirm_password,
+}) => {
+  const response = await axiosClient.patch("/auth/change-password", {
+    current_password,
+    password,
+    confirm_password,
+  });
+  return response.data;
+};
+
 const authApi = {
   login,
   register,
   forgotPassword,
   resetPassword,
   getProfile,
+  updateProfile,
+  changePassword,
 };
 
 export default authApi;

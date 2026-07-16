@@ -30,6 +30,12 @@ function AuthProvider({ children }) {
     setLoading(false);
   }, [saveToken]);
 
+  const refreshProfile = useCallback(async () => {
+    const response = await getProfile();
+    setUser(response.data || null);
+    return response;
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -106,8 +112,9 @@ function AuthProvider({ children }) {
       login,
       register,
       logout,
+      refreshProfile,
     }),
-    [loading, login, logout, register, token, user]
+    [loading, login, logout, refreshProfile, register, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
