@@ -3,13 +3,13 @@ export const aboutContent = {
     eyebrow: 'Giới thiệu trung tâm',
     title: 'Trung tâm Chiếu phim Quốc gia',
     description:
-      'Giao diện tab một trang cho phần giới thiệu, dịch vụ và phòng chiếu - được tách dữ liệu riêng để dễ bảo trì và mở rộng.',
+      'Khám phá AuraCinema, tìm hiểu về không gian rạp, dịch vụ nổi bật và hệ thống phòng chiếu hiện đại.',
   },
   sections: {
     introOverview: 'Tổng quan',
     orgChart: 'Sơ đồ tổ chức',
     introImages: 'Hình ảnh minh họa',
-    serviceImagesHint: 'Lưới ảnh tự co giãn từ 2 đến 3 cột trên desktop và 1 cột trên mobile.',
+    serviceImagesHint: 'Một số hình ảnh về rạp phim và dịch vụ.',
     theaterSpace: 'Không gian phòng chiếu',
   },
   tabs: [
@@ -28,9 +28,9 @@ export const aboutContent = {
       contactValue: '1900 1234 · support@auracinema.vn',
     },
     summary:
-      'Trung tâm Chiếu phim Quốc gia (NCC) là điểm đến điện ảnh phục vụ cả hoạt động chiếu phim thương mại lẫn các chương trình chuyên đề, sự kiện văn hóa và giao lưu điện ảnh.',
+      'Trung tâm Chiếu phim AuraCinema là điểm đến điện ảnh phục vụ cả hoạt động chiếu phim thương mại lẫn các chương trình chuyên đề, sự kiện văn hóa và giao lưu điện ảnh.',
     chartNote:
-      'Sơ đồ tổ chức dưới đây được dựng bằng HTML/CSS để hiển thị sắc nét khi phóng to và phù hợp với nhiều kích thước màn hình.',
+      'Sơ đồ dưới đây mô tả cơ cấu tổ chức và sự phân chia chức năng giữa các bộ phận trong hệ thống rạp chiếu phim.',
     organizationChart: [
       {
         title: 'Bộ Văn hóa, Thể thao và Du lịch',
