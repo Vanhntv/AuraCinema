@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi";
 import { getDashboardStats } from "../services/dashboardService";
 import { useAuth } from "../hooks/useAuth";
+import { getUserLoginUrl } from "../utils/authRedirect";
 
 const emptyDashboard = {
   stats: {
@@ -36,7 +37,6 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 
 const DashboardPage = () => {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
@@ -103,7 +103,7 @@ const DashboardPage = () => {
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    window.location.assign(getUserLoginUrl());
   };
 
   return (

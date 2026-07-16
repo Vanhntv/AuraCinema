@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { getAdminDashboardUrl, isAdminUser } from "../utils/authRedirect";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -30,7 +31,13 @@ function LoginPage() {
     setSubmitting(true);
 
     try {
-      await login(formData);
+      const response = await login(formData);
+
+      if (isAdminUser(response.data)) {
+        window.location.assign(getAdminDashboardUrl(response.token));
+        return;
+      }
+
       navigate(from, { replace: true });
     } catch (err) {
       setError(
@@ -80,6 +87,10 @@ function LoginPage() {
               value={formData.password}
             />
           </label>
+
+          <div className="auth-form-link">
+            <Link to="/quen-mat-khau">Quen mat khau?</Link>
+          </div>
 
           <button className="auth-submit" disabled={submitting} type="submit">
             {submitting ? "Dang dang nhap..." : "Dang nhap"}

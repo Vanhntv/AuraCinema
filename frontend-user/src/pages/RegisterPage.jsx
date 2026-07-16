@@ -9,6 +9,7 @@ function RegisterPage() {
     full_name: "",
     email: "",
     password: "",
+    confirm_password: "",
     phone: "",
   });
   const [error, setError] = useState("");
@@ -25,11 +26,25 @@ function RegisterPage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+
+    if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+      setError("Mat khau phai co it nhat 8 ky tu, gom chu hoa va so.");
+      return;
+    }
+
+    if (formData.password !== formData.confirm_password) {
+      setError("Mat khau xac nhan khong khop.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
       await register({
-        ...formData,
+        full_name: formData.full_name,
+        email: formData.email,
+        password: formData.password,
+        confirm_password: formData.confirm_password,
         phone: formData.phone.trim() || undefined,
       });
       navigate("/login", {
@@ -47,17 +62,17 @@ function RegisterPage() {
 
   return (
     <main className="auth-shell">
-      <section className="auth-panel" aria-labelledby="register-title">
+      <section className="auth-panel auth-panel-wide" aria-labelledby="register-title">
         <div className="auth-brand">
           <span>AuraCinema</span>
           <h1 id="register-title">Tao tai khoan</h1>
           <p>Dang ky de bat dau dat ve va luu cac phim yeu thich.</p>
         </div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form auth-form-grid" noValidate onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
 
-          <label>
+          <label className="auth-field-full">
             Ho va ten
             <input
               autoComplete="name"
@@ -99,17 +114,31 @@ function RegisterPage() {
             Mat khau
             <input
               autoComplete="new-password"
-              minLength={6}
+              minLength={8}
               name="password"
               onChange={handleChange}
-              placeholder="Toi thieu 6 ky tu"
+              placeholder="Toi thieu 8 ky tu, co chu hoa va so"
               required
               type="password"
               value={formData.password}
             />
           </label>
 
-          <button className="auth-submit" disabled={submitting} type="submit">
+          <label>
+            Xac nhan mat khau
+            <input
+              autoComplete="new-password"
+              minLength={8}
+              name="confirm_password"
+              onChange={handleChange}
+              placeholder="Nhap lai mat khau"
+              required
+              type="password"
+              value={formData.confirm_password}
+            />
+          </label>
+
+          <button className="auth-submit auth-field-full" disabled={submitting} type="submit">
             {submitting ? "Dang tao tai khoan..." : "Dang ky"}
           </button>
         </form>

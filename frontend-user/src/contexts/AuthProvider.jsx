@@ -3,6 +3,9 @@ import { login as loginApi, register as registerApi, getProfile } from "../api/a
 import { ACCESS_TOKEN_KEY } from "../api/axiosClient";
 import { AuthContext } from "./AuthContext";
 
+const ADMIN_ACCESS_TOKEN_KEY = "adminAccessToken";
+const isAdminUser = (user) => user?.role === "admin" || user?.role_id === 1;
+
 function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(ACCESS_TOKEN_KEY));
   const [user, setUser] = useState(null);
@@ -22,6 +25,7 @@ function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     saveToken(null);
+    localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
     setUser(null);
     setLoading(false);
   }, [saveToken]);
@@ -64,12 +68,21 @@ function AuthProvider({ children }) {
   const login = useCallback(
     async (credentials) => {
       const response = await loginApi(credentials);
+      const loggedInUser = response.data || null;
 
       if (response.token) {
+        if (isAdminUser(loggedInUser)) {
+          localStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, response.token);
+          saveToken(null);
+          setUser(null);
+          return response;
+        }
+
+        localStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
         saveToken(response.token);
       }
 
-      setUser(response.data || null);
+      setUser(loggedInUser);
       return response;
     },
     [saveToken]
@@ -79,14 +92,9 @@ function AuthProvider({ children }) {
     async (payload) => {
       const response = await registerApi(payload);
 
-      if (response.token) {
-        saveToken(response.token);
-        setUser(response.data || null);
-      }
-
       return response;
     },
-    [saveToken]
+    []
   );
 
   const value = useMemo(
