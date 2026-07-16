@@ -15,6 +15,7 @@ import seatsRoute from "./router/seatsRouters.js";
 import showtimesRoute from "./router/showtimesRouters.js";
 import showtimeSeatsRoute from "./router/showtimeSeatsRouters.js";
 import vouchersRoute from "./router/vouchersRouters.js";
+import bookingsRoute from "./router/bookingsRouters.js";
 
 const app = express();
 
@@ -36,6 +37,7 @@ app.use("/api/showtimes", showtimesRoute);
 app.use("/api/showtime-seats", showtimeSeatsRoute);
 app.use("/showtime-seats", showtimeSeatsRoute);
 app.use("/api/vouchers", vouchersRoute);
+app.use("/api/bookings", bookingsRoute);
 
 connectDB().then(() => {
   app.listen(5001, () => {

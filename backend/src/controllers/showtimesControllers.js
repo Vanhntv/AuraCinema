@@ -60,6 +60,8 @@ const mapShowtime = (showtime) => ({
   movie_id: showtime.movie_id?._id ?? showtime.movie_id ?? null,
   movieTitle: showtime.movie_id?.title ?? null,
   moviePoster: showtime.movie_id?.poster ?? null,
+  movieDuration: showtime.movie_id?.duration ?? null,
+  movieStatus: showtime.movie_id?.status ?? null,
   room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
   roomName: showtime.room_id?.name ?? null,
   cinema_id:
@@ -71,6 +73,7 @@ const mapShowtime = (showtime) => ({
   end_time: showtime.end_time,
   endTime: formatTime(showtime.end_time),
   base_price: showtime.base_price,
+  seat_prices: showtime.seat_prices ?? null,
   created_at: showtime.created_at,
   updated_at: showtime.updated_at,
 });
@@ -189,7 +192,7 @@ export const getAllShowtimes = async (req, res) => {
 
 export const createShowtime = async (req, res) => {
   try {
-    const { movie_id, room_id, start_time, end_time, base_price } = req.body;
+    const { movie_id, room_id, start_time, end_time, base_price, seat_prices } = req.body;
 
     if (!movie_id || !room_id || !start_time) {
       return res.status(400).json({
@@ -280,6 +283,7 @@ export const createShowtime = async (req, res) => {
         base_price !== undefined && base_price !== null
           ? Number(base_price)
           : null,
+      seat_prices: seat_prices || undefined,
     });
 
     const generatedShowtimeSeats =
@@ -313,7 +317,7 @@ export const createShowtime = async (req, res) => {
 export const updateShowtime = async (req, res) => {
   try {
     const { id } = req.params;
-    const { movie_id, room_id, start_time, end_time, base_price } = req.body;
+    const { movie_id, room_id, start_time, end_time, base_price, seat_prices } = req.body;
 
     const showtime = await Showtime.findOne({
       _id: id,
@@ -450,9 +454,17 @@ export const updateShowtime = async (req, res) => {
         base_price !== null && base_price !== "" ? Number(base_price) : null;
     }
 
+    if (seat_prices !== undefined) {
+      showtime.seat_prices = {
+        normal: seat_prices.normal !== "" && seat_prices.normal != null ? Number(seat_prices.normal) : null,
+        vip: seat_prices.vip !== "" && seat_prices.vip != null ? Number(seat_prices.vip) : null,
+        couple: seat_prices.couple !== "" && seat_prices.couple != null ? Number(seat_prices.couple) : null,
+      };
+    }
+
     await showtime.save();
 
-    if (base_price !== undefined || room_id !== undefined) {
+    if (base_price !== undefined || seat_prices !== undefined || room_id !== undefined) {
       await generateShowtimeSeatsForShowtimeService(showtime._id);
     }
 

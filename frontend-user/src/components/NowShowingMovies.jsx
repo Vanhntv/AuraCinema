@@ -86,7 +86,7 @@ function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
           {emptyText}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+        <div className="grid grid-cols-4 gap-5 max-lg:grid-cols-2 max-sm:grid-cols-1">
           {movies.map((movie) => (
             <MovieCard
               key={movie._id}
@@ -147,7 +147,7 @@ function NowShowingMovies() {
   const comingSoonMovies = movies.filter((movie) => movie.status === 'coming_soon')
 
   return (
-    <section className="w-full">
+    <section className="mx-auto w-[min(1280px,calc(100%_-_40px))] py-14 max-sm:w-[calc(100%_-_28px)] max-sm:py-10">
       <div className="mb-8 flex items-end justify-between gap-5 max-sm:block">
         <div>
           <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold uppercase tracking-[0.24em] text-[#ff6070]">
@@ -159,14 +159,14 @@ function NowShowingMovies() {
         </div>
         <a
           className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold text-slate-300 no-underline transition-colors hover:text-[#ff6070] max-sm:mt-4 max-sm:inline-block"
-          href="/"
+          href="/lich-chieu"
         >
           Xem tất cả
         </a>
       </div>
 
       {isLoading && (
-        <div className="grid grid-cols-4 gap-6 max-xl:grid-cols-3 max-lg:grid-cols-2 max-sm:grid-cols-1">
+        <div className="grid grid-cols-4 gap-5 max-lg:grid-cols-2 max-sm:grid-cols-1">
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               className="h-[430px] animate-pulse rounded-2xl bg-white/[0.06]"
@@ -186,14 +186,14 @@ function NowShowingMovies() {
         <>
           <MovieGroup
             title="Phim đang chiếu"
-            movies={nowShowingMovies}
+            movies={nowShowingMovies.slice(0, 4)}
             emptyText="Chưa có phim đang chiếu."
             onOpenDetail={setSelectedMovie}
             onOpenBooking={openBooking}
           />
           <MovieGroup
             title="Phim sắp chiếu"
-            movies={comingSoonMovies}
+            movies={comingSoonMovies.slice(0, 4)}
             emptyText="Chưa có phim sắp chiếu."
             onOpenDetail={setSelectedMovie}
             onOpenBooking={openBooking}

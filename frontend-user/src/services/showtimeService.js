@@ -2,6 +2,11 @@ import axiosClient from "../api/axiosClient";
 
 const API_URL = "/showtimes";
 
+export const getShowtimes = async (params = {}) => {
+  const response = await axiosClient.get(API_URL, { params });
+  return response.data;
+};
+
 export const getShowtimesByMovie = async (movieId, params = {}) => {
   const response = await axiosClient.get(`${API_URL}/movie/${movieId}`, {
     params,

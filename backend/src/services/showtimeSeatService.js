@@ -2,6 +2,7 @@ import Room from "../models/Room.js";
 import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
+import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import {
   bulkUpsertShowtimeSeats,
   createManyShowtimeSeats,
@@ -67,6 +68,20 @@ const resolveDefaultPrice = async ({ showtime, seat, price }) => {
     const error = new Error("Khong tim thay seat type");
     error.statusCode = 404;
     throw error;
+  }
+
+  const normalizedTypeName = String(seatType.name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const priceKey = normalizedTypeName.includes("vip")
+    ? "vip"
+    : normalizedTypeName.includes("doi") || normalizedTypeName.includes("couple")
+      ? "couple"
+      : "normal";
+  const customPrice = showtime.seat_prices?.[priceKey];
+  if (customPrice !== undefined && customPrice !== null) {
+    return Number(customPrice);
   }
 
   const basePrice = Number(showtime.base_price ?? 0);
@@ -313,6 +328,15 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
   })
     .populate("seat_type_id", "name description price_multiplier")
     .select("_id room_id seat_type_id");
+
+  await ShowtimeSeat.updateMany(
+    {
+      showtime_id: showtime._id,
+      deleted_at: null,
+      seat_id: { $nin: seats.map((seat) => seat._id) },
+    },
+    { $set: { deleted_at: new Date() } },
+  );
 
   if (!seats.length) {
     return {

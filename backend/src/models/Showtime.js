@@ -24,6 +24,11 @@ const showtimeSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    seat_prices: {
+      normal: { type: Number, default: null, min: 0 },
+      vip: { type: Number, default: null, min: 0 },
+      couple: { type: Number, default: null, min: 0 },
+    },
     deleted_at: {
       type: Date,
       default: null,

@@ -89,8 +89,19 @@ export const register = async (req, res) => {
     delete userResponse.password;
     userResponse.role = resolveUserRole(user);
 
+    const token = signJwt(
+      {
+        id: user._id.toString(),
+        role_id: user.role_id,
+        role: resolveUserRole(user),
+      },
+      process.env.JWT_SECRET,
+      7 * 24 * 60 * 60
+    );
+
     return res.status(201).json({
       success: true,
+      token,
       message: "Đăng ký thành công",
       data: userResponse,
     });

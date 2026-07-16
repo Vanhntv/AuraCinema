@@ -22,6 +22,8 @@ const showtimeSeatSchema = new mongoose.Schema(
       default: "available",
       trim: true,
     },
+    held_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    hold_expires_at: { type: Date, default: null },
     deleted_at: {
       type: Date,
       default: null,

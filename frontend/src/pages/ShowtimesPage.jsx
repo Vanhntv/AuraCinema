@@ -20,6 +20,9 @@ const emptyForm = {
   start_time: "",
   end_time: "",
   base_price: "",
+  normal_price: "",
+  vip_price: "",
+  couple_price: "",
 };
 
 const text = {
@@ -278,6 +281,9 @@ const ShowtimesPage = () => {
         showtime.base_price !== undefined && showtime.base_price !== null
           ? String(showtime.base_price)
           : "",
+      normal_price: showtime.seat_prices?.normal != null ? String(showtime.seat_prices.normal) : "",
+      vip_price: showtime.seat_prices?.vip != null ? String(showtime.seat_prices.vip) : "",
+      couple_price: showtime.seat_prices?.couple != null ? String(showtime.seat_prices.couple) : "",
     });
     setFormErrors({});
     setFeedback({ type: "", message: "" });
@@ -303,6 +309,9 @@ const ShowtimesPage = () => {
     if (formData.base_price && Number(formData.base_price) < 0) {
       errors.base_price = text.priceInvalid;
     }
+    ["normal_price", "vip_price", "couple_price"].forEach((field) => {
+      if (formData[field] && Number(formData[field]) < 0) errors[field] = text.priceInvalid;
+    });
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -330,6 +339,11 @@ const ShowtimesPage = () => {
         ...(formData.base_price
           ? { base_price: Number(formData.base_price) }
           : {}),
+        seat_prices: {
+          normal: formData.normal_price === "" ? null : Number(formData.normal_price),
+          vip: formData.vip_price === "" ? null : Number(formData.vip_price),
+          couple: formData.couple_price === "" ? null : Number(formData.couple_price),
+        },
       };
 
       if (isEditing) {
@@ -492,6 +506,18 @@ const ShowtimesPage = () => {
                   <span className="form-error">{formErrors.movie_id}</span>
                 ) : null}
               </label>
+
+              {[
+                ["normal_price", "Giá ghế thường"],
+                ["vip_price", "Giá ghế VIP"],
+                ["couple_price", "Giá ghế đôi"],
+              ].map(([field, label]) => (
+                <label className="form-group" key={field}>
+                  <span className="form-label">{label}</span>
+                  <input className={`form-input ${formErrors[field] ? "error" : ""}`} type="number" min="0" step="1000" value={formData[field]} onChange={(event) => updateField(field, event.target.value)} placeholder="Ví dụ: 80000" />
+                  {formErrors[field] ? <span className="form-error">{formErrors[field]}</span> : <span className="form-hint">Để trống để tính theo giá cơ bản.</span>}
+                </label>
+              ))}
 
               <label className="form-group">
                 <span className="form-label">

@@ -29,6 +29,10 @@ function HomePage() {
   return (
     <>
       <HeroSlider />
+      <section className="mx-auto mt-6 grid w-[min(1280px,calc(100%_-_40px))] grid-cols-2 gap-4 max-sm:w-[calc(100%_-_28px)] max-sm:grid-cols-1">
+        <a href="/lich-chieu" className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[#ff5364]/5"><strong className="block text-lg">Lịch chiếu hôm nay</strong><span className="mt-1 block text-sm text-slate-400">Chọn phim, rạp và khung giờ phù hợp</span></a>
+        <a href="/khuyen-mai" className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[#ff5364]/5"><strong className="block text-lg">Ưu đãi nổi bật</strong><span className="mt-1 block text-sm text-slate-400">Khám phá chương trình dành riêng cho bạn</span></a>
+      </section>
       <NowShowingMovies />
     </>
   );
