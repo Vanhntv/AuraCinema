@@ -38,7 +38,7 @@ const menuItems = [
   {
     section: "Hệ thống",
     items: [
-      { path: "/users", icon: <HiOutlineUsers />, label: "Người dùng" },
+      { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
       { path: "/settings", icon: <HiOutlineCog />, label: "Cài đặt" },
     ],
   },

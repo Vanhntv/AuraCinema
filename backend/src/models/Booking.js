@@ -10,6 +10,11 @@ const bookingSchema = new mongoose.Schema(
     customer_phone: { type: String, default: null, trim: true },
     total_price: { type: Number, required: true, min: 0 },
     status: { type: String, enum: ["confirmed", "cancelled"], default: "confirmed" },
+    payment_status: {
+      type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "paid",
+    },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } },
 );

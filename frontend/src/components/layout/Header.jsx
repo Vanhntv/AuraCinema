@@ -18,6 +18,7 @@ const pageTitles = {
   "/cinemas": "Rạp chiếu",
   "/showtimes": "Suất chiếu",
   "/users": "Người dùng",
+  "/admin/users": "Người dùng",
   "/settings": "Cài đặt",
 };
 

@@ -69,6 +69,15 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    account_status: {
+      type: String,
+      enum: ["active", "banned", "unverified"],
+      default: "active",
+    },
+    last_login_at: {
+      type: Date,
+      default: null,
+    },
     password_changed_at: {
       type: Date,
       default: null,
