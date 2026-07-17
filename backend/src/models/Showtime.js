@@ -24,6 +24,17 @@ const showtimeSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    show_type: {
+      type: String,
+      default: "2D",
+      trim: true,
+    },
+    status: {
+      type: String,
+      enum: ["upcoming", "open", "closed", "finished", "cancelled"],
+      default: "open",
+      trim: true,
+    },
     deleted_at: {
       type: Date,
       default: null,

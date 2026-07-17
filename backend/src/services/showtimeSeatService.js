@@ -370,6 +370,32 @@ export const countShowtimeSeatsForShowtimeService = async (showtimeId) => {
   return seats.length;
 };
 
+export const countReservedShowtimeSeatsForShowtimeService = async (
+  showtimeId,
+) => {
+  const seats = await findShowtimeSeatsByShowtimeId(showtimeId, {
+    populate: false,
+  });
+
+  return seats.filter((seat) => seat.status !== "available").length;
+};
+
+export const cancelShowtimeSeatsForShowtimeService = async (showtimeId) => {
+  const seats = await findShowtimeSeatsByShowtimeId(showtimeId, {
+    populate: false,
+  });
+
+  await Promise.all(
+    seats.map((seat) =>
+      updateShowtimeSeatById(seat._id, {
+        status: seat.status === "available" ? "unavailable" : "cancelled",
+      }),
+    ),
+  );
+
+  return { modifiedCount: seats.length };
+};
+
 export const updateShowtimeSeatService = async (id, payload) => {
   const existingShowtimeSeat = await findShowtimeSeatById(id);
 

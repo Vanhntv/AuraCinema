@@ -9,6 +9,7 @@ import {
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineSparkles,
+  HiOutlineTag,
   HiOutlineTrash,
   HiOutlineX,
 } from "react-icons/hi";
@@ -20,7 +21,28 @@ const emptyForm = {
   start_time: "",
   end_time: "",
   base_price: "",
+  show_type: "2D",
+  status: "open",
 };
+
+const emptyFilters = {
+  movie_id: "",
+  cinema_id: "",
+  room_id: "",
+  date: "",
+  status: "all",
+  show_type: "",
+};
+
+const showtimeStatuses = [
+  { value: "upcoming", label: "Sắp chiếu" },
+  { value: "open", label: "Đang mở bán" },
+  { value: "closed", label: "Ngừng bán" },
+  { value: "finished", label: "Đã chiếu" },
+  { value: "cancelled", label: "Đã hủy" },
+];
+
+const showTypes = ["2D", "3D", "IMAX", "Phụ đề", "Lồng tiếng"];
 
 const text = {
   addShowtime: "Th\u00eam su\u1ea5t chi\u1ebfu",
@@ -38,6 +60,7 @@ const text = {
     "Th\u1eddi gian k\u1ebft th\u00fac ph\u1ea3i sau th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
   endTimeHint:
     "C\u00f3 th\u1ec3 b\u1ecf tr\u1ed1ng n\u1ebfu h\u1ec7 th\u1ed1ng t\u1ef1 t\u00ednh theo th\u1eddi l\u01b0\u1ee3ng phim.",
+  filters: "Bộ lọc suất chiếu",
   formInvalid:
     "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
   loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
@@ -49,11 +72,14 @@ const text = {
   preview: "Xem tr\u01b0\u1edbc",
   priceHint:
     "Nh\u1eadp gi\u00e1 m\u1eb7c \u0111\u1ecbnh tr\u01b0\u1edbc khi \u00e1p d\u1ee5ng ph\u1ee5 thu ho\u1eb7c khuy\u1ebfn m\u00e3i.",
+  showType: "Loại suất chiếu",
+  status: "Trạng thái",
   refresh: "L\u00e0m m\u1edbi",
   requiredMovie: "Vui l\u00f2ng ch\u1ecdn phim.",
   requiredRoom: "Vui l\u00f2ng ch\u1ecdn ph\u00f2ng chi\u1ebfu.",
   requiredStart:
     "Vui l\u00f2ng ch\u1ecdn th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
+  startTimeInPast: "Không được tạo hoặc cập nhật suất chiếu trong quá khứ.",
   room: "Ph\u00f2ng",
   roomLabel: "Ph\u00f2ng chi\u1ebfu",
   saveShowtime: "L\u01b0u su\u1ea5t chi\u1ebfu",
@@ -67,6 +93,7 @@ const text = {
   tableActions: "Thao t\u00e1c",
   tableCinema: "R\u1ea1p",
   tableEnd: "Gi\u1edd k\u1ebft th\u00fac",
+  tablePrice: "Giá vé",
   tableStart: "Gi\u1edd b\u1eaft \u0111\u1ea7u",
   title: "Qu\u1ea3n l\u00fd Su\u1ea5t chi\u1ebfu",
   updateDescription:
@@ -80,6 +107,14 @@ const text = {
   subtitle:
     "T\u1ea1o l\u1ecbch chi\u1ebfu, ch\u1ecdn ph\u00f2ng v\u00e0 ki\u1ec3m so\u00e1t gi\u00e1 v\u00e9 theo t\u1eebng su\u1ea5t",
   edit: "Ch\u1ec9nh s\u1eeda",
+  deleteShowtime: "Xóa hoặc hủy suất chiếu",
+  deleting: "Đang xử lý...",
+  allMovies: "Tất cả phim",
+  allCinemas: "Tất cả rạp",
+  allRooms: "Tất cả phòng",
+  allStatuses: "Tất cả trạng thái",
+  allShowTypes: "Tất cả loại chiếu",
+  clearFilters: "Xóa lọc",
 };
 
 const normalizeText = (value = "") =>
@@ -120,12 +155,25 @@ const formatCurrency = (value) => {
   }).format(amount);
 };
 
+const getDateKey = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleDateString("en-CA");
+};
+
 const getRoomLabel = (room) => {
   const cinemaName = room.cinema_id?.name || room.cinemaName;
   return cinemaName ? `${room.name} - ${cinemaName}` : room.name;
 };
 
 const getShowtimeId = (showtime) => showtime.id || showtime._id;
+
+const getStatusMeta = (status) =>
+  showtimeStatuses.find((item) => item.value === status) ||
+  showtimeStatuses[1];
 
 const toDateTimeLocalInput = (value) => {
   if (!value) return "";
@@ -147,6 +195,7 @@ const ShowtimesPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [deletingShowtimeId, setDeletingShowtimeId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState(emptyFilters);
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
   const [editingShowtime, setEditingShowtime] = useState(null);
@@ -219,10 +268,58 @@ const ShowtimesPage = () => {
     [formData.room_id, rooms],
   );
 
+  const cinemas = useMemo(() => {
+    const cinemaMap = new Map();
+
+    rooms.forEach((room) => {
+      const cinema = room.cinema_id;
+      const cinemaId = cinema?._id || room.cinema_id || room.cinemaId;
+
+      if (!cinemaId || cinemaMap.has(String(cinemaId))) return;
+
+      cinemaMap.set(String(cinemaId), {
+        id: String(cinemaId),
+        name: cinema?.name || room.cinemaName || "Rạp chưa đặt tên",
+      });
+    });
+
+    return Array.from(cinemaMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, "vi"),
+    );
+  }, [rooms]);
+
+  const filteredRoomsForSelect = useMemo(() => {
+    if (!filters.cinema_id) return rooms;
+
+    return rooms.filter((room) => {
+      const cinemaId = room.cinema_id?._id || room.cinema_id || room.cinemaId;
+      return String(cinemaId) === filters.cinema_id;
+    });
+  }, [filters.cinema_id, rooms]);
+
+  const calculatedEndTime = useMemo(() => {
+    if (!formData.start_time || !selectedMovie?.duration) {
+      return formData.end_time;
+    }
+
+    if (formData.end_time) {
+      return formData.end_time;
+    }
+
+    const startDate = new Date(formData.start_time);
+    if (Number.isNaN(startDate.getTime())) {
+      return "";
+    }
+
+    const endDate = new Date(
+      startDate.getTime() + Number(selectedMovie.duration) * 60 * 1000,
+    );
+
+    return endDate.toISOString();
+  }, [formData.end_time, formData.start_time, selectedMovie]);
+
   const filteredShowtimes = useMemo(() => {
     const query = searchQuery.trim();
-
-    if (!query) return showtimes;
 
     const searchTerms = normalizeText(query).split(/\s+/).filter(Boolean);
 
@@ -230,14 +327,47 @@ const ShowtimesPage = () => {
       const movieTitle = showtime.movieTitle || "";
       const roomName = showtime.roomName || "";
       const cinemaName = showtime.cinemaName || "";
+      const showType = showtime.show_type || "";
+      const status = showtime.status || "open";
+
+      if (filters.movie_id && String(showtime.movie_id) !== filters.movie_id) {
+        return false;
+      }
+
+      if (filters.room_id && String(showtime.room_id) !== filters.room_id) {
+        return false;
+      }
+
+      if (
+        filters.cinema_id &&
+        String(showtime.cinema_id) !== filters.cinema_id
+      ) {
+        return false;
+      }
+
+      if (filters.date && getDateKey(showtime.start_time) !== filters.date) {
+        return false;
+      }
+
+      if (filters.status !== "all" && status !== filters.status) {
+        return false;
+      }
+
+      if (filters.show_type && showType !== filters.show_type) {
+        return false;
+      }
+
+      if (!searchTerms.length) {
+        return true;
+      }
 
       return searchTerms.every((term) => {
-        return [movieTitle, roomName, cinemaName].some((value) =>
+        return [movieTitle, roomName, cinemaName, showType].some((value) =>
           matchesSearchQuery(value, term),
         );
       });
     });
-  }, [searchQuery, showtimes]);
+  }, [filters, searchQuery, showtimes]);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -278,6 +408,8 @@ const ShowtimesPage = () => {
         showtime.base_price !== undefined && showtime.base_price !== null
           ? String(showtime.base_price)
           : "",
+      show_type: showtime.show_type || "2D",
+      status: showtime.stored_status || showtime.status || "open",
     });
     setFormErrors({});
     setFeedback({ type: "", message: "" });
@@ -290,6 +422,13 @@ const ShowtimesPage = () => {
     if (!formData.movie_id) errors.movie_id = text.requiredMovie;
     if (!formData.room_id) errors.room_id = text.requiredRoom;
     if (!formData.start_time) errors.start_time = text.requiredStart;
+
+    if (formData.start_time) {
+      const startTime = new Date(formData.start_time).getTime();
+      if (startTime < Date.now()) {
+        errors.start_time = text.startTimeInPast;
+      }
+    }
 
     if (formData.end_time && formData.start_time) {
       const startTime = new Date(formData.start_time).getTime();
@@ -327,9 +466,11 @@ const ShowtimesPage = () => {
         ...(formData.end_time
           ? { end_time: new Date(formData.end_time).toISOString() }
           : {}),
-        ...(formData.base_price
+        ...(formData.base_price !== ""
           ? { base_price: Number(formData.base_price) }
           : {}),
+        show_type: formData.show_type,
+        status: formData.status,
       };
 
       if (isEditing) {
@@ -428,6 +569,104 @@ const ShowtimesPage = () => {
           />
         </div>
       </div>
+
+      <section className="showtime-filters" aria-label={text.filters}>
+        <select
+          className="form-input"
+          value={filters.movie_id}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, movie_id: event.target.value }))
+          }
+        >
+          <option value="">{text.allMovies}</option>
+          {movies.map((movie) => (
+            <option key={movie._id} value={movie._id}>
+              {movie.title}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="form-input"
+          value={filters.cinema_id}
+          onChange={(event) =>
+            setFilters((prev) => ({
+              ...prev,
+              cinema_id: event.target.value,
+              room_id: "",
+            }))
+          }
+        >
+          <option value="">{text.allCinemas}</option>
+          {cinemas.map((cinema) => (
+            <option key={cinema.id} value={cinema.id}>
+              {cinema.name}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="form-input"
+          value={filters.room_id}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, room_id: event.target.value }))
+          }
+        >
+          <option value="">{text.allRooms}</option>
+          {filteredRoomsForSelect.map((room) => (
+            <option key={room._id} value={room._id}>
+              {getRoomLabel(room)}
+            </option>
+          ))}
+        </select>
+
+        <input
+          className="form-input"
+          type="date"
+          value={filters.date}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, date: event.target.value }))
+          }
+        />
+
+        <select
+          className="form-input"
+          value={filters.status}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, status: event.target.value }))
+          }
+        >
+          <option value="all">{text.allStatuses}</option>
+          {showtimeStatuses.map((status) => (
+            <option key={status.value} value={status.value}>
+              {status.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          className="form-input"
+          value={filters.show_type}
+          onChange={(event) =>
+            setFilters((prev) => ({ ...prev, show_type: event.target.value }))
+          }
+        >
+          <option value="">{text.allShowTypes}</option>
+          {showTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setFilters(emptyFilters)}
+        >
+          {text.clearFilters}
+        </button>
+      </section>
 
       {feedback.message ? (
         <div className={`showtime-alert ${feedback.type}`} role="alert">
@@ -553,6 +792,40 @@ const ShowtimesPage = () => {
               </label>
 
               <label className="form-group">
+                <span className="form-label">{text.showType}</span>
+                <select
+                  className="form-input"
+                  value={formData.show_type}
+                  onChange={(event) =>
+                    updateField("show_type", event.target.value)
+                  }
+                >
+                  {showTypes.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="form-group">
+                <span className="form-label">{text.status}</span>
+                <select
+                  className="form-input"
+                  value={formData.status}
+                  onChange={(event) =>
+                    updateField("status", event.target.value)
+                  }
+                >
+                  {showtimeStatuses.map((status) => (
+                    <option key={status.value} value={status.value}>
+                      {status.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="form-group">
                 <span className="form-label">{text.basePrice}</span>
                 <input
                   className={`form-input ${formErrors.base_price ? "error" : ""}`}
@@ -584,6 +857,14 @@ const ShowtimesPage = () => {
                 <span>
                   <HiOutlineClock />
                   {formatDateTime(formData.start_time)}
+                </span>
+                <span>
+                  <HiOutlineCalendar />
+                  {formatDateTime(calculatedEndTime)}
+                </span>
+                <span>
+                  <HiOutlineTag />
+                  {formData.show_type} - {getStatusMeta(formData.status).label}
                 </span>
                 <span>
                   <HiOutlineCash />
@@ -673,8 +954,11 @@ const ShowtimesPage = () => {
                   <th>{text.movie}</th>
                   <th>{text.room}</th>
                   <th>{text.tableCinema}</th>
+                  <th>{text.showType}</th>
                   <th>{text.tableStart}</th>
                   <th>{text.tableEnd}</th>
+                  <th>{text.tablePrice}</th>
+                  <th>{text.status}</th>
                   <th style={{ width: "110px", textAlign: "center" }}>
                     {text.tableActions}
                   </th>
@@ -686,8 +970,17 @@ const ShowtimesPage = () => {
                     <td>{showtime.movieTitle || "-"}</td>
                     <td>{showtime.roomName || "-"}</td>
                     <td>{showtime.cinemaName || "-"}</td>
+                    <td>{showtime.show_type || "2D"}</td>
                     <td>{showtime.startTime || "-"}</td>
                     <td>{showtime.endTime || "-"}</td>
+                    <td>{formatCurrency(showtime.base_price)}</td>
+                    <td>
+                      <span
+                        className={`showtime-status-pill status-${showtime.status || "open"}`}
+                      >
+                        {getStatusMeta(showtime.status).label}
+                      </span>
+                    </td>
                     <td>
                       <div
                         className="table-actions"

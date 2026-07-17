@@ -1270,6 +1270,54 @@ ol {
   background: var(--color-success);
 }
 
+.showtime-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+}
+
+.showtime-filters .btn {
+  justify-content: center;
+}
+
+.showtime-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  padding: 5px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.showtime-status-pill.status-open {
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.showtime-status-pill.status-upcoming {
+  background: var(--color-info-bg);
+  color: var(--color-info);
+}
+
+.showtime-status-pill.status-closed {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.showtime-status-pill.status-finished,
+.showtime-status-pill.status-cancelled {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
 .showtime-form-panel {
   margin-bottom: 20px;
   overflow: hidden;
