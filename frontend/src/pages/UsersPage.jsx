@@ -746,7 +746,7 @@ const UsersPage = () => {
   };
 
   return (
-    <>
+    <div className="users-page">
       <div className="page-header">
         <div className="page-header-info">
           <h1>Quản lý Người dùng</h1>
@@ -760,7 +760,7 @@ const UsersPage = () => {
         </div>
       </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid users-stats-grid">
         <div className="stat-card">
           <div className="stat-card-icon purple">
             <HiOutlineUsers />
@@ -790,7 +790,7 @@ const UsersPage = () => {
         </div>
       </div>
 
-      <div className="table-container">
+      <div className="table-container users-table-container">
         <div className="table-toolbar">
           <div className="table-toolbar-left">
             <span className="table-toolbar-title">Danh sách người dùng</span>
@@ -977,7 +977,7 @@ const UsersPage = () => {
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
-    </>
+    </div>
   );
 };
 
