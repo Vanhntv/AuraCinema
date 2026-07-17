@@ -25,8 +25,11 @@ export const authMiddleware = async (req, res, next) => {
     const user = await User.findOne({
       _id: payload.id,
       deleted_at: null,
-      status: true,
-    }).select("_id role role_id password_changed_at");
+      $or: [
+        { account_status: "active" },
+        { account_status: { $exists: false }, status: true },
+      ],
+    }).select("_id role role_id password_changed_at account_status status");
 
     if (!user) {
       return res.status(401).json({

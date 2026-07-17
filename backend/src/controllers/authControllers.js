@@ -48,6 +48,13 @@ const resetLoginAttempts = (req) => {
   loginAttempts.delete(getRateLimitKey(req));
 };
 
+const activeUserQuery = {
+  $or: [
+    { account_status: "active" },
+    { account_status: { $exists: false }, status: true },
+  ],
+};
+
 export const loginRateLimit = (req, res, next) => {
   const key = getRateLimitKey(req);
   const now = Date.now();
@@ -261,7 +268,7 @@ export const login = async (req, res) => {
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
-      status: true,
+      ...activeUserQuery,
     });
 
     if (!user) {
@@ -281,6 +288,11 @@ export const login = async (req, res) => {
     }
 
     resetLoginAttempts(req);
+
+    user.account_status = user.account_status || (user.status ? "active" : "banned");
+    user.status = user.account_status === "active";
+    user.last_login_at = new Date();
+    await user.save();
 
     const userResponse = sanitizeUser(user);
 
@@ -323,7 +335,7 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
-      status: true,
+      ...activeUserQuery,
     });
 
     const responsePayload = {
@@ -390,7 +402,7 @@ export const resetPassword = async (req, res) => {
     const user = await User.findOne({
       email: normalizeEmail(email),
       deleted_at: null,
-      status: true,
+      ...activeUserQuery,
     });
 
     if (
@@ -504,7 +516,7 @@ export const updateProfile = async (req, res) => {
       {
         _id: req.user.id,
         deleted_at: null,
-        status: true,
+        ...activeUserQuery,
       },
       allowedFields,
       {
@@ -561,7 +573,7 @@ export const changePassword = async (req, res) => {
     const user = await User.findOne({
       _id: req.user.id,
       deleted_at: null,
-      status: true,
+      ...activeUserQuery,
     });
 
     if (!user) {
