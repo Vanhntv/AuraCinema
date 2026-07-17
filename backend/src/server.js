@@ -18,6 +18,7 @@ import vouchersRoute from "./router/vouchersRouters.js";
 import bookingsRoute from "./router/bookingsRouters.js";
 
 const app = express();
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
@@ -40,7 +41,18 @@ app.use("/api/vouchers", vouchersRoute);
 app.use("/api/bookings", bookingsRoute);
 
 connectDB().then(() => {
-  app.listen(5001, () => {
-    console.log("5001");
+  const server = app.listen(PORT, () => {
+    console.log(`Backend running on port ${PORT}`);
+  });
+
+  server.on("error", (error) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(
+        `Port ${PORT} dang duoc su dung. Hay tat process cu hoac chay voi PORT khac.`,
+      );
+      process.exit(1);
+    }
+
+    throw error;
   });
 });

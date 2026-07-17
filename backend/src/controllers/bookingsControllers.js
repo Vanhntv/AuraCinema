@@ -70,8 +70,26 @@ export const createBooking = async (req, res) => {
 export const getMyBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({ user_id: req.user.id })
-      .populate("showtime_id", "movie_id room_id start_time end_time")
-      .populate({ path: "showtime_seat_ids", populate: { path: "seat_id", select: "seat_row seat_number seat_type_id" } })
+      .populate({
+        path: "showtime_id",
+        select: "movie_id room_id start_time end_time",
+        populate: [
+          { path: "movie_id", select: "title poster duration age_limit" },
+          {
+            path: "room_id",
+            select: "name cinema_id",
+            populate: { path: "cinema_id", select: "name address city" },
+          },
+        ],
+      })
+      .populate({
+        path: "showtime_seat_ids",
+        populate: {
+          path: "seat_id",
+          select: "seat_row seat_number seat_type_id",
+          populate: { path: "seat_type_id", select: "name" },
+        },
+      })
       .sort({ created_at: -1 });
     return res.json({ success: true, data: bookings });
   } catch (error) {

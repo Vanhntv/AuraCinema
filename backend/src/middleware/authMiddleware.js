@@ -1,6 +1,7 @@
 import { verifyJwt } from "../utils/jwt.js";
+import User from "../models/User.js";
 
-export const authMiddleware = (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -21,11 +22,34 @@ export const authMiddleware = (req, res, next) => {
     }
 
     const payload = verifyJwt(token, process.env.JWT_SECRET);
+    const user = await User.findOne({
+      _id: payload.id,
+      deleted_at: null,
+      status: true,
+    }).select("_id role role_id password_changed_at");
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Token không hợp lệ",
+      });
+    }
+
+    if (
+      user.password_changed_at &&
+      payload.iat &&
+      Math.floor(user.password_changed_at.getTime() / 1000) > payload.iat
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Mật khẩu đã được thay đổi. Vui lòng đăng nhập lại",
+      });
+    }
 
     req.user = {
-      id: payload.id,
-      role_id: payload.role_id,
-      role: payload.role === "admin" || payload.role_id === 1 ? "admin" : "user",
+      id: user._id.toString(),
+      role_id: user.role_id,
+      role: user.role === "admin" || user.role_id === 1 ? "admin" : "user",
       iat: payload.iat,
       exp: payload.exp,
     };

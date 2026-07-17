@@ -32,13 +32,46 @@ const userSchema = new mongoose.Schema(
       default: null,
       trim: true,
     },
+    birth_date: {
+      type: Date,
+      default: null,
+    },
+    gender: {
+      type: String,
+      enum: ["male", "female", "other", null],
+      default: null,
+    },
+    address: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     avatar: {
       type: String,
       default: null,
     },
+    member_tier: {
+      type: String,
+      enum: ["member", "vip", "vvip"],
+      default: "member",
+    },
+    reward_points: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    total_spent: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     status: {
       type: Boolean,
       default: true,
+    },
+    password_changed_at: {
+      type: Date,
+      default: null,
     },
     password_reset_otp: {
       type: String,

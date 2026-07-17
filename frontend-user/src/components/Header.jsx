@@ -6,7 +6,7 @@ import { useAuth } from "../hooks/useAuth"; // Nhớ import hook này
 function Header() {
   const navigate = useNavigate(); // Chỉ để 1 lần duy nhất
   const location = useLocation();
-  const { isAuthenticated, logout } = useAuth(); // Bây giờ sẽ hoạt động
+  const { isAuthenticated, logout, user } = useAuth(); // Bây giờ sẽ hoạt động
 
   const handleLogout = () => {
     logout();
@@ -44,12 +44,23 @@ function Header() {
         {/* Phần hiển thị nút dựa trên trạng thái đăng nhập */}
         <div className="flex justify-end gap-3.5 max-sm:col-span-full max-sm:w-full">
           {isAuthenticated ? (
-            <button
-              onClick={handleLogout}
-              className="h-[54px] min-w-32 rounded-full border border-white/10 bg-white/[0.04] px-7 font-bold text-white transition hover:border-red-500 hover:text-red-500"
-            >
-              Đăng xuất
-            </button>
+            <>
+              <button
+                onClick={() => navigate("/tai-khoan")}
+                className="h-[54px] min-w-32 rounded-full border border-white/10 bg-white/[0.04] px-7 font-bold text-white transition hover:border-[#ff6070] hover:text-[#ff6070]"
+                title={user?.full_name || user?.email || "Tai khoan"}
+                type="button"
+              >
+                Tài khoản
+              </button>
+              <button
+                onClick={handleLogout}
+                className="h-[54px] min-w-32 rounded-full border border-white/10 bg-white/[0.04] px-7 font-bold text-white transition hover:border-red-500 hover:text-red-500"
+                type="button"
+              >
+                Đăng xuất
+              </button>
+            </>
           ) : (
             <>
               <button

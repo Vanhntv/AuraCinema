@@ -14,6 +14,8 @@ import AboutPage from './pages/about/AboutPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import AccountPage from './pages/AccountPage';
+import ProtectedRoute from './routes/ProtectedRoute';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -58,6 +60,14 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route
+          path="/tai-khoan"
+          element={
+            <ProtectedRoute>
+              <AccountPage />
+            </ProtectedRoute>
+          }
+        />
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
       </Routes>
       <Footer />
