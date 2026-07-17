@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiOutlineEye,
-  HiOutlineKey,
   HiOutlineLockClosed,
   HiOutlineLockOpen,
   HiOutlinePencil,
@@ -14,7 +13,6 @@ import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
 import {
   adjustRewardPoints,
-  forceResetPassword,
   getUserById,
   getUsers,
   updateUserAccountStatus,
@@ -120,7 +118,7 @@ const UserInfoField = ({ label, value }) => (
   </div>
 );
 
-const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceReset }) => {
+const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward }) => {
   if (!detail && !loading) return null;
 
   const user = detail?.user;
@@ -385,10 +383,6 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
           </button>
           {user ? (
             <>
-              <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
-                <HiOutlineKey />
-                Reset mật khẩu
-              </button>
               <button className="btn btn-secondary" type="button" onClick={() => onReward(user)}>
                 <HiOutlinePlus />
                 Điểm thưởng
@@ -612,7 +606,6 @@ const UsersPage = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [rewardUser, setRewardUser] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
-  const [resetTarget, setResetTarget] = useState(null);
 
   const activeUsers = useMemo(() => users.filter((user) => resolveAccountStatus(user) === "active").length, [users]);
   const bannedUsers = useMemo(() => users.filter((user) => resolveAccountStatus(user) === "banned").length, [users]);
@@ -729,19 +722,6 @@ const UsersPage = () => {
       fetchUsers(currentPage);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái");
-    }
-  };
-
-  const handleConfirmForceReset = async () => {
-    if (!resetTarget) return;
-    try {
-      const response = await forceResetPassword(resetTarget._id, "Admin hỗ trợ force reset password");
-      const otpText = response.dev_otp ? ` OTP dev: ${response.dev_otp}` : "";
-      addToast("success", `${response.message || "Đã tạo yêu cầu reset mật khẩu"}.${otpText}`);
-      setResetTarget(null);
-      if (detail?.user?._id === resetTarget._id) await reloadDetail(resetTarget._id);
-    } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể reset mật khẩu");
     }
   };
 
@@ -905,9 +885,6 @@ const UsersPage = () => {
                               >
                                 {isActiveUser(user) ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
                               </button>
-                              <button className="btn btn-icon btn-ghost" title="Force reset password" onClick={() => setResetTarget(user)}>
-                                <HiOutlineKey />
-                              </button>
                             </div>
                           </td>
                         </tr>
@@ -939,7 +916,6 @@ const UsersPage = () => {
         onClose={() => setDetail(null)}
         onEdit={(user) => setEditingUser(user)}
         onReward={(user) => setRewardUser(user)}
-        onForceReset={(user) => setResetTarget(user)}
       />
 
       <UserEditModal
@@ -966,14 +942,6 @@ const UsersPage = () => {
         }
         onConfirm={handleConfirmStatus}
         onCancel={() => setStatusTarget(null)}
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(resetTarget)}
-        title="Force reset password"
-        message={`Tạo yêu cầu đặt lại mật khẩu cho "${resetTarget?.full_name}"? Admin không thể xem mật khẩu hiện tại của user.`}
-        onConfirm={handleConfirmForceReset}
-        onCancel={() => setResetTarget(null)}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
