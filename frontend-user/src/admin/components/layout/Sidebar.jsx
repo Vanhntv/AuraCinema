@@ -7,7 +7,6 @@ import {
   HiOutlineUsers,
   HiOutlineCog,
   HiOutlineOfficeBuilding,
-  HiOutlineVideoCamera,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
 
