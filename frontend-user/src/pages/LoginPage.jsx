@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { getAdminDashboardUrl, isAdminUser } from "../utils/authRedirect";
+import { isAdminUser } from "../utils/authRedirect";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ function LoginPage() {
       const response = await login(formData);
 
       if (isAdminUser(response.data)) {
-        window.location.assign(getAdminDashboardUrl(response.token));
+        navigate("/admin/dashboard", { replace: true });
         return;
       }
 
