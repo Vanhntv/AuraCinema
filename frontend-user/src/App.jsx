@@ -1,4 +1,4 @@
-import { Route, Routes, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -16,6 +16,15 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AccountPage from './pages/AccountPage';
 import ProtectedRoute from './routes/ProtectedRoute';
+import AdminLayout from './admin/components/layout/AdminLayout';
+import AdminRoute from './admin/routes/AdminRoute';
+import AdminDashboardPage from './admin/pages/DashboardPage';
+import AdminGenresPage from './admin/pages/GenresPage';
+import AdminMoviesPage from './admin/pages/MoviesPage';
+import AdminCinemasPage from './admin/pages/CinemasPage';
+import AdminShowtimesPage from './admin/pages/ShowtimesPage';
+import AdminTrailersPage from './admin/pages/TrailersPage';
+import AdminUsersPage from './admin/pages/UsersPage';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -41,10 +50,13 @@ function HomePage() {
 }
 
 function App() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
   return (
     <main className="min-h-screen bg-[#0f141c] text-white">
       <ScrollToTop />
-      <Header />
+      {!isAdminRoute && <Header />}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/lich-chieu" element={<MovieSchedule />} />
@@ -68,9 +80,27 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboardPage />} />
+          <Route path="genres" element={<AdminGenresPage />} />
+          <Route path="movies" element={<AdminMoviesPage />} />
+          <Route path="cinemas" element={<AdminCinemasPage />} />
+          <Route path="showtimes" element={<AdminShowtimesPage />} />
+          <Route path="trailers" element={<AdminTrailersPage />} />
+          <Route path="users" element={<AdminUsersPage />} />
+          <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
+        </Route>
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
       </Routes>
-      <Footer />
+      {!isAdminRoute && <Footer />}
     </main>
   );
 }
