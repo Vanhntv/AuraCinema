@@ -29,6 +29,15 @@ const showtimeSchema = new mongoose.Schema(
       vip: { type: Number, default: null, min: 0 },
       couple: { type: Number, default: null, min: 0 },
     },
+    status: {
+      type: String,
+      enum: ["scheduled", "now_showing", "completed", "cancelled"],
+      default: "scheduled",
+    },
+    cancelled_at: {
+      type: Date,
+      default: null,
+    },
     deleted_at: {
       type: Date,
       default: null,

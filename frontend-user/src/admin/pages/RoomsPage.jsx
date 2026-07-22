@@ -38,7 +38,7 @@ const statusLabels = {
   inactive: "Ngừng hoạt động",
 };
 
-const roomTypes = ["2D", "3D", "IMAX", "VIP"];
+const roomTypes = ["2D", "3D"];
 const PAGE_SIZE = 10;
 
 const getSeatCode = (seat) => seat.seat_code || `${seat.seat_row}${seat.seat_number}`;
@@ -441,7 +441,7 @@ function RoomsPage() {
       const nextFormData = {
         cinema_id: detail.cinema_id?._id || detail.cinema_id || "",
         name: detail.name || "",
-        room_type: detail.room_type || "2D",
+        room_type: roomTypes.includes(detail.room_type) ? detail.room_type : "2D",
         row_count: detail.row_count || "",
         column_count: detail.column_count || "",
         status: detail.status || "active",
