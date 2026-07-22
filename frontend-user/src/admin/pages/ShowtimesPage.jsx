@@ -17,8 +17,8 @@ import axiosClient from "../../api/axiosClient";
 const emptyForm = {
   movie_id: "",
   room_id: "",
-  start_time: "",
-  end_time: "",
+  start_date: "",
+  show_time: "",
   base_price: "",
   normal_price: "",
   vip_price: "",
@@ -28,6 +28,8 @@ const emptyForm = {
 const text = {
   addShowtime: "Th\u00eam su\u1ea5t chi\u1ebfu",
   addShowtimeNew: "Th\u00eam su\u1ea5t chi\u1ebfu m\u1edbi",
+  autoSchedule: "T\u1ef1 \u0111\u1ed9ng x\u1ebfp l\u1ecbch",
+  autoScheduling: "\u0110ang x\u1ebfp...",
   basePrice: "Gi\u00e1 v\u00e9 c\u01a1 b\u1ea3n",
   cancelEdit: "H\u1ee7y s\u1eeda",
   chooseMovie: "Ch\u1ecdn phim",
@@ -36,11 +38,6 @@ const text = {
   closeForm: "\u0110\u00f3ng form",
   createDescription:
     "Ho\u00e0n thi\u1ec7n th\u00f4ng tin l\u1ecbch chi\u1ebfu tr\u01b0\u1edbc khi m\u1edf b\u00e1n v\u00e9.",
-  endTime: "K\u1ebft th\u00fac",
-  endTimeAfterStart:
-    "Th\u1eddi gian k\u1ebft th\u00fac ph\u1ea3i sau th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
-  endTimeHint:
-    "C\u00f3 th\u1ec3 b\u1ecf tr\u1ed1ng n\u1ebfu h\u1ec7 th\u1ed1ng t\u1ef1 t\u00ednh theo th\u1eddi l\u01b0\u1ee3ng phim.",
   formInvalid:
     "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
   loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
@@ -56,13 +53,15 @@ const text = {
   requiredMovie: "Vui l\u00f2ng ch\u1ecdn phim.",
   requiredRoom: "Vui l\u00f2ng ch\u1ecdn ph\u00f2ng chi\u1ebfu.",
   requiredStart:
-    "Vui l\u00f2ng ch\u1ecdn th\u1eddi gian b\u1eaft \u0111\u1ea7u.",
+    "Vui l\u00f2ng ch\u1ecdn ng\u00e0y chi\u1ebfu.",
+  requiredShowTime: "Vui l\u00f2ng ch\u1ecdn khung gi\u1edd chi\u1ebfu.",
   room: "Ph\u00f2ng",
   roomLabel: "Ph\u00f2ng chi\u1ebfu",
   saveShowtime: "L\u01b0u su\u1ea5t chi\u1ebfu",
   saving: "\u0110ang l\u01b0u...",
   searchPlaceholder: "T\u00ecm theo phim, ph\u00f2ng ho\u1eb7c r\u1ea1p...",
-  startTime: "B\u1eaft \u0111\u1ea7u",
+  startDate: "Ng\u00e0y chi\u1ebfu",
+  showTime: "Khung gi\u1edd chi\u1ebfu",
   successCreate:
     "\u0110\u00e3 th\u00eam su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
   successUpdate:
@@ -71,18 +70,28 @@ const text = {
   tableCinema: "R\u1ea1p",
   tableEnd: "Gi\u1edd k\u1ebft th\u00fac",
   tableStart: "Gi\u1edd b\u1eaft \u0111\u1ea7u",
+  tableStatus: "Tr\u1ea1ng th\u00e1i",
   title: "Qu\u1ea3n l\u00fd Su\u1ea5t chi\u1ebfu",
   updateDescription:
     "\u0110i\u1ec1u ch\u1ec9nh phim, ph\u00f2ng, th\u1eddi gian ho\u1eb7c gi\u00e1 v\u00e9 cho su\u1ea5t \u0111ang ch\u1ecdn.",
   updateShowtime: "C\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu",
   updateFailed: "Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu.",
   createFailed: "Kh\u00f4ng th\u1ec3 th\u00eam su\u1ea5t chi\u1ebfu.",
+  deleteShowtime: "H\u1ee7y su\u1ea5t chi\u1ebfu",
+  deleting: "\u0110ang h\u1ee7y...",
   priceInvalid:
     "Gi\u00e1 v\u00e9 kh\u00f4ng \u0111\u01b0\u1ee3c nh\u1ecf h\u01a1n 0.",
   resetInfo: "X\u00f3a th\u00f4ng tin",
   subtitle:
     "T\u1ea1o l\u1ecbch chi\u1ebfu, ch\u1ecdn ph\u00f2ng v\u00e0 ki\u1ec3m so\u00e1t gi\u00e1 v\u00e9 theo t\u1eebng su\u1ea5t",
   edit: "Ch\u1ec9nh s\u1eeda",
+};
+
+const statusLabels = {
+  scheduled: "Sắp chiếu",
+  now_showing: "Đang chiếu",
+  completed: "Đã kết thúc",
+  cancelled: "Đã hủy",
 };
 
 const normalizeText = (value = "") =>
@@ -123,14 +132,27 @@ const formatCurrency = (value) => {
   }).format(amount);
 };
 
+const formatDuration = (duration) => {
+  const minutes = Number(duration);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "Chưa có thời lượng";
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  if (!hours) return `${minutes} phút`;
+  if (!remainingMinutes) return `${hours} giờ`;
+  return `${hours} giờ ${remainingMinutes} phút`;
+};
+
 const getRoomLabel = (room) => {
   const cinemaName = room.cinema_id?.name || room.cinemaName;
   return cinemaName ? `${room.name} - ${cinemaName}` : room.name;
 };
 
 const getShowtimeId = (showtime) => showtime.id || showtime._id;
+const canModifyShowtime = (showtime) => showtime.status === "scheduled";
 
-const toDateTimeLocalInput = (value) => {
+const toDateInputValue = (value) => {
   if (!value) return "";
 
   const date = new Date(value);
@@ -139,8 +161,30 @@ const toDateTimeLocalInput = (value) => {
   const offsetDate = new Date(
     date.getTime() - date.getTimezoneOffset() * 60000,
   );
-  return offsetDate.toISOString().slice(0, 16);
+  return offsetDate.toISOString().slice(0, 10);
 };
+
+const toTimeInputValue = (value) => {
+  if (!value) return "";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const offsetDate = new Date(
+    date.getTime() - date.getTimezoneOffset() * 60000,
+  );
+  return offsetDate.toISOString().slice(11, 16);
+};
+
+const buildStartDateTime = ({ start_date, show_time }) => {
+  if (!start_date || !show_time) return null;
+
+  const date = new Date(`${start_date}T${show_time}`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatTimeInputValue = (date) =>
+  `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
@@ -148,8 +192,13 @@ const ShowtimesPage = () => {
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [autoScheduling, setAutoScheduling] = useState(false);
   const [deletingShowtimeId, setDeletingShowtimeId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [movieFilter, setMovieFilter] = useState("");
+  const [roomFilter, setRoomFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
   const [editingShowtime, setEditingShowtime] = useState(null);
@@ -157,18 +206,27 @@ const ShowtimesPage = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
+  const [conflictShowtimes, setConflictShowtimes] = useState([]);
 
   const isEditing = Boolean(editingShowtime);
 
   const fetchShowtimes = useCallback(async () => {
     try {
-      const response = await axiosClient.get("/showtimes");
+      const response = await axiosClient.get("/showtimes", {
+        params: {
+          q: searchQuery.trim() || undefined,
+          movie_id: movieFilter || undefined,
+          room_id: roomFilter || undefined,
+          date: dateFilter || undefined,
+          status: statusFilter || undefined,
+        },
+      });
       setShowtimes(response.data?.data || []);
     } catch (error) {
       console.error(error);
       setShowtimes([]);
     }
-  }, []);
+  }, [dateFilter, movieFilter, roomFilter, searchQuery, statusFilter]);
 
   const fetchMovies = useCallback(async () => {
     try {
@@ -253,6 +311,7 @@ const ShowtimesPage = () => {
     setFormData(emptyForm);
     setFormErrors({});
     setFeedback({ type: "", message: "" });
+    setConflictShowtimes([]);
   };
 
   const closeForm = () => {
@@ -273,12 +332,20 @@ const ShowtimesPage = () => {
   };
 
   const openEditForm = (showtime) => {
+    if (!canModifyShowtime(showtime)) {
+      setFeedback({
+        type: "error",
+        message: "Chỉ được chỉnh sửa suất chiếu chưa bắt đầu.",
+      });
+      return;
+    }
+
     setEditingShowtime(showtime);
     setFormData({
       movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
       room_id: showtime.room_id ? String(showtime.room_id) : "",
-      start_time: toDateTimeLocalInput(showtime.start_time),
-      end_time: toDateTimeLocalInput(showtime.end_time),
+      start_date: toDateInputValue(showtime.start_time),
+      show_time: toTimeInputValue(showtime.start_time),
       base_price:
         showtime.base_price !== undefined && showtime.base_price !== null
           ? String(showtime.base_price)
@@ -297,15 +364,15 @@ const ShowtimesPage = () => {
 
     if (!formData.movie_id) errors.movie_id = text.requiredMovie;
     if (!formData.room_id) errors.room_id = text.requiredRoom;
-    if (!formData.start_time) errors.start_time = text.requiredStart;
+    if (!formData.start_date) errors.start_date = text.requiredStart;
+    if (!formData.show_time) errors.show_time = text.requiredShowTime;
 
-    if (formData.end_time && formData.start_time) {
-      const startTime = new Date(formData.start_time).getTime();
-      const endTime = new Date(formData.end_time).getTime();
-
-      if (endTime <= startTime) {
-        errors.end_time = text.endTimeAfterStart;
-      }
+    const startDateTime = buildStartDateTime(formData);
+    if (!errors.start_date && !errors.show_time && !startDateTime) {
+      errors.start_date = "Ngày chiếu hoặc khung giờ chiếu không hợp lệ.";
+    }
+    if (startDateTime && startDateTime.getTime() <= Date.now()) {
+      errors.start_date = "Không thể tạo hoặc đổi suất chiếu về thời điểm đã qua.";
     }
 
     if (formData.base_price && Number(formData.base_price) < 0) {
@@ -319,6 +386,20 @@ const ShowtimesPage = () => {
     return Object.keys(errors).length === 0;
   };
 
+  const buildShowtimePayload = (startDateTime) => ({
+    movie_id: formData.movie_id,
+    room_id: formData.room_id,
+    start_time: startDateTime.toISOString(),
+    ...(formData.base_price
+      ? { base_price: Number(formData.base_price) }
+      : {}),
+    seat_prices: {
+      normal: formData.normal_price === "" ? null : Number(formData.normal_price),
+      vip: formData.vip_price === "" ? null : Number(formData.vip_price),
+      couple: formData.couple_price === "" ? null : Number(formData.couple_price),
+    },
+  });
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -330,23 +411,9 @@ const ShowtimesPage = () => {
     try {
       setSubmitting(true);
       setFeedback({ type: "", message: "" });
+      setConflictShowtimes([]);
 
-      const payload = {
-        movie_id: formData.movie_id,
-        room_id: formData.room_id,
-        start_time: new Date(formData.start_time).toISOString(),
-        ...(formData.end_time
-          ? { end_time: new Date(formData.end_time).toISOString() }
-          : {}),
-        ...(formData.base_price
-          ? { base_price: Number(formData.base_price) }
-          : {}),
-        seat_prices: {
-          normal: formData.normal_price === "" ? null : Number(formData.normal_price),
-          vip: formData.vip_price === "" ? null : Number(formData.vip_price),
-          couple: formData.couple_price === "" ? null : Number(formData.couple_price),
-        },
-      };
+      const payload = buildShowtimePayload(buildStartDateTime(formData));
 
       if (isEditing) {
         await axiosClient.put(
@@ -370,12 +437,118 @@ const ShowtimesPage = () => {
         error.response?.data?.message ||
         (isEditing ? text.updateFailed : text.createFailed);
       setFeedback({ type: "error", message });
+      setConflictShowtimes(error.response?.data?.conflict ? [error.response.data.conflict] : []);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleAutoSchedule = async () => {
+    const errors = {};
+
+    if (!formData.movie_id) errors.movie_id = text.requiredMovie;
+    if (!formData.room_id) errors.room_id = text.requiredRoom;
+    if (!formData.start_date) errors.start_date = text.requiredStart;
+    ["base_price", "normal_price", "vip_price", "couple_price"].forEach((field) => {
+      if (formData[field] && Number(formData[field]) < 0) errors[field] = text.priceInvalid;
+    });
+
+    if (!selectedMovie?.duration || Number(selectedMovie.duration) <= 0) {
+      errors.movie_id = "Phim chưa có thời lượng để tự động xếp lịch.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors((current) => ({ ...current, ...errors }));
+      setFeedback({ type: "error", message: text.formInvalid });
+      return;
+    }
+
+    const durationMinutes = Number(selectedMovie.duration);
+    const gapMinutes = 20;
+    const openingTime = new Date(`${formData.start_date}T08:00`);
+    const closingTime = new Date(`${formData.start_date}T00:00`);
+    closingTime.setDate(closingTime.getDate() + 1);
+    const now = new Date();
+    const slots = [];
+
+    for (
+      let slotStart = new Date(openingTime);
+      slotStart.getTime() + durationMinutes * 60 * 1000 <= closingTime.getTime();
+      slotStart = new Date(slotStart.getTime() + (durationMinutes + gapMinutes) * 60 * 1000)
+    ) {
+      if (slotStart > now) {
+        slots.push(new Date(slotStart));
+      }
+    }
+
+    if (!slots.length) {
+      setFeedback({
+        type: "error",
+        message: "Không có khung giờ hợp lệ trong khoảng 08:00 - 24:00.",
+      });
+      return;
+    }
+
+    try {
+      setAutoScheduling(true);
+      setFeedback({ type: "", message: "" });
+      setConflictShowtimes([]);
+
+      const createdSlots = [];
+      const skippedSlots = [];
+
+      for (const slot of slots) {
+        try {
+          await axiosClient.post("/showtimes", buildShowtimePayload(slot));
+          createdSlots.push(slot);
+        } catch (error) {
+          skippedSlots.push({
+            slot,
+            message: error.response?.data?.message || "Không thể tạo suất chiếu",
+            conflict: error.response?.data?.conflict || null,
+          });
+        }
+      }
+
+      if (createdSlots.length > 0) {
+        setFormData((current) => ({
+          ...current,
+          show_time: formatTimeInputValue(createdSlots[0]),
+        }));
+      }
+
+      setFeedback({
+        type: createdSlots.length > 0 ? "success" : "error",
+        message:
+          createdSlots.length > 0
+            ? `Đã tự động tạo ${createdSlots.length} suất chiếu. ${
+                skippedSlots.length ? `Bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc không hợp lệ.` : ""
+              }`
+            : "Không tạo được suất chiếu nào do các khung giờ bị trùng hoặc không hợp lệ.",
+      });
+      setConflictShowtimes(
+        skippedSlots.map((item) => ({
+          ...(item.conflict || {}),
+          attempted_start_time: item.slot.toISOString(),
+          message: item.message,
+        })),
+      );
+
+      await fetchShowtimes();
+    } finally {
+      setAutoScheduling(false);
+    }
+  };
+
   const openDeleteModal = (showtime) => {
+    if (!canModifyShowtime(showtime)) {
+      setFeedback({
+        type: "error",
+        message: "Chỉ được hủy suất chiếu chưa bắt đầu.",
+      });
+      return;
+    }
+
     setDeleteTarget(showtime);
     setDeleteModalOpen(true);
   };
@@ -396,7 +569,7 @@ const ShowtimesPage = () => {
       await axiosClient.delete(`/showtimes/${showtimeId}`);
       setFeedback({
         type: "success",
-        message: "Đã xóa suất chiếu thành công.",
+        message: "Đã hủy suất chiếu thành công.",
       });
       closeDeleteModal();
       await fetchShowtimes();
@@ -443,6 +616,48 @@ const ShowtimesPage = () => {
             onChange={(event) => setSearchQuery(event.target.value)}
           />
         </div>
+        <select
+          className="form-input showtime-filter-select"
+          value={movieFilter}
+          onChange={(event) => setMovieFilter(event.target.value)}
+        >
+          <option value="">Tất cả phim</option>
+          {movies.map((movie) => (
+            <option key={movie._id} value={movie._id}>
+              {movie.title}
+            </option>
+          ))}
+        </select>
+        <select
+          className="form-input showtime-filter-select"
+          value={roomFilter}
+          onChange={(event) => setRoomFilter(event.target.value)}
+        >
+          <option value="">Tất cả phòng</option>
+          {rooms.map((room) => (
+            <option key={room._id} value={room._id}>
+              {getRoomLabel(room)}
+            </option>
+          ))}
+        </select>
+        <input
+          className="form-input showtime-filter-date"
+          type="date"
+          value={dateFilter}
+          onChange={(event) => setDateFilter(event.target.value)}
+        />
+        <select
+          className="form-input showtime-filter-select"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+        >
+          <option value="">Tất cả trạng thái</option>
+          {Object.entries(statusLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {feedback.message ? (
@@ -457,6 +672,38 @@ const ShowtimesPage = () => {
             <div>{feedback.message}</div>
           </div>
         </div>
+      ) : null}
+
+      {conflictShowtimes.length > 0 ? (
+        <section className="showtime-conflict-panel">
+          <div className="showtime-conflict-header">
+            <strong>Suất chiếu bị trùng lịch</strong>
+            <span>{conflictShowtimes.length} khung giờ cần kiểm tra</span>
+          </div>
+          <div className="showtime-conflict-list">
+            {conflictShowtimes.map((item, index) => (
+              <div
+                className="showtime-conflict-item"
+                key={`${item.id || item.attempted_start_time || index}-${index}`}
+              >
+                <div>
+                  <span className="showtime-conflict-label">Khung giờ thử tạo</span>
+                  <strong>{formatDateTime(item.attempted_start_time)}</strong>
+                </div>
+                <div>
+                  <span className="showtime-conflict-label">Suất đang chiếm lịch</span>
+                  <strong>{item.movieTitle || "Không xác định phim"}</strong>
+                  <small>
+                    {item.roomName || selectedRoom?.name || "-"} · {formatDateTime(item.start_time)} - {item.endTime || formatDateTime(item.end_time)}
+                  </small>
+                </div>
+                <div className="showtime-conflict-message">
+                  {item.message || "Khung giờ này đã trùng với suất chiếu khác."}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       ) : null}
 
       {isFormOpen ? (
@@ -506,6 +753,8 @@ const ShowtimesPage = () => {
                 </select>
                 {formErrors.movie_id ? (
                   <span className="form-error">{formErrors.movie_id}</span>
+                ) : selectedMovie ? (
+                  <span className="form-hint">Thời lượng: {formatDuration(selectedMovie.duration)}</span>
                 ) : null}
               </label>
 
@@ -547,37 +796,48 @@ const ShowtimesPage = () => {
 
               <label className="form-group">
                 <span className="form-label">
-                  {text.startTime} <span className="required">*</span>
+                  {text.startDate} <span className="required">*</span>
                 </span>
                 <input
-                  className={`form-input ${formErrors.start_time ? "error" : ""}`}
-                  type="datetime-local"
-                  value={formData.start_time}
+                  className={`form-input ${formErrors.start_date ? "error" : ""}`}
+                  type="date"
+                  value={formData.start_date}
                   onChange={(event) =>
-                    updateField("start_time", event.target.value)
+                    updateField("start_date", event.target.value)
                   }
                   required
                 />
-                {formErrors.start_time ? (
-                  <span className="form-error">{formErrors.start_time}</span>
+                {formErrors.start_date ? (
+                  <span className="form-error">{formErrors.start_date}</span>
                 ) : null}
               </label>
 
               <label className="form-group">
-                <span className="form-label">{text.endTime}</span>
-                <input
-                  className={`form-input ${formErrors.end_time ? "error" : ""}`}
-                  type="datetime-local"
-                  value={formData.end_time}
-                  onChange={(event) =>
-                    updateField("end_time", event.target.value)
-                  }
-                />
-                {formErrors.end_time ? (
-                  <span className="form-error">{formErrors.end_time}</span>
-                ) : (
-                  <span className="form-hint">{text.endTimeHint}</span>
-                )}
+                <span className="form-label">
+                  {text.showTime} <span className="required">*</span>
+                </span>
+                <div className="showtime-time-row">
+                  <input
+                    className={`form-input ${formErrors.show_time ? "error" : ""}`}
+                    type="time"
+                    value={formData.show_time}
+                    onChange={(event) =>
+                      updateField("show_time", event.target.value)
+                    }
+                    required
+                  />
+                  <button
+                    className="btn btn-secondary showtime-auto-btn"
+                    disabled={autoScheduling || submitting || isEditing}
+                    type="button"
+                    onClick={handleAutoSchedule}
+                  >
+                    {autoScheduling ? text.autoScheduling : text.autoSchedule}
+                  </button>
+                </div>
+                {formErrors.show_time ? (
+                  <span className="form-error">{formErrors.show_time}</span>
+                ) : null}
               </label>
 
               <label className="form-group">
@@ -611,7 +871,7 @@ const ShowtimesPage = () => {
                 </span>
                 <span>
                   <HiOutlineClock />
-                  {formatDateTime(formData.start_time)}
+                  {formatDateTime(buildStartDateTime(formData))}
                 </span>
                 <span>
                   <HiOutlineCash />
@@ -652,12 +912,11 @@ const ShowtimesPage = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="showtime-delete-icon">🗑️</div>
-            <h3>Xác nhận xóa suất chiếu</h3>
+            <h3>Xác nhận hủy suất chiếu</h3>
             <p>
-              Bạn có chắc chắn muốn xóa suất chiếu này?
+              Bạn có chắc chắn muốn hủy suất chiếu này?
               <br />
-              Hành động này sẽ ẩn suất chiếu khỏi danh sách và không thể hoàn
-              tác.
+              Suất chiếu sẽ chuyển sang trạng thái đã hủy và không bị xóa cứng.
             </p>
             <div className="showtime-delete-meta">
               <strong>{deleteTarget?.movieTitle || "Suất chiếu"}</strong>
@@ -677,8 +936,8 @@ const ShowtimesPage = () => {
                 onClick={handleDeleteShowtime}
               >
                 {deletingShowtimeId === getShowtimeId(deleteTarget)
-                  ? "Đang xóa..."
-                  : "Xác nhận xóa"}
+                  ? "Đang hủy..."
+                  : "Xác nhận hủy"}
               </button>
             </div>
           </div>
@@ -703,6 +962,7 @@ const ShowtimesPage = () => {
                   <th>{text.tableCinema}</th>
                   <th>{text.tableStart}</th>
                   <th>{text.tableEnd}</th>
+                  <th>{text.tableStatus}</th>
                   <th style={{ width: "110px", textAlign: "center" }}>
                     {text.tableActions}
                   </th>
@@ -717,6 +977,11 @@ const ShowtimesPage = () => {
                     <td>{showtime.startTime || "-"}</td>
                     <td>{showtime.endTime || "-"}</td>
                     <td>
+                      <span className={`showtime-status-badge ${showtime.status || "scheduled"}`}>
+                        {statusLabels[showtime.status] || showtime.status || "-"}
+                      </span>
+                    </td>
+                    <td>
                       <div
                         className="table-actions"
                         style={{ justifyContent: "center" }}
@@ -726,6 +991,7 @@ const ShowtimesPage = () => {
                           className="btn btn-icon btn-ghost"
                           style={{ color: "var(--color-info)" }}
                           onClick={() => openEditForm(showtime)}
+                          disabled={!canModifyShowtime(showtime)}
                           title={text.edit}
                           id={`btn-edit-showtime-${getShowtimeId(showtime)}`}
                         >
@@ -737,7 +1003,8 @@ const ShowtimesPage = () => {
                           style={{ color: "var(--color-danger)" }}
                           onClick={() => openDeleteModal(showtime)}
                           disabled={
-                            deletingShowtimeId === getShowtimeId(showtime)
+                            deletingShowtimeId === getShowtimeId(showtime) ||
+                            !canModifyShowtime(showtime)
                           }
                           title={text.deleteShowtime}
                           id={`btn-delete-showtime-${getShowtimeId(showtime)}`}

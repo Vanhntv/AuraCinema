@@ -10,7 +10,16 @@ const auditLogSchema = new mongoose.Schema(
     target_user_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
+    },
+    target_type: {
+      type: String,
+      default: "User",
+      trim: true,
+    },
+    target_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
     },
     action: {
       type: String,
