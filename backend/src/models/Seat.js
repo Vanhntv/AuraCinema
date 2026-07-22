@@ -21,6 +21,11 @@ const seatSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    seat_code: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     status: {
       type: Boolean,
       default: true,

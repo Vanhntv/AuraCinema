@@ -100,6 +100,14 @@ const hasShowtimeConflict = async ({
   return Boolean(conflict);
 };
 
+const assertRoomCanCreateShowtime = (room) => {
+  if (room.status && room.status !== "active") {
+    const error = new Error("Chi phong dang hoat dong moi duoc tao suat chieu");
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
 export const getAllShowtimes = async (req, res) => {
   try {
     const { q, movie_id, room_id, cinema_id, date } = req.query;
@@ -183,7 +191,7 @@ export const getAllShowtimes = async (req, res) => {
       data: showtimes.map(mapShowtime),
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -224,6 +232,8 @@ export const createShowtime = async (req, res) => {
         message: "Khong tim thay room",
       });
     }
+
+    assertRoomCanCreateShowtime(room);
 
     const startDate = new Date(start_time);
 
@@ -307,7 +317,7 @@ export const createShowtime = async (req, res) => {
       showtime_seats_created: generatedShowtimeSeats.upsertedCount,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -377,6 +387,8 @@ export const updateShowtime = async (req, res) => {
           message: "Khong tim thay room",
         });
       }
+
+      assertRoomCanCreateShowtime(room);
 
       nextRoomId = room._id;
     }
