@@ -48,7 +48,7 @@ function Header() {
               <button
                 onClick={() => navigate("/tai-khoan")}
                 className="h-[54px] min-w-32 rounded-full border border-white/10 bg-white/[0.04] px-7 font-bold text-white transition hover:border-[#ff6070] hover:text-[#ff6070]"
-                title={user?.full_name || user?.email || "Tai khoan"}
+                title={user?.full_name || user?.email || "Tài khoản"}
                 type="button"
               >
                 Tài khoản

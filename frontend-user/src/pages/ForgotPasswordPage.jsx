@@ -25,11 +25,11 @@ function ForgotPasswordPage() {
 
   const validatePassword = () => {
     if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
-      return "Mat khau phai co it nhat 8 ky tu, gom chu hoa va so.";
+      return "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
     }
 
     if (formData.password !== formData.confirm_password) {
-      return "Mat khau xac nhan khong khop.";
+      return "Mật khẩu xác nhận không khớp.";
     }
 
     return "";
@@ -46,7 +46,7 @@ function ForgotPasswordPage() {
       setMessage(response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message);
       setStep("reset");
     } catch (err) {
-      setError(err.response?.data?.message || "Khong the gui OTP. Vui long thu lai.");
+      setError(err.response?.data?.message || "Không thể gửi OTP. Vui lòng thử lại.");
     } finally {
       setSubmitting(false);
     }
@@ -69,10 +69,10 @@ function ForgotPasswordPage() {
       await resetPassword(formData);
       navigate("/login", {
         replace: true,
-        state: { message: "Dat lai mat khau thanh cong. Vui long dang nhap." },
+        state: { message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập." },
       });
     } catch (err) {
-      setError(err.response?.data?.message || "Khong the dat lai mat khau. Vui long thu lai.");
+      setError(err.response?.data?.message || "Không thể đặt lại mật khẩu. Vui lòng thử lại.");
     } finally {
       setSubmitting(false);
     }
@@ -83,8 +83,8 @@ function ForgotPasswordPage() {
       <section className="auth-panel" aria-labelledby="forgot-password-title">
         <div className="auth-brand">
           <span>AuraCinema</span>
-          <h1 id="forgot-password-title">Quen mat khau</h1>
-          <p>Nhap email de nhan OTP va dat lai mat khau moi.</p>
+          <h1 id="forgot-password-title">Quên mật khẩu</h1>
+          <p>Nhập email để nhận OTP và đặt lại mật khẩu mới.</p>
         </div>
 
         {step === "request" ? (
@@ -106,7 +106,7 @@ function ForgotPasswordPage() {
             </label>
 
             <button className="auth-submit" disabled={submitting} type="submit">
-              {submitting ? "Dang gui OTP..." : "Gui OTP"}
+              {submitting ? "Đang gửi OTP..." : "Gửi OTP"}
             </button>
           </form>
         ) : (
@@ -133,7 +133,7 @@ function ForgotPasswordPage() {
                 inputMode="numeric"
                 name="otp"
                 onChange={handleChange}
-                placeholder="Nhap OTP"
+                placeholder="Nhập OTP"
                 required
                 type="text"
                 value={formData.otp}
@@ -141,13 +141,13 @@ function ForgotPasswordPage() {
             </label>
 
             <label>
-              Mat khau moi
+              Mật khẩu mới
               <input
                 autoComplete="new-password"
                 minLength={8}
                 name="password"
                 onChange={handleChange}
-                placeholder="Toi thieu 8 ky tu, co chu hoa va so"
+                placeholder="Tối thiểu 8 ký tự, có chữ hoa và số"
                 required
                 type="password"
                 value={formData.password}
@@ -155,13 +155,13 @@ function ForgotPasswordPage() {
             </label>
 
             <label>
-              Xac nhan mat khau moi
+              Xác nhận mật khẩu mới
               <input
                 autoComplete="new-password"
                 minLength={8}
                 name="confirm_password"
                 onChange={handleChange}
-                placeholder="Nhap lai mat khau moi"
+                placeholder="Nhập lại mật khẩu mới"
                 required
                 type="password"
                 value={formData.confirm_password}
@@ -169,13 +169,13 @@ function ForgotPasswordPage() {
             </label>
 
             <button className="auth-submit" disabled={submitting} type="submit">
-              {submitting ? "Dang dat lai..." : "Dat lai mat khau"}
+              {submitting ? "Đang đặt lại..." : "Đặt lại mật khẩu"}
             </button>
           </form>
         )}
 
         <p className="auth-switch">
-          Da nho mat khau? <Link to="/login">Dang nhap</Link>
+          Đã nhớ mật khẩu? <Link to="/login">Đăng nhập</Link>
         </p>
       </section>
     </main>
