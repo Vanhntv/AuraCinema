@@ -11,6 +11,7 @@ const MAX_SEATS_PER_ROOM = 400;
 const MAX_ROOM_ROWS = 26;
 
 const normalizeName = (value) => String(value || "").trim();
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const parsePositiveInteger = (value, fieldName, { required = false } = {}) => {
   if (value === undefined || value === null || value === "") {
@@ -128,7 +129,10 @@ const getRoomSeats = async (roomId) =>
 const ensureRoomNameIsUnique = async ({ cinemaId, name, excludeId = null }) => {
   const filter = {
     cinema_id: cinemaId,
-    name,
+    name: {
+      $regex: `^${escapeRegex(name)}$`,
+      $options: "i",
+    },
     deleted_at: null,
   };
 

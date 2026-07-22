@@ -41,6 +41,16 @@ const PAGE_SIZE = 10;
 
 const getCinemaName = (room) => room.cinema_id?.name || "Chưa chọn rạp";
 const getSeatCode = (seat) => seat.seat_code || `${seat.seat_row}${seat.seat_number}`;
+const getRoomCinemaId = (room) => {
+  if (!room?.cinema_id) return "";
+  return typeof room.cinema_id === "object" ? room.cinema_id._id || "" : String(room.cinema_id);
+};
+const normalizeRoomName = (value = "") =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
 
 function SeatMap({ seats = [] }) {
   const groupedSeats = useMemo(() => {
@@ -198,6 +208,20 @@ function RoomsPage() {
 
     if (!formData.cinema_id) errors.cinema_id = "Vui lòng chọn rạp.";
     if (!formData.name.trim()) errors.name = "Vui lòng nhập tên phòng.";
+    if (!errors.name && formData.cinema_id) {
+      const duplicateRoom = rooms.find((room) => {
+        const isSameRoom = editingRoom && room._id === editingRoom._id;
+        return (
+          !isSameRoom &&
+          getRoomCinemaId(room) === formData.cinema_id &&
+          normalizeRoomName(room.name) === normalizeRoomName(formData.name)
+        );
+      });
+
+      if (duplicateRoom) {
+        errors.name = "Tên phòng đã tồn tại trong rạp này.";
+      }
+    }
     if (!Number.isInteger(rowCount) || rowCount <= 0) {
       errors.row_count = "Số hàng phải là số nguyên dương.";
     }
