@@ -531,11 +531,7 @@ function RoomsPage() {
         onConfirm={handleConfirmDelete}
       />
 
-      <div className="toast-container">
-        {toasts.map((toast) => (
-          <Toast key={toast.id} {...toast} onClose={() => removeToast(toast.id)} />
-        ))}
-      </div>
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }
