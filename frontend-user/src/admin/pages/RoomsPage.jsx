@@ -72,6 +72,15 @@ const getCouplePairClass = ({ isCouple, previousCoupleCount, hasNextCouple }) =>
   if (hasNextCouple) return "couple-connected-right";
   return "";
 };
+const parseSeatCode = (seatCode = "") => {
+  const match = String(seatCode).match(/^([A-Z])(\d+)$/);
+  if (!match) return null;
+
+  return {
+    rowIndex: match[1].charCodeAt(0) - 65,
+    columnIndex: Number(match[2]) - 1,
+  };
+};
 const buildSeatCode = (rowIndex, columnIndex) =>
   `${String.fromCharCode(65 + rowIndex)}${columnIndex + 1}`;
 const buildDefaultSeatLayout = ({ rowCount, columnCount, seatTypeId }) => {
@@ -192,6 +201,7 @@ function SeatLayoutEditor({
   seatTypes,
   selectedSeatTypeId,
   onSeatClick,
+  onRowClick,
 }) {
   const rows = Number(rowCount);
   const columns = Number(columnCount);
@@ -213,7 +223,14 @@ function SeatLayoutEditor({
 
           return (
             <div className="room-seat-row" key={rowLabel}>
-              <span className="room-seat-row-label">{rowLabel}</span>
+              <button
+                className="room-seat-row-label room-seat-row-action"
+                title={`Áp dụng loại ghế đang chọn cho hàng ${rowLabel}`}
+                type="button"
+                onClick={() => onRowClick(rowIndex)}
+              >
+                {rowLabel}
+              </button>
               <div className="room-seat-list">
                 {Array.from({ length: columns }).map((__, columnIndex) => {
                   const seatCode = buildSeatCode(rowIndex, columnIndex);
@@ -280,6 +297,8 @@ function RoomsPage() {
   const [seatTypes, setSeatTypes] = useState([]);
   const [selectedSeatTypeId, setSelectedSeatTypeId] = useState("");
   const [seatLayout, setSeatLayout] = useState({});
+  const [quickStartSeat, setQuickStartSeat] = useState("");
+  const [quickEndSeat, setQuickEndSeat] = useState("");
 
   const addToast = useCallback((type, message) => {
     setToasts((current) => [...current, { id: Date.now() + Math.random(), type, message }]);
@@ -451,6 +470,7 @@ function RoomsPage() {
     const errors = {};
     const rowCount = Number(formData.row_count);
     const columnCount = Number(formData.column_count);
+    const seatTypeMap = new Map(seatTypes.map((seatType) => [seatType._id, seatType]));
 
     const resolvedCinemaId = formData.cinema_id || defaultCinemaId;
     if (!resolvedCinemaId) errors.cinema_id = "Hệ thống chưa có rạp mặc định để gán phòng.";
@@ -483,6 +503,32 @@ function RoomsPage() {
     }
     if (!seatTypes.length || !defaultSeatTypeId) {
       errors.seat_layout = "Chưa có loại ghế để tạo sơ đồ.";
+    }
+    if (!errors.seat_layout) {
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+        let currentCoupleRun = [];
+
+        for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+          const seatCode = buildSeatCode(rowIndex, columnIndex);
+          const seatType = seatTypeMap.get(seatLayout[seatCode]);
+
+          if (getSeatTypeTone(seatType) === "couple") {
+            currentCoupleRun.push(seatCode);
+          } else {
+            if (currentCoupleRun.length % 2 !== 0) {
+              errors.seat_layout = `Ghế Couple ${currentCoupleRun.at(-1)} đang bị lẻ, cần chọn đủ 2 ghế liền nhau.`;
+              break;
+            }
+            currentCoupleRun = [];
+          }
+        }
+
+        if (!errors.seat_layout && currentCoupleRun.length % 2 !== 0) {
+          errors.seat_layout = `Ghế Couple ${currentCoupleRun.at(-1)} đang bị lẻ, cần chọn đủ 2 ghế liền nhau.`;
+        }
+
+        if (errors.seat_layout) break;
+      }
     }
 
     setFormErrors(errors);
@@ -584,7 +630,135 @@ function RoomsPage() {
 
   const updateSeatTypeForSeat = (seatCode) => {
     if (!selectedSeatTypeId) return;
-    setSeatLayout((current) => ({ ...current, [seatCode]: selectedSeatTypeId }));
+    const selectedSeatType = seatTypes.find((seatType) => seatType._id === selectedSeatTypeId);
+
+    if (getSeatTypeTone(selectedSeatType) !== "couple") {
+      setSeatLayout((current) => ({ ...current, [seatCode]: selectedSeatTypeId }));
+      return;
+    }
+
+    const seatPosition = parseSeatCode(seatCode);
+    const columnCount = Number(formData.column_count);
+
+    if (!seatPosition || !Number.isInteger(columnCount)) return;
+
+    setSeatLayout((current) => {
+      const seatTypeMap = new Map(seatTypes.map((seatType) => [seatType._id, seatType]));
+
+      if (getSeatTypeTone(seatTypeMap.get(current[seatCode])) === "couple") {
+        return current;
+      }
+
+      const rightSeatCode =
+        seatPosition.columnIndex + 1 < columnCount
+          ? buildSeatCode(seatPosition.rowIndex, seatPosition.columnIndex + 1)
+          : null;
+      const leftSeatCode =
+        seatPosition.columnIndex > 0
+          ? buildSeatCode(seatPosition.rowIndex, seatPosition.columnIndex - 1)
+          : null;
+      const rightSeatIsCouple =
+        rightSeatCode && getSeatTypeTone(seatTypeMap.get(current[rightSeatCode])) === "couple";
+      const leftSeatIsCouple =
+        leftSeatCode && getSeatTypeTone(seatTypeMap.get(current[leftSeatCode])) === "couple";
+      const nextPairSeatCode =
+        rightSeatCode && !rightSeatIsCouple
+          ? rightSeatCode
+          : leftSeatCode && !leftSeatIsCouple
+            ? leftSeatCode
+            : null;
+
+      if (!nextPairSeatCode) {
+        addToast("error", "Ghế Couple cần có 2 ghế liền nhau.");
+        return current;
+      }
+
+      return {
+        ...current,
+        [seatCode]: selectedSeatTypeId,
+        [nextPairSeatCode]: selectedSeatTypeId,
+      };
+    });
+    setFormErrors((current) => ({ ...current, seat_layout: "" }));
+  };
+
+  const applySeatTypeToSeatCodes = (seatCodes) => {
+    if (!selectedSeatTypeId || !seatCodes.length) return;
+
+    const selectedSeatType = seatTypes.find((seatType) => seatType._id === selectedSeatTypeId);
+    const isCouple = getSeatTypeTone(selectedSeatType) === "couple";
+    const appliedSeatCodes = isCouple
+      ? seatCodes.slice(0, seatCodes.length - (seatCodes.length % 2))
+      : seatCodes;
+
+    if (!appliedSeatCodes.length) {
+      addToast("error", "Ghế Couple cần chọn tối thiểu 2 ghế liền nhau.");
+      return;
+    }
+
+    setSeatLayout((current) => {
+      const nextLayout = { ...current };
+      appliedSeatCodes.forEach((seatCode) => {
+        nextLayout[seatCode] = selectedSeatTypeId;
+      });
+      return nextLayout;
+    });
+    setFormErrors((current) => ({ ...current, seat_layout: "" }));
+
+    if (isCouple && appliedSeatCodes.length !== seatCodes.length) {
+      addToast("error", `Đã bỏ ${seatCodes.at(-1)} vì ghế Couple phải chọn theo cặp.`);
+    }
+  };
+
+  const applySeatTypeToRow = (rowIndex) => {
+    const columnCount = Number(formData.column_count);
+    if (!Number.isInteger(columnCount) || columnCount <= 0) return;
+
+    applySeatTypeToSeatCodes(
+      Array.from({ length: columnCount }).map((_, columnIndex) =>
+        buildSeatCode(rowIndex, columnIndex),
+      ),
+    );
+  };
+
+  const handleQuickApply = () => {
+    const startSeat = parseSeatCode(quickStartSeat.trim().toUpperCase());
+    const endSeat = parseSeatCode(quickEndSeat.trim().toUpperCase());
+    const rowCount = Number(formData.row_count);
+    const columnCount = Number(formData.column_count);
+
+    if (!startSeat || !endSeat) {
+      addToast("error", "Vui lòng nhập khoảng ghế hợp lệ, ví dụ D3 đến D8.");
+      return;
+    }
+
+    if (
+      startSeat.rowIndex < 0 ||
+      endSeat.rowIndex < 0 ||
+      startSeat.rowIndex >= rowCount ||
+      endSeat.rowIndex >= rowCount ||
+      startSeat.columnIndex < 0 ||
+      endSeat.columnIndex < 0 ||
+      startSeat.columnIndex >= columnCount ||
+      endSeat.columnIndex >= columnCount
+    ) {
+      addToast("error", "Khoảng chọn phải nằm trong sơ đồ ghế.");
+      return;
+    }
+
+    const fromRow = Math.min(startSeat.rowIndex, endSeat.rowIndex);
+    const toRow = Math.max(startSeat.rowIndex, endSeat.rowIndex);
+    const fromColumn = Math.min(startSeat.columnIndex, endSeat.columnIndex);
+    const toColumn = Math.max(startSeat.columnIndex, endSeat.columnIndex);
+    const seatCodes = [];
+
+    for (let rowIndex = fromRow; rowIndex <= toRow; rowIndex += 1) {
+      for (let columnIndex = fromColumn; columnIndex <= toColumn; columnIndex += 1) {
+        seatCodes.push(buildSeatCode(rowIndex, columnIndex));
+      }
+    }
+
+    applySeatTypeToSeatCodes(seatCodes);
   };
 
   const addPresetSeatType = async (preset) => {
@@ -744,6 +918,26 @@ function RoomsPage() {
                 ))}
               </div>
 
+              <div className="seat-quick-tools">
+                <div className="seat-quick-range">
+                  <input
+                    className="form-input seat-quick-input"
+                    placeholder="Góc 1, ví dụ D4"
+                    value={quickStartSeat}
+                    onChange={(event) => setQuickStartSeat(event.target.value.toUpperCase())}
+                  />
+                  <input
+                    className="form-input seat-quick-input"
+                    placeholder="Góc 2, ví dụ F7"
+                    value={quickEndSeat}
+                    onChange={(event) => setQuickEndSeat(event.target.value.toUpperCase())}
+                  />
+                  <button className="btn btn-secondary" type="button" onClick={handleQuickApply}>
+                    Áp dụng
+                  </button>
+                </div>
+              </div>
+
               {formErrors.seat_layout ? (
                 <span className="form-error">{formErrors.seat_layout}</span>
               ) : null}
@@ -755,6 +949,7 @@ function RoomsPage() {
                 seatTypes={seatTypes}
                 selectedSeatTypeId={selectedSeatTypeId}
                 onSeatClick={updateSeatTypeForSeat}
+                onRowClick={applySeatTypeToRow}
               />
             </div>
 
