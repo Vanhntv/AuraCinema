@@ -1,5 +1,6 @@
 import express from "express";
 import {
+  checkShowtimeConflict,
   getAllShowtimes,
   createShowtime,
   deleteShowtime,
@@ -13,6 +14,7 @@ import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js"
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
 
+router.get("/check-conflict", adminOnly, checkShowtimeConflict);
 router.get("/movie/:movie_id", getShowtimesByMovie);
 router.get("/room/:room_id", getShowtimesByRoom);
 router.put("/:id", adminOnly, updateShowtime);

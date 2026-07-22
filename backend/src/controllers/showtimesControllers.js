@@ -8,12 +8,7 @@ import {
 } from "../services/showtimeSeatService.js";
 
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
-const BUFFER_BY_ROOM_TYPE = {
-  "2D": 10,
-  "3D": 15,
-  IMAX: 20,
-  VIP: 20,
-};
+const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -54,8 +49,7 @@ const sendError = (res, error) => {
   });
 };
 
-const resolveBufferMinutes = (room) =>
-  BUFFER_BY_ROOM_TYPE[String(room?.room_type || "2D").toUpperCase()] ?? 10;
+const resolveBufferMinutes = () => SHOWTIME_CLEANUP_BUFFER_MINUTES;
 
 const resolveShowtimeStatus = (showtime, now = new Date()) => {
   if (showtime.status === "cancelled") return "cancelled";
@@ -226,6 +220,34 @@ const mapShowtime = (showtime) => ({
   updated_at: showtime.updated_at,
 });
 
+const getEffectiveShowtimeEndTime = (showtime) => {
+  const startTime = new Date(showtime.start_time);
+  const storedEndTime = new Date(showtime.end_time);
+  const movieDuration = Number(showtime.movie_id?.duration);
+
+  if (Number.isNaN(startTime.getTime())) {
+    return storedEndTime;
+  }
+
+  if (Number.isFinite(movieDuration) && movieDuration > 0) {
+    const durationEndTime = new Date(
+      startTime.getTime() + movieDuration * 60 * 1000,
+    );
+    const storedDurationMinutes =
+      (storedEndTime.getTime() - startTime.getTime()) / 60000;
+
+    if (
+      Number.isNaN(storedEndTime.getTime()) ||
+      storedEndTime <= startTime ||
+      storedDurationMinutes > movieDuration + 60
+    ) {
+      return durationEndTime;
+    }
+  }
+
+  return storedEndTime;
+};
+
 const hasShowtimeConflict = async ({
   room_id,
   startTime,
@@ -246,7 +268,7 @@ const hasShowtimeConflict = async ({
     filter._id = { $ne: excludeId };
   }
 
-  const conflict = await Showtime.findOne(filter)
+  const candidates = await Showtime.find(filter)
     .populate("movie_id", "title poster duration release_date status")
     .populate({
       path: "room_id",
@@ -255,9 +277,17 @@ const hasShowtimeConflict = async ({
         path: "cinema_id",
         select: "name city address",
       },
-    });
+    })
+    .sort({ start_time: 1 });
 
-  return conflict;
+  return candidates.find((showtime) => {
+    const effectiveEndTime = getEffectiveShowtimeEndTime(showtime);
+
+    return (
+      showtime.start_time < new Date(endTime.getTime() + bufferMs) &&
+      effectiveEndTime > new Date(startTime.getTime() - bufferMs)
+    );
+  });
 };
 
 const assertRoomCanCreateShowtime = (room) => {
@@ -446,8 +476,56 @@ export const createShowtime = async (req, res) => {
     if (conflictShowtime) {
       return res.status(409).json({
         success: false,
-        message: "Khung gio nay da trung voi showtime khac",
+        message:
+          "Khung gio nay bi trung hoac chua cach suat lien ke toi thieu 30 phut",
         conflict: mapShowtime(conflictShowtime),
+      });
+    }
+
+    const cancelledShowtime = await Showtime.findOne({
+      deleted_at: null,
+      status: "cancelled",
+      movie_id,
+      room_id,
+      start_time: startDate,
+    });
+
+    if (cancelledShowtime) {
+      const beforeSnapshot = toAuditSnapshot(cancelledShowtime);
+      cancelledShowtime.end_time = finalEndTime;
+      cancelledShowtime.base_price = parsePrice(base_price, "base_price");
+      cancelledShowtime.seat_prices = normalizeSeatPrices(seat_prices);
+      cancelledShowtime.status = "scheduled";
+      cancelledShowtime.cancelled_at = null;
+      await cancelledShowtime.save();
+
+      const generatedShowtimeSeats =
+        await generateShowtimeSeatsForShowtimeService(cancelledShowtime._id);
+
+      const restoredShowtime = await Showtime.findById(cancelledShowtime._id)
+        .populate("movie_id", "title poster duration release_date status")
+        .populate({
+          path: "room_id",
+          select: "name capacity cinema_id room_type status",
+          populate: {
+            path: "cinema_id",
+            select: "name city address",
+          },
+        });
+
+      await writeShowtimeAuditLog({
+        req,
+        action: "showtime.restore",
+        before: beforeSnapshot,
+        after: toAuditSnapshot(cancelledShowtime),
+        showtimeId: cancelledShowtime._id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Da khoi phuc suat chieu da huy",
+        data: mapShowtime(restoredShowtime),
+        showtime_seats_created: generatedShowtimeSeats.upsertedCount,
       });
     }
 
@@ -497,6 +575,98 @@ export const createShowtime = async (req, res) => {
   }
 };
 
+export const checkShowtimeConflict = async (req, res) => {
+  try {
+    const { movie_id, room_id, start_time, exclude_id } = req.query;
+
+    if (!movie_id || !room_id || !start_time) {
+      return res.status(400).json({
+        success: false,
+        message: "movie_id, room_id va start_time la bat buoc",
+      });
+    }
+
+    const movie = await Movie.findOne({
+      _id: movie_id,
+      deleted_at: null,
+    });
+
+    if (!movie) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay movie",
+      });
+    }
+
+    let excludedShowtime = null;
+    if (exclude_id) {
+      excludedShowtime = await Showtime.findOne({
+        _id: exclude_id,
+        deleted_at: null,
+      });
+    }
+
+    const room = await Room.findOne({
+      _id: room_id,
+      deleted_at: null,
+    }).populate("cinema_id", "name city address");
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay room",
+      });
+    }
+
+    assertRoomCanCreateShowtime(room);
+
+    const startDate = new Date(start_time);
+
+    if (Number.isNaN(startDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "start_time khong hop le",
+      });
+    }
+
+    assertShowtimeStartIsFuture(startDate);
+    if (
+      !excludedShowtime ||
+      String(excludedShowtime.movie_id) !== String(movie._id)
+    ) {
+      assertMovieCanBeScheduled(movie, startDate);
+    }
+
+    if (!movie.duration) {
+      return res.status(400).json({
+        success: false,
+        message: "Phim chua co duration de tinh end_time",
+      });
+    }
+
+    const endDate = new Date(startDate.getTime() + movie.duration * 60 * 1000);
+    const conflictShowtime = await hasShowtimeConflict({
+      room_id,
+      startTime: startDate,
+      endTime: endDate,
+      bufferMinutes: resolveBufferMinutes(room),
+      excludeId: exclude_id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      has_conflict: Boolean(conflictShowtime),
+      conflict: conflictShowtime ? mapShowtime(conflictShowtime) : null,
+      buffer_minutes: resolveBufferMinutes(room),
+      message: conflictShowtime
+        ? "Khung gio nay bi trung hoac chua cach suat lien ke toi thieu 30 phut"
+        : "",
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
 export const updateShowtime = async (req, res) => {
   try {
     const { id } = req.params;
@@ -523,8 +693,10 @@ export const updateShowtime = async (req, res) => {
     let nextEndTime = showtime.end_time;
     let movieForValidation = null;
     let roomForValidation = null;
+    const isChangingMovie =
+      movie_id !== undefined && String(movie_id) !== String(showtime.movie_id);
     const hasImportantChanges =
-      (movie_id !== undefined && String(movie_id) !== String(showtime.movie_id)) ||
+      isChangingMovie ||
       (room_id !== undefined && String(room_id) !== String(showtime.room_id)) ||
       start_time !== undefined ||
       end_time !== undefined;
@@ -627,7 +799,9 @@ export const updateShowtime = async (req, res) => {
         deleted_at: null,
       });
     }
-    assertMovieCanBeScheduled(movieForValidation, nextStartTime);
+    if (isChangingMovie) {
+      assertMovieCanBeScheduled(movieForValidation, nextStartTime);
+    }
 
     if (!roomForValidation) {
       roomForValidation = await Room.findOne({
@@ -647,8 +821,64 @@ export const updateShowtime = async (req, res) => {
     if (conflictShowtime) {
       return res.status(409).json({
         success: false,
-        message: "Khung gio nay da trung voi showtime khac",
+        message:
+          "Khung gio nay bi trung hoac chua cach suat lien ke toi thieu 30 phut",
         conflict: mapShowtime(conflictShowtime),
+      });
+    }
+
+    const cancelledShowtime = await Showtime.findOne({
+      _id: { $ne: showtime._id },
+      deleted_at: null,
+      status: "cancelled",
+      movie_id: nextMovieId,
+      room_id: nextRoomId,
+      start_time: nextStartTime,
+    });
+
+    if (cancelledShowtime) {
+      const restoreBeforeSnapshot = toAuditSnapshot(cancelledShowtime);
+      cancelledShowtime.end_time = nextEndTime;
+      cancelledShowtime.status = "scheduled";
+      cancelledShowtime.cancelled_at = null;
+
+      if (base_price !== undefined) {
+        cancelledShowtime.base_price = parsePrice(base_price, "base_price");
+      }
+
+      if (seat_prices !== undefined) {
+        cancelledShowtime.seat_prices = normalizeSeatPrices(seat_prices);
+      }
+
+      await cancelledShowtime.save();
+
+      if (base_price !== undefined || seat_prices !== undefined) {
+        await generateShowtimeSeatsForShowtimeService(cancelledShowtime._id);
+      }
+
+      const restoredShowtime = await Showtime.findById(cancelledShowtime._id)
+        .populate("movie_id", "title poster duration release_date status")
+        .populate({
+          path: "room_id",
+          select: "name capacity cinema_id room_type status",
+          populate: {
+            path: "cinema_id",
+            select: "name city address",
+          },
+        });
+
+      await writeShowtimeAuditLog({
+        req,
+        action: "showtime.restore",
+        before: restoreBeforeSnapshot,
+        after: toAuditSnapshot(cancelledShowtime),
+        showtimeId: cancelledShowtime._id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Da khoi phuc suat chieu da huy",
+        data: mapShowtime(restoredShowtime),
       });
     }
 

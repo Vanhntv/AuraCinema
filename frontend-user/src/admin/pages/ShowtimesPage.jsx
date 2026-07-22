@@ -94,6 +94,21 @@ const statusLabels = {
   cancelled: "Đã hủy",
 };
 
+const normalizeShowtimeErrorMessage = (message, fallback) => {
+  if (!message) return fallback;
+  if (message.includes("Chi phim dang cong chieu")) {
+    return "Chỉ phim đang công chiếu mới được tạo suất chiếu.";
+  }
+  if (
+    message.includes("chua cach suat lien ke toi thieu 30 phut") ||
+    message.includes("toi thieu 30 phut")
+  ) {
+    return "Khung giờ này bị trùng hoặc chưa cách suất liền kề tối thiểu 30 phút để dọn phòng.";
+  }
+
+  return message;
+};
+
 const normalizeText = (value = "") =>
   value
     .normalize("NFD")
@@ -132,6 +147,19 @@ const formatCurrency = (value) => {
   }).format(amount);
 };
 
+const formatDateOnly = (value) => {
+  if (!value) return "-";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+};
+
 const formatDuration = (duration) => {
   const minutes = Number(duration);
   if (!Number.isFinite(minutes) || minutes <= 0) return "Chưa có thời lượng";
@@ -150,7 +178,23 @@ const getRoomLabel = (room) => {
 };
 
 const getShowtimeId = (showtime) => showtime.id || showtime._id;
-const canModifyShowtime = (showtime) => showtime.status === "scheduled";
+const isFutureShowtime = (showtime) => {
+  const startTime = new Date(showtime?.start_time);
+  return !Number.isNaN(startTime.getTime()) && startTime > new Date();
+};
+const canEditShowtime = (showtime) =>
+  showtime.status === "scheduled" ||
+  (showtime.status === "cancelled" && isFutureShowtime(showtime));
+const canCancelShowtime = (showtime) => showtime.status === "scheduled";
+
+const getShowtimeGroupKey = (showtime) =>
+  [
+    showtime.movie_id || "movie",
+    showtime.cinema_id || showtime.cinemaName || "cinema",
+    showtime.room_id || showtime.roomName || "room",
+    toDateInputValue(showtime.start_time) || "date",
+    showtime.base_price ?? "base",
+  ].join("|");
 
 const toDateInputValue = (value) => {
   if (!value) return "";
@@ -186,6 +230,11 @@ const buildStartDateTime = ({ start_date, show_time }) => {
 const formatTimeInputValue = (date) =>
   `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 
+const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
+
+const addMinutes = (date, minutes) =>
+  new Date(date.getTime() + minutes * 60 * 1000);
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
@@ -207,6 +256,7 @@ const ShowtimesPage = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const [conflictShowtimes, setConflictShowtimes] = useState([]);
+  const [autoScheduleSlots, setAutoScheduleSlots] = useState([]);
 
   const isEditing = Boolean(editingShowtime);
 
@@ -302,9 +352,65 @@ const ShowtimesPage = () => {
     });
   }, [searchQuery, showtimes]);
 
+  const groupedShowtimes = useMemo(() => {
+    const groups = new Map();
+
+    filteredShowtimes.forEach((showtime) => {
+      const groupKey = getShowtimeGroupKey(showtime);
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          key: groupKey,
+          movieTitle: showtime.movieTitle || "-",
+          moviePoster: showtime.moviePoster || "",
+          cinemaName: showtime.cinemaName || "-",
+          roomName: showtime.roomName || "-",
+          startDate: showtime.start_time,
+          basePrice: showtime.base_price,
+          showtimes: [],
+        });
+      }
+
+      groups.get(groupKey).showtimes.push(showtime);
+    });
+
+    return Array.from(groups.values()).map((group) => {
+      const showtimesByStartTime = group.showtimes.reduce((timeMap, showtime) => {
+        const key = new Date(showtime.start_time).getTime();
+        const existingShowtime = timeMap.get(key);
+
+        if (
+          !existingShowtime ||
+          (existingShowtime.status === "cancelled" &&
+            showtime.status !== "cancelled")
+        ) {
+          timeMap.set(key, showtime);
+        }
+
+        return timeMap;
+      }, new Map());
+
+      return {
+        ...group,
+        showtimes: Array.from(showtimesByStartTime.values()).sort(
+        (first, second) =>
+          new Date(first.start_time).getTime() -
+          new Date(second.start_time).getTime(),
+        ),
+      };
+    });
+  }, [filteredShowtimes]);
+
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFormErrors((prev) => ({ ...prev, [field]: "" }));
+    if (["movie_id", "room_id", "start_date"].includes(field)) {
+      setAutoScheduleSlots([]);
+      setConflictShowtimes([]);
+    }
+    if (field === "show_time") {
+      setAutoScheduleSlots([]);
+    }
   };
 
   const resetForm = () => {
@@ -312,6 +418,7 @@ const ShowtimesPage = () => {
     setFormErrors({});
     setFeedback({ type: "", message: "" });
     setConflictShowtimes([]);
+    setAutoScheduleSlots([]);
   };
 
   const closeForm = () => {
@@ -331,15 +438,16 @@ const ShowtimesPage = () => {
     setIsFormOpen(true);
   };
 
-  const openEditForm = (showtime) => {
-    if (!canModifyShowtime(showtime)) {
+  const openEditForm = (showtime, relatedShowtimes = [showtime]) => {
+    if (!canEditShowtime(showtime)) {
       setFeedback({
         type: "error",
-        message: "Chỉ được chỉnh sửa suất chiếu chưa bắt đầu.",
+        message: "Chỉ được chỉnh sửa suất chiếu sắp chiếu hoặc suất đã hủy chưa bắt đầu.",
       });
       return;
     }
 
+    const currentStartTime = new Date(showtime.start_time);
     setEditingShowtime(showtime);
     setFormData({
       movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
@@ -356,6 +464,24 @@ const ShowtimesPage = () => {
     });
     setFormErrors({});
     setFeedback({ type: "", message: "" });
+    setConflictShowtimes([]);
+    const relatedStartTimes = Array.from(
+      relatedShowtimes.reduce((timeMap, item) => {
+        const date = new Date(item.start_time);
+        if (!Number.isNaN(date.getTime())) {
+          timeMap.set(date.getTime(), date);
+        }
+        return timeMap;
+      }, new Map()).values(),
+    ).sort((first, second) => first.getTime() - second.getTime());
+
+    setAutoScheduleSlots(
+      relatedStartTimes.length
+        ? relatedStartTimes
+        : Number.isNaN(currentStartTime.getTime())
+          ? []
+          : [currentStartTime],
+    );
     setIsFormOpen(true);
   };
 
@@ -413,29 +539,90 @@ const ShowtimesPage = () => {
       setFeedback({ type: "", message: "" });
       setConflictShowtimes([]);
 
-      const payload = buildShowtimePayload(buildStartDateTime(formData));
+      const startTimes =
+        !isEditing && autoScheduleSlots.length > 0
+          ? autoScheduleSlots
+          : [buildStartDateTime(formData)];
 
       if (isEditing) {
+        const payload = buildShowtimePayload(startTimes[0]);
+        if (editingShowtime.status === "cancelled") {
+          payload.status = "scheduled";
+        }
+
         await axiosClient.put(
           `/showtimes/${getShowtimeId(editingShowtime)}`,
           payload,
         );
       } else {
-        await axiosClient.post("/showtimes", payload);
+        const createdSlots = [];
+        const skippedSlots = [];
+
+        for (const startTime of startTimes) {
+          try {
+            await axiosClient.post("/showtimes", buildShowtimePayload(startTime));
+            createdSlots.push(startTime);
+          } catch (error) {
+            skippedSlots.push({
+              slot: startTime,
+              message: normalizeShowtimeErrorMessage(
+                error.response?.data?.message,
+                "Không thể tạo suất chiếu",
+              ),
+              conflict: error.response?.data?.conflict || null,
+            });
+          }
+        }
+
+        if (!createdSlots.length) {
+          setFeedback({
+            type: "error",
+            message: "Không tạo được suất chiếu nào do các khung giờ bị trùng hoặc không hợp lệ.",
+          });
+          setConflictShowtimes(
+            skippedSlots.map((item) => ({
+              ...(item.conflict || {}),
+              attempted_start_time: item.slot.toISOString(),
+              message: item.message,
+            })),
+          );
+          return;
+        }
+
+        const conflictItems = skippedSlots.map((item) => ({
+          ...(item.conflict || {}),
+          attempted_start_time: item.slot.toISOString(),
+          message: item.message,
+        }));
+
+        resetForm();
+        setConflictShowtimes(conflictItems);
+        setFeedback({
+          type: skippedSlots.length ? "error" : "success",
+          message: skippedSlots.length
+            ? `Đã tạo ${createdSlots.length} suất chiếu, bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc không hợp lệ.`
+            : autoScheduleSlots.length
+              ? `Đã tạo ${createdSlots.length} suất chiếu theo danh sách đã chọn.`
+              : text.successCreate,
+        });
       }
 
-      resetForm();
       setEditingShowtime(null);
-      setFeedback({
-        type: "success",
-        message: isEditing ? text.successUpdate : text.successCreate,
-      });
+      if (isEditing) {
+        resetForm();
+        setFeedback({
+          type: "success",
+          message: text.successUpdate,
+        });
+      }
       setIsFormOpen(false);
       await fetchShowtimes();
     } catch (error) {
       const message =
-        error.response?.data?.message ||
-        (isEditing ? text.updateFailed : text.createFailed);
+        normalizeShowtimeErrorMessage(
+          error.response?.data?.message,
+          isEditing ? text.updateFailed : text.createFailed,
+        );
       setFeedback({ type: "error", message });
       setConflictShowtimes(error.response?.data?.conflict ? [error.response.data.conflict] : []);
     } finally {
@@ -456,6 +643,9 @@ const ShowtimesPage = () => {
     if (!selectedMovie?.duration || Number(selectedMovie.duration) <= 0) {
       errors.movie_id = "Phim chưa có thời lượng để tự động xếp lịch.";
     }
+    if (!isEditing && selectedMovie?.status && selectedMovie.status !== "now_showing") {
+      errors.movie_id = "Chỉ phim đang công chiếu mới được tạo suất chiếu.";
+    }
 
     if (Object.keys(errors).length > 0) {
       setFormErrors((current) => ({ ...current, ...errors }));
@@ -464,7 +654,6 @@ const ShowtimesPage = () => {
     }
 
     const durationMinutes = Number(selectedMovie.duration);
-    const gapMinutes = 20;
     const openingTime = new Date(`${formData.start_date}T08:00`);
     const closingTime = new Date(`${formData.start_date}T00:00`);
     closingTime.setDate(closingTime.getDate() + 1);
@@ -474,7 +663,10 @@ const ShowtimesPage = () => {
     for (
       let slotStart = new Date(openingTime);
       slotStart.getTime() + durationMinutes * 60 * 1000 <= closingTime.getTime();
-      slotStart = new Date(slotStart.getTime() + (durationMinutes + gapMinutes) * 60 * 1000)
+      slotStart = addMinutes(
+        slotStart,
+        durationMinutes + SHOWTIME_CLEANUP_BUFFER_MINUTES,
+      )
     ) {
       if (slotStart > now) {
         slots.push(new Date(slotStart));
@@ -494,54 +686,121 @@ const ShowtimesPage = () => {
       setFeedback({ type: "", message: "" });
       setConflictShowtimes([]);
 
-      const createdSlots = [];
-      const skippedSlots = [];
+      const slotChecks = await Promise.all(
+        slots.map(async (slot) => {
+          try {
+            const response = await axiosClient.get("/showtimes/check-conflict", {
+              params: {
+                movie_id: formData.movie_id,
+                room_id: formData.room_id,
+                start_time: slot.toISOString(),
+                exclude_id: isEditing ? getShowtimeId(editingShowtime) : undefined,
+              },
+            });
 
-      for (const slot of slots) {
-        try {
-          await axiosClient.post("/showtimes", buildShowtimePayload(slot));
-          createdSlots.push(slot);
-        } catch (error) {
-          skippedSlots.push({
-            slot,
-            message: error.response?.data?.message || "Không thể tạo suất chiếu",
-            conflict: error.response?.data?.conflict || null,
-          });
-        }
+            return {
+              slot,
+              hasConflict: Boolean(response.data?.has_conflict),
+              issueType: response.data?.has_conflict ? "conflict" : "",
+              conflict: response.data?.conflict || null,
+              message: response.data?.has_conflict
+                ? normalizeShowtimeErrorMessage(
+                    response.data?.message,
+                    "Khung giờ này bị trùng hoặc chưa cách suất liền kề tối thiểu 30 phút để dọn phòng.",
+                  )
+                : "",
+            };
+          } catch (error) {
+            return {
+              slot,
+              hasConflict: Boolean(error.response?.data?.conflict),
+              issueType: error.response?.data?.conflict ? "conflict" : "invalid",
+              conflict: error.response?.data?.conflict || null,
+              message: normalizeShowtimeErrorMessage(
+                error.response?.data?.message ||
+                  "",
+                "Khung giờ này không hợp lệ hoặc chưa đủ 30 phút dọn phòng.",
+              ),
+            };
+          }
+        }),
+      );
+      const availableSlots = slotChecks
+        .filter((item) => !item.hasConflict && item.issueType !== "invalid")
+        .map((item) => item.slot);
+      const skippedSlots = slotChecks.filter(
+        (item) => item.hasConflict || item.issueType === "invalid",
+      );
+
+      if (!availableSlots.length) {
+        setAutoScheduleSlots([]);
+        setFormData((current) => ({ ...current, show_time: "" }));
+        setConflictShowtimes(
+          skippedSlots.map((item) => ({
+            ...(item.conflict || {}),
+            attempted_start_time: item.slot.toISOString(),
+            issueType: item.issueType,
+            message: item.message,
+          })),
+        );
+        setFeedback({
+          type: "error",
+          message: "Tất cả khung giờ đề xuất đã trùng lịch hoặc không hợp lệ, không có khung giờ trống để hiển thị.",
+        });
+        return;
       }
 
-      if (createdSlots.length > 0) {
-        setFormData((current) => ({
-          ...current,
-          show_time: formatTimeInputValue(createdSlots[0]),
-        }));
-      }
-
-      setFeedback({
-        type: createdSlots.length > 0 ? "success" : "error",
-        message:
-          createdSlots.length > 0
-            ? `Đã tự động tạo ${createdSlots.length} suất chiếu. ${
-                skippedSlots.length ? `Bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc không hợp lệ.` : ""
-              }`
-            : "Không tạo được suất chiếu nào do các khung giờ bị trùng hoặc không hợp lệ.",
-      });
+      setAutoScheduleSlots(availableSlots);
+      setFormData((current) => ({
+        ...current,
+        show_time: formatTimeInputValue(availableSlots[0]),
+      }));
       setConflictShowtimes(
         skippedSlots.map((item) => ({
           ...(item.conflict || {}),
           attempted_start_time: item.slot.toISOString(),
+          issueType: item.issueType,
           message: item.message,
         })),
       );
-
-      await fetchShowtimes();
+      setFeedback({
+        type: skippedSlots.length ? "error" : "success",
+        message: skippedSlots.length
+          ? `Đã tìm thấy ${availableSlots.length} khung giờ trống, bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc chưa đủ 30 phút dọn phòng.`
+          : `Đã tạo danh sách ${availableSlots.length} khung giờ đề xuất. Admin có thể xóa khung không dùng rồi bấm Lưu suất chiếu để tạo lịch.`,
+      });
+    } catch (error) {
+      setFeedback({
+        type: "error",
+        message:
+          error.response?.data?.message ||
+          "Không thể kiểm tra lịch chiếu hiện có.",
+      });
     } finally {
       setAutoScheduling(false);
     }
   };
 
+  const removeAutoScheduleSlot = (slotToRemove) => {
+    setAutoScheduleSlots((currentSlots) => {
+      const nextSlots = currentSlots.filter(
+        (slot) => slot.getTime() !== slotToRemove.getTime(),
+      );
+
+      setFormData((current) => ({
+        ...current,
+        show_time: nextSlots[0]
+          ? formatTimeInputValue(nextSlots[0])
+          : "",
+      }));
+
+      return nextSlots;
+    });
+    setConflictShowtimes([]);
+  };
+
   const openDeleteModal = (showtime) => {
-    if (!canModifyShowtime(showtime)) {
+    if (!canCancelShowtime(showtime)) {
       setFeedback({
         type: "error",
         message: "Chỉ được hủy suất chiếu chưa bắt đầu.",
@@ -549,7 +808,32 @@ const ShowtimesPage = () => {
       return;
     }
 
-    setDeleteTarget(showtime);
+    setDeleteTarget({
+      mode: "single",
+      showtimes: [showtime],
+      title: showtime.movieTitle || "Suất chiếu",
+      subtitle: `${showtime.roomName || ""} · ${showtime.startTime || ""}`,
+    });
+    setDeleteModalOpen(true);
+  };
+
+  const openDeleteGroupModal = (group) => {
+    const deletableShowtimes = group.showtimes.filter(canCancelShowtime);
+
+    if (!deletableShowtimes.length) {
+      setFeedback({
+        type: "error",
+        message: "Nhóm này không còn suất chiếu nào có thể hủy.",
+      });
+      return;
+    }
+
+    setDeleteTarget({
+      mode: "group",
+      showtimes: deletableShowtimes,
+      title: group.movieTitle || "Suất chiếu",
+      subtitle: `${group.roomName || ""} · ${formatDateOnly(group.startDate)}`,
+    });
     setDeleteModalOpen(true);
   };
 
@@ -559,17 +843,28 @@ const ShowtimesPage = () => {
   };
 
   const handleDeleteShowtime = async () => {
-    if (!deleteTarget) return;
+    const targetShowtimes = deleteTarget?.showtimes || [];
+    if (!targetShowtimes.length) return;
 
-    const showtimeId = getShowtimeId(deleteTarget);
+    const deleteId =
+      deleteTarget.mode === "group"
+        ? `group-${targetShowtimes.map(getShowtimeId).join("-")}`
+        : getShowtimeId(targetShowtimes[0]);
 
     try {
-      setDeletingShowtimeId(showtimeId);
+      setDeletingShowtimeId(deleteId);
       setFeedback({ type: "", message: "" });
-      await axiosClient.delete(`/showtimes/${showtimeId}`);
+      await Promise.all(
+        targetShowtimes.map((showtime) =>
+          axiosClient.delete(`/showtimes/${getShowtimeId(showtime)}`),
+        ),
+      );
       setFeedback({
         type: "success",
-        message: "Đã hủy suất chiếu thành công.",
+        message:
+          deleteTarget.mode === "group"
+            ? `Đã hủy ${targetShowtimes.length} suất chiếu trong nhóm.`
+            : "Đã hủy suất chiếu thành công.",
       });
       closeDeleteModal();
       await fetchShowtimes();
@@ -582,6 +877,15 @@ const ShowtimesPage = () => {
       setDeletingShowtimeId(null);
     }
   };
+
+  const hasRealScheduleConflicts = conflictShowtimes.some(
+    (item) =>
+      item.issueType !== "invalid" &&
+      (item.id || item.movieTitle || item.start_time),
+  );
+  const conflictPanelTitle = hasRealScheduleConflicts
+    ? "Suất chiếu bị trùng lịch"
+    : "Khung giờ không hợp lệ";
 
   return (
     <div className="page-container">
@@ -677,31 +981,45 @@ const ShowtimesPage = () => {
       {conflictShowtimes.length > 0 ? (
         <section className="showtime-conflict-panel">
           <div className="showtime-conflict-header">
-            <strong>Suất chiếu bị trùng lịch</strong>
+            <strong>{conflictPanelTitle}</strong>
             <span>{conflictShowtimes.length} khung giờ cần kiểm tra</span>
           </div>
           <div className="showtime-conflict-list">
-            {conflictShowtimes.map((item, index) => (
-              <div
-                className="showtime-conflict-item"
-                key={`${item.id || item.attempted_start_time || index}-${index}`}
-              >
-                <div>
-                  <span className="showtime-conflict-label">Khung giờ thử tạo</span>
-                  <strong>{formatDateTime(item.attempted_start_time)}</strong>
+            {conflictShowtimes.map((item, index) => {
+              const isInvalidIssue =
+                item.issueType === "invalid" ||
+                (!item.id && !item.movieTitle && !item.start_time);
+
+              return (
+                <div
+                  className="showtime-conflict-item"
+                  key={`${item.id || item.attempted_start_time || index}-${index}`}
+                >
+                  <div>
+                    <span className="showtime-conflict-label">Khung giờ thử tạo</span>
+                    <strong>{formatDateTime(item.attempted_start_time)}</strong>
+                  </div>
+                  <div>
+                    <span className="showtime-conflict-label">
+                      {isInvalidIssue ? "Lý do không hợp lệ" : "Suất đang chiếm lịch"}
+                    </span>
+                    <strong>
+                      {isInvalidIssue
+                        ? item.message || "Khung giờ này không hợp lệ."
+                        : item.movieTitle || "Không xác định phim"}
+                    </strong>
+                    {!isInvalidIssue ? (
+                      <small>
+                        {item.roomName || selectedRoom?.name || "-"} · {formatDateTime(item.start_time)} - {item.endTime || formatDateTime(item.end_time)}
+                      </small>
+                    ) : null}
+                  </div>
+                  <div className="showtime-conflict-message">
+                    {item.message || "Khung giờ này đã trùng với suất chiếu khác."}
+                  </div>
                 </div>
-                <div>
-                  <span className="showtime-conflict-label">Suất đang chiếm lịch</span>
-                  <strong>{item.movieTitle || "Không xác định phim"}</strong>
-                  <small>
-                    {item.roomName || selectedRoom?.name || "-"} · {formatDateTime(item.start_time)} - {item.endTime || formatDateTime(item.end_time)}
-                  </small>
-                </div>
-                <div className="showtime-conflict-message">
-                  {item.message || "Khung giờ này đã trùng với suất chiếu khác."}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -828,7 +1146,7 @@ const ShowtimesPage = () => {
                   />
                   <button
                     className="btn btn-secondary showtime-auto-btn"
-                    disabled={autoScheduling || submitting || isEditing}
+                    disabled={autoScheduling || submitting}
                     type="button"
                     onClick={handleAutoSchedule}
                   >
@@ -838,6 +1156,80 @@ const ShowtimesPage = () => {
                 {formErrors.show_time ? (
                   <span className="form-error">{formErrors.show_time}</span>
                 ) : null}
+                <div className="showtime-auto-slots">
+                  <div className="showtime-auto-slots-header">
+                    <span>
+                      {autoScheduleSlots.length
+                        ? `${autoScheduleSlots.length} khung giờ đề xuất`
+                        : "Khung giờ đề xuất"}
+                    </span>
+                    {autoScheduleSlots.length > 0 ? (
+                      <button
+                        type="button"
+                        className="showtime-auto-clear"
+                        onClick={() => {
+                          setAutoScheduleSlots([]);
+                          setFormData((current) => ({
+                            ...current,
+                            show_time: "",
+                          }));
+                        }}
+                      >
+                        Xóa tất cả
+                      </button>
+                    ) : null}
+                  </div>
+                  {autoScheduleSlots.length > 0 ? (
+                    <div className="showtime-auto-slot-list">
+                      {autoScheduleSlots.map((slot) => (
+                        <span
+                          className={`showtime-auto-slot ${
+                            formData.show_time === formatTimeInputValue(slot)
+                              ? "selected"
+                              : ""
+                          }`}
+                          key={slot.toISOString()}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() =>
+                            setFormData((current) => ({
+                              ...current,
+                              show_time: formatTimeInputValue(slot),
+                            }))
+                          }
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              setFormData((current) => ({
+                                ...current,
+                                show_time: formatTimeInputValue(slot),
+                              }));
+                            }
+                          }}
+                          title={`Chọn khung ${formatTimeInputValue(slot)}`}
+                        >
+                          {formatTimeInputValue(slot)}
+                          <button
+                            type="button"
+                            className="showtime-auto-slot-remove"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeAutoScheduleSlot(slot);
+                            }}
+                            aria-label={`Xóa khung ${formatTimeInputValue(slot)}`}
+                            title={`Xóa khung ${formatTimeInputValue(slot)}`}
+                          >
+                            <HiOutlineX />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="showtime-auto-empty">
+                      Bấm Tự động xếp lịch để hệ thống đề xuất khung giờ trống, đã chừa tối thiểu 30 phút dọn phòng.
+                    </p>
+                  )}
+                </div>
               </label>
 
               <label className="form-group">
@@ -912,15 +1304,21 @@ const ShowtimesPage = () => {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="showtime-delete-icon">🗑️</div>
-            <h3>Xác nhận hủy suất chiếu</h3>
+            <h3>
+              {deleteTarget?.mode === "group"
+                ? "Xác nhận hủy nhóm suất chiếu"
+                : "Xác nhận hủy khung giờ chiếu"}
+            </h3>
             <p>
-              Bạn có chắc chắn muốn hủy suất chiếu này?
+              {deleteTarget?.mode === "group"
+                ? `Bạn có chắc chắn muốn hủy ${deleteTarget?.showtimes?.length || 0} khung giờ trong nhóm này?`
+                : "Bạn có chắc chắn muốn hủy khung giờ chiếu này?"}
               <br />
               Suất chiếu sẽ chuyển sang trạng thái đã hủy và không bị xóa cứng.
             </p>
             <div className="showtime-delete-meta">
-              <strong>{deleteTarget?.movieTitle || "Suất chiếu"}</strong>
-              <span>{deleteTarget?.roomName || ""}</span>
+              <strong>{deleteTarget?.title || "Suất chiếu"}</strong>
+              <span>{deleteTarget?.subtitle || ""}</span>
             </div>
             <div className="showtime-delete-actions">
               <button
@@ -935,7 +1333,7 @@ const ShowtimesPage = () => {
                 className="btn btn-danger"
                 onClick={handleDeleteShowtime}
               >
-                {deletingShowtimeId === getShowtimeId(deleteTarget)
+                {deletingShowtimeId
                   ? "Đang hủy..."
                   : "Xác nhận hủy"}
               </button>
@@ -950,50 +1348,88 @@ const ShowtimesPage = () => {
             <div className="spinner"></div>
             <p>{text.loading}</p>
           </div>
-        ) : filteredShowtimes.length === 0 ? (
+        ) : groupedShowtimes.length === 0 ? (
           <div className="empty-state">{text.noShowtimes}</div>
         ) : (
           <div className="table-container">
-            <table className="data-table">
+            <table className="data-table showtime-group-table">
               <thead>
                 <tr>
                   <th>{text.movie}</th>
-                  <th>{text.room}</th>
-                  <th>{text.tableCinema}</th>
-                  <th>{text.tableStart}</th>
-                  <th>{text.tableEnd}</th>
-                  <th>{text.tableStatus}</th>
+                  <th>Phòng chiếu</th>
+                  <th>Ngày chiếu</th>
+                  <th>Các khung giờ</th>
+                  <th>Giá vé</th>
                   <th style={{ width: "110px", textAlign: "center" }}>
                     {text.tableActions}
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {filteredShowtimes.map((showtime) => (
-                  <tr key={getShowtimeId(showtime)}>
-                    <td>{showtime.movieTitle || "-"}</td>
-                    <td>{showtime.roomName || "-"}</td>
-                    <td>{showtime.cinemaName || "-"}</td>
-                    <td>{showtime.startTime || "-"}</td>
-                    <td>{showtime.endTime || "-"}</td>
+                {groupedShowtimes.map((group) => (
+                  <tr key={group.key}>
                     <td>
-                      <span className={`showtime-status-badge ${showtime.status || "scheduled"}`}>
-                        {statusLabels[showtime.status] || showtime.status || "-"}
-                      </span>
+                      <div className="showtime-movie-cell">
+                        <div className="showtime-movie-poster">
+                          {group.moviePoster ? (
+                            <img src={group.moviePoster} alt={group.movieTitle} />
+                          ) : (
+                            <span>Poster</span>
+                          )}
+                        </div>
+                        <strong title={group.movieTitle}>
+                          {group.movieTitle}
+                        </strong>
+                      </div>
                     </td>
                     <td>
-                      <div
-                        className="table-actions"
-                        style={{ justifyContent: "center" }}
-                      >
+                      <div className="showtime-room-cell">
+                        <strong>{group.roomName}</strong>
+                      </div>
+                    </td>
+                    <td>{formatDateOnly(group.startDate)}</td>
+                    <td>
+                      <div className="showtime-slot-list">
+                        {group.showtimes.map((showtime) => (
+                          <button
+                            key={getShowtimeId(showtime)}
+                            type="button"
+                            className={`showtime-slot-chip ${showtime.status || "scheduled"}`}
+                            onClick={() => openDeleteModal(showtime)}
+                            disabled={!canCancelShowtime(showtime)}
+                            title={`Hủy suất ${showtime.startTime || "-"} - ${statusLabels[showtime.status] || showtime.status || "-"}`}
+                          >
+                            <span>{showtime.startTime || "-"}</span>
+                            <small>
+                              {statusLabels[showtime.status] ||
+                                showtime.status ||
+                                "-"}
+                            </small>
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <strong className="showtime-price-cell">
+                        {formatCurrency(group.basePrice)}
+                      </strong>
+                    </td>
+                    <td>
+                      <div className="showtime-row-actions">
                         <button
                           type="button"
                           className="btn btn-icon btn-ghost"
                           style={{ color: "var(--color-info)" }}
-                          onClick={() => openEditForm(showtime)}
-                          disabled={!canModifyShowtime(showtime)}
-                          title={text.edit}
-                          id={`btn-edit-showtime-${getShowtimeId(showtime)}`}
+                          onClick={() => {
+                            const editableShowtime =
+                              group.showtimes.find(canEditShowtime);
+                            if (editableShowtime) {
+                              openEditForm(editableShowtime, group.showtimes);
+                            }
+                          }}
+                          disabled={!group.showtimes.some(canEditShowtime)}
+                          title="Sửa suất chiếu có thể chỉnh sửa đầu tiên trong nhóm"
+                          id={`btn-edit-showtime-group-${group.key}`}
                         >
                           <HiOutlinePencil />
                         </button>
@@ -1001,19 +1437,15 @@ const ShowtimesPage = () => {
                           type="button"
                           className="btn btn-icon btn-ghost"
                           style={{ color: "var(--color-danger)" }}
-                          onClick={() => openDeleteModal(showtime)}
+                          onClick={() => openDeleteGroupModal(group)}
                           disabled={
-                            deletingShowtimeId === getShowtimeId(showtime) ||
-                            !canModifyShowtime(showtime)
+                            Boolean(deletingShowtimeId) ||
+                            !group.showtimes.some(canCancelShowtime)
                           }
-                          title={text.deleteShowtime}
-                          id={`btn-delete-showtime-${getShowtimeId(showtime)}`}
+                          title="Hủy tất cả khung giờ có thể hủy trong nhóm"
+                          id={`btn-delete-showtime-group-${group.key}`}
                         >
-                          {deletingShowtimeId === getShowtimeId(showtime) ? (
-                            text.deleting
-                          ) : (
-                            <HiOutlineTrash />
-                          )}
+                          <HiOutlineTrash />
                         </button>
                       </div>
                     </td>
