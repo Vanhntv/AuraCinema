@@ -278,6 +278,17 @@ const buildStandardSeatPrices = (basePrice) => {
 const addMinutes = (date, minutes) =>
   new Date(date.getTime() + minutes * 60 * 1000);
 
+const mergeSlotTimes = (slots = []) =>
+  Array.from(
+    slots.reduce((timeMap, slot) => {
+      const date = new Date(slot);
+      if (!Number.isNaN(date.getTime())) {
+        timeMap.set(date.getTime(), date);
+      }
+      return timeMap;
+    }, new Map()).values(),
+  ).sort((first, second) => first.getTime() - second.getTime());
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
@@ -294,6 +305,7 @@ const ShowtimesPage = () => {
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
   const [editingShowtime, setEditingShowtime] = useState(null);
+  const [editingGroupShowtimes, setEditingGroupShowtimes] = useState([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -478,9 +490,9 @@ const ShowtimesPage = () => {
       return {
         ...group,
         showtimes: Array.from(showtimesByStartTime.values()).sort(
-        (first, second) =>
-          new Date(first.start_time).getTime() -
-          new Date(second.start_time).getTime(),
+          (first, second) =>
+            new Date(first.start_time).getTime() -
+            new Date(second.start_time).getTime(),
         ),
       };
     });
@@ -492,11 +504,29 @@ const ShowtimesPage = () => {
     if (["base_price", "normal_price", "vip_price", "couple_price"].includes(field)) {
       setPriceMode("custom");
     }
-    if (["movie_id", "room_id", "start_date"].includes(field)) {
+    if (!isEditing && ["movie_id", "room_id", "start_date"].includes(field)) {
       setAutoScheduleSlots([]);
       setConflictShowtimes([]);
     }
-    if (field === "show_time") {
+    if (isEditing && field === "start_date") {
+      setAutoScheduleSlots((currentSlots) =>
+        mergeSlotTimes(currentSlots.map((slot) => {
+          const timeValue = formatTimeInputValue(slot);
+          const nextSlot = new Date(`${value}T${timeValue}`);
+          return Number.isNaN(nextSlot.getTime()) ? slot : nextSlot;
+        })),
+      );
+      setConflictShowtimes([]);
+    }
+    if (isEditing && field === "show_time" && formData.start_date && value) {
+      const nextSlot = new Date(`${formData.start_date}T${value}`);
+      if (!Number.isNaN(nextSlot.getTime())) {
+        setAutoScheduleSlots((currentSlots) =>
+          mergeSlotTimes([...currentSlots, nextSlot]),
+        );
+      }
+    }
+    if (field === "show_time" && !isEditing) {
       setAutoScheduleSlots([]);
     }
   };
@@ -508,11 +538,13 @@ const ShowtimesPage = () => {
     setConflictShowtimes([]);
     setAutoScheduleSlots([]);
     setPriceMode("auto");
+    setEditingGroupShowtimes([]);
   };
 
   const closeForm = () => {
     resetForm();
     setEditingShowtime(null);
+    setEditingGroupShowtimes([]);
     setIsFormOpen(false);
   };
 
@@ -524,6 +556,7 @@ const ShowtimesPage = () => {
 
     resetForm();
     setEditingShowtime(null);
+    setEditingGroupShowtimes([]);
     setIsFormOpen(true);
   };
 
@@ -538,6 +571,15 @@ const ShowtimesPage = () => {
 
     const currentStartTime = new Date(showtime.start_time);
     setEditingShowtime(showtime);
+    setEditingGroupShowtimes(
+      relatedShowtimes
+        .filter(canEditShowtime)
+        .sort(
+          (first, second) =>
+            new Date(first.start_time).getTime() -
+            new Date(second.start_time).getTime(),
+        ),
+    );
     setPriceMode("custom");
     setFormData({
       movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
@@ -616,6 +658,97 @@ const ShowtimesPage = () => {
     },
   });
 
+  const getFormSlotTimes = () => {
+    const manualStartTime = buildStartDateTime(formData);
+    const slots = autoScheduleSlots.length ? [...autoScheduleSlots] : [];
+
+    if (manualStartTime) {
+      slots.push(manualStartTime);
+    }
+
+    return mergeSlotTimes(slots);
+  };
+
+  const syncEditingShowtimeGroup = async (slotTimes) => {
+    const groupShowtimes = (
+      editingGroupShowtimes.length ? editingGroupShowtimes : [editingShowtime]
+    )
+      .filter(Boolean)
+      .filter(canEditShowtime)
+      .sort(
+        (first, second) =>
+          new Date(first.start_time).getTime() -
+          new Date(second.start_time).getTime(),
+      );
+
+    const updatedSlots = [];
+    const createdSlots = [];
+    const skippedSlots = [];
+    const updateCount = Math.min(groupShowtimes.length, slotTimes.length);
+
+    for (let index = 0; index < updateCount; index += 1) {
+      const targetShowtime = groupShowtimes[index];
+      const slotTime = slotTimes[index];
+      const payload = buildShowtimePayload(slotTime);
+
+      if (targetShowtime.status === "cancelled") {
+        payload.status = "scheduled";
+      }
+
+      try {
+        await axiosClient.put(
+          `/showtimes/${getShowtimeId(targetShowtime)}`,
+          payload,
+        );
+        updatedSlots.push(slotTime);
+      } catch (error) {
+        skippedSlots.push({
+          slot: slotTime,
+          message: normalizeShowtimeErrorMessage(
+            error.response?.data?.message,
+            text.updateFailed,
+          ),
+          conflict: error.response?.data?.conflict || null,
+        });
+      }
+    }
+
+    for (const slotTime of slotTimes.slice(groupShowtimes.length)) {
+      try {
+        await axiosClient.post("/showtimes", buildShowtimePayload(slotTime));
+        createdSlots.push(slotTime);
+      } catch (error) {
+        skippedSlots.push({
+          slot: slotTime,
+          message: normalizeShowtimeErrorMessage(
+            error.response?.data?.message,
+            text.createFailed,
+          ),
+          conflict: error.response?.data?.conflict || null,
+        });
+      }
+    }
+
+    const redundantShowtimes = groupShowtimes.slice(slotTimes.length);
+    for (const showtime of redundantShowtimes) {
+      if (!canCancelShowtime(showtime)) continue;
+      try {
+        await axiosClient.delete(`/showtimes/${getShowtimeId(showtime)}`);
+      } catch (error) {
+        skippedSlots.push({
+          slot: new Date(showtime.start_time),
+          message: normalizeShowtimeErrorMessage(
+            error.response?.data?.message,
+            "Không thể hủy khung giờ dư trong nhóm.",
+          ),
+          conflict: error.response?.data?.conflict || null,
+        });
+      }
+    }
+
+    return { updatedSlots, createdSlots, skippedSlots };
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -629,21 +762,44 @@ const ShowtimesPage = () => {
       setFeedback({ type: "", message: "" });
       setConflictShowtimes([]);
 
-      const startTimes =
-        !isEditing && autoScheduleSlots.length > 0
+      const startTimes = isEditing
+        ? getFormSlotTimes()
+        : autoScheduleSlots.length > 0
           ? autoScheduleSlots
           : [buildStartDateTime(formData)];
 
       if (isEditing) {
-        const payload = buildShowtimePayload(startTimes[0]);
-        if (editingShowtime.status === "cancelled") {
-          payload.status = "scheduled";
+        const { updatedSlots, createdSlots, skippedSlots } =
+          await syncEditingShowtimeGroup(startTimes);
+
+        if (!updatedSlots.length && !createdSlots.length) {
+          setFeedback({
+            type: "error",
+            message: "Không cập nhật được khung giờ nào trong nhóm suất chiếu.",
+          });
+          setConflictShowtimes(
+            skippedSlots.map((item) => ({
+              ...(item.conflict || {}),
+              attempted_start_time: item.slot.toISOString(),
+              message: item.message,
+            })),
+          );
+          return;
         }
 
-        await axiosClient.put(
-          `/showtimes/${getShowtimeId(editingShowtime)}`,
-          payload,
+        setConflictShowtimes(
+          skippedSlots.map((item) => ({
+            ...(item.conflict || {}),
+            attempted_start_time: item.slot.toISOString(),
+            message: item.message,
+          })),
         );
+        setFeedback({
+          type: skippedSlots.length ? "error" : "success",
+          message: skippedSlots.length
+            ? `Đã cập nhật ${updatedSlots.length + createdSlots.length} khung giờ, còn ${skippedSlots.length} khung giờ cần kiểm tra.`
+            : `Đã cập nhật ${updatedSlots.length + createdSlots.length} khung giờ trong nhóm suất chiếu.`,
+        });
       } else {
         const createdSlots = [];
         const skippedSlots = [];
@@ -699,11 +855,11 @@ const ShowtimesPage = () => {
 
       setEditingShowtime(null);
       if (isEditing) {
-        resetForm();
-        setFeedback({
-          type: "success",
-          message: text.successUpdate,
-        });
+        setFormData(emptyForm);
+        setFormErrors({});
+        setAutoScheduleSlots([]);
+        setPriceMode("auto");
+        setEditingGroupShowtimes([]);
       }
       setIsFormOpen(false);
       await fetchShowtimes();
@@ -775,6 +931,9 @@ const ShowtimesPage = () => {
       setAutoScheduling(true);
       setFeedback({ type: "", message: "" });
       setConflictShowtimes([]);
+      const editingGroupIds = new Set(
+        editingGroupShowtimes.map((showtime) => String(getShowtimeId(showtime))),
+      );
 
       const slotChecks = await Promise.all(
         slots.map(async (slot) => {
@@ -787,13 +946,18 @@ const ShowtimesPage = () => {
                 exclude_id: isEditing ? getShowtimeId(editingShowtime) : undefined,
               },
             });
+            const conflict = response.data?.conflict || null;
+            const isCurrentGroupConflict =
+              conflict && editingGroupIds.has(String(getShowtimeId(conflict)));
+            const hasConflict =
+              Boolean(response.data?.has_conflict) && !isCurrentGroupConflict;
 
             return {
               slot,
-              hasConflict: Boolean(response.data?.has_conflict),
-              issueType: response.data?.has_conflict ? "conflict" : "",
-              conflict: response.data?.conflict || null,
-              message: response.data?.has_conflict
+              hasConflict,
+              issueType: hasConflict ? "conflict" : "",
+              conflict: hasConflict ? conflict : null,
+              message: hasConflict
                 ? normalizeShowtimeErrorMessage(
                     response.data?.message,
                     "Khung giờ này bị trùng hoặc chưa cách suất liền kề tối thiểu 30 phút để dọn phòng.",
@@ -976,6 +1140,12 @@ const ShowtimesPage = () => {
   const conflictPanelTitle = hasRealScheduleConflicts
     ? "Suất chiếu bị trùng lịch"
     : "Khung giờ không hợp lệ";
+  const formSlotTimes = isEditing ? getFormSlotTimes() : autoScheduleSlots;
+  const submitButtonLabel = isEditing
+    ? formSlotTimes.length > 1
+      ? `Cập nhật ${formSlotTimes.length} khung giờ`
+      : text.updateShowtime
+    : text.saveShowtime;
 
   return (
     <div className="page-container">
@@ -1291,8 +1461,12 @@ const ShowtimesPage = () => {
                   <div className="showtime-auto-slots-header">
                     <span>
                       {autoScheduleSlots.length
-                        ? `${autoScheduleSlots.length} khung giờ đề xuất`
-                        : "Khung giờ đề xuất"}
+                        ? isEditing
+                          ? `${autoScheduleSlots.length} khung giờ sẽ cập nhật`
+                          : `${autoScheduleSlots.length} khung giờ đề xuất`
+                        : isEditing
+                          ? "Khung giờ sẽ cập nhật"
+                          : "Khung giờ đề xuất"}
                     </span>
                     {autoScheduleSlots.length > 0 ? (
                       <button
@@ -1357,7 +1531,9 @@ const ShowtimesPage = () => {
                     </div>
                   ) : (
                     <p className="showtime-auto-empty">
-                      Bấm Tự động xếp lịch để hệ thống đề xuất khung giờ trống, đã chừa tối thiểu 30 phút dọn phòng.
+                      {isEditing
+                        ? "Danh sách khung giờ trong nhóm sẽ hiển thị tại đây. Có thể bấm Tự động xếp lịch để đề xuất lại."
+                        : "Bấm Tự động xếp lịch để hệ thống đề xuất khung giờ trống, đã chừa tối thiểu 30 phút dọn phòng."}
                     </p>
                   )}
                 </div>
@@ -1396,7 +1572,9 @@ const ShowtimesPage = () => {
                 </span>
                 <span>
                   <HiOutlineClock />
-                  {formatDateTime(buildStartDateTime(formData))}
+                  {formSlotTimes.length
+                    ? formSlotTimes.map(formatTimeInputValue).join(", ")
+                    : formatDateTime(buildStartDateTime(formData))}
                 </span>
                 <span>
                   <HiOutlineCash />
@@ -1429,9 +1607,7 @@ const ShowtimesPage = () => {
               >
                 {submitting
                   ? text.saving
-                  : isEditing
-                    ? text.updateShowtime
-                    : text.saveShowtime}
+                  : submitButtonLabel}
               </button>
             </div>
           </form>
