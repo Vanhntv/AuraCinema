@@ -6,7 +6,7 @@ import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 
 const ROOM_STATUSES = ["active", "maintenance", "inactive"];
-const ROOM_TYPES = ["2D", "3D", "IMAX", "VIP"];
+const ROOM_TYPES = ["2D", "3D"];
 const MAX_SEATS_PER_ROOM = 400;
 const MAX_ROOM_ROWS = 26;
 

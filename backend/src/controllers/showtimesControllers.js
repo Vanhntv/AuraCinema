@@ -9,6 +9,11 @@ import {
 
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
+const VIP_SEAT_SURCHARGE = 20000;
+const STANDARD_TICKET_PRICES = {
+  "2D": { weekday: 50000, weekend: 55000 },
+  "3D": { weekday: 65000, weekend: 70000 },
+};
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -50,6 +55,65 @@ const sendError = (res, error) => {
 };
 
 const resolveBufferMinutes = () => SHOWTIME_CLEANUP_BUFFER_MINUTES;
+
+const isWeekendShowtime = (dateValue) => {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jakarta",
+    weekday: "short",
+  }).format(new Date(dateValue));
+
+  return weekday === "Sat" || weekday === "Sun";
+};
+
+const resolveStandardPricing = ({ room, startTime }) => {
+  const roomType = String(room?.room_type || "2D").toUpperCase();
+  const priceTable = STANDARD_TICKET_PRICES[roomType] || STANDARD_TICKET_PRICES["2D"];
+  const basePrice = isWeekendShowtime(startTime)
+    ? priceTable.weekend
+    : priceTable.weekday;
+
+  return {
+    base_price: basePrice,
+    seat_prices: {
+      normal: basePrice,
+      vip: basePrice + VIP_SEAT_SURCHARGE,
+      couple: basePrice * 2,
+    },
+  };
+};
+
+const buildStandardSeatPrices = (basePrice) => ({
+  normal: basePrice,
+  vip: basePrice + VIP_SEAT_SURCHARGE,
+  couple: basePrice * 2,
+});
+
+const resolveShowtimePricingSnapshot = ({ base_price, seat_prices, room, startTime }) => {
+  const standardPricing = resolveStandardPricing({ room, startTime });
+  const parsedBasePrice = parsePrice(base_price, "base_price");
+  const normalizedSeatPrices =
+    seat_prices === undefined ? undefined : normalizeSeatPrices(seat_prices);
+  const finalBasePrice = parsedBasePrice ?? standardPricing.base_price;
+  const derivedSeatPrices = buildStandardSeatPrices(finalBasePrice);
+
+  return {
+    base_price: finalBasePrice,
+    seat_prices: {
+      normal:
+        normalizedSeatPrices?.normal ??
+        derivedSeatPrices.normal ??
+        finalBasePrice,
+      vip:
+        normalizedSeatPrices?.vip ??
+        derivedSeatPrices.vip ??
+        finalBasePrice,
+      couple:
+        normalizedSeatPrices?.couple ??
+        derivedSeatPrices.couple ??
+        finalBasePrice,
+    },
+  };
+};
 
 const resolveShowtimeStatus = (showtime, now = new Date()) => {
   if (showtime.status === "cancelled") return "cancelled";
@@ -490,11 +554,18 @@ export const createShowtime = async (req, res) => {
       start_time: startDate,
     });
 
+    const pricingSnapshot = resolveShowtimePricingSnapshot({
+      base_price,
+      seat_prices,
+      room,
+      startTime: startDate,
+    });
+
     if (cancelledShowtime) {
       const beforeSnapshot = toAuditSnapshot(cancelledShowtime);
       cancelledShowtime.end_time = finalEndTime;
-      cancelledShowtime.base_price = parsePrice(base_price, "base_price");
-      cancelledShowtime.seat_prices = normalizeSeatPrices(seat_prices);
+      cancelledShowtime.base_price = pricingSnapshot.base_price;
+      cancelledShowtime.seat_prices = pricingSnapshot.seat_prices;
       cancelledShowtime.status = "scheduled";
       cancelledShowtime.cancelled_at = null;
       await cancelledShowtime.save();
@@ -534,8 +605,8 @@ export const createShowtime = async (req, res) => {
       room_id,
       start_time: startDate,
       end_time: finalEndTime,
-      base_price: parsePrice(base_price, "base_price"),
-      seat_prices: normalizeSeatPrices(seat_prices),
+      base_price: pricingSnapshot.base_price,
+      seat_prices: pricingSnapshot.seat_prices,
       status: "scheduled",
     });
 

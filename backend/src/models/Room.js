@@ -14,7 +14,7 @@ const roomSchema = new mongoose.Schema(
     },
     room_type: {
       type: String,
-      enum: ["2D", "3D", "IMAX", "VIP"],
+      enum: ["2D", "3D"],
       default: "2D",
       trim: true,
     },

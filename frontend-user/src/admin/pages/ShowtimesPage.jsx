@@ -13,6 +13,7 @@ import {
   HiOutlineX,
 } from "react-icons/hi";
 import axiosClient from "../../api/axiosClient";
+import ticketPriceData from "../../data/ticketPriceData.json";
 
 const emptyForm = {
   movie_id: "",
@@ -231,6 +232,48 @@ const formatTimeInputValue = (date) =>
   `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
+const VIP_SEAT_SURCHARGE = 20000;
+
+const parseTicketPrice = (value) => {
+  const price = Number(String(value || "").replace(/[^\d]/g, ""));
+  return Number.isFinite(price) ? price : null;
+};
+
+const isWeekendDate = (dateValue) => {
+  if (!dateValue) return false;
+  const date = new Date(`${dateValue}T00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  return date.getDay() === 0 || date.getDay() === 6;
+};
+
+const getStandardBasePrice = ({ roomType, startDate }) => {
+  const normalizedRoomType = String(roomType || "2D").toUpperCase();
+  const tableName = normalizedRoomType === "3D" ? "3D" : "2D";
+  const table = ticketPriceData.pricingTables.find(
+    (item) => item.name === tableName,
+  );
+  const adultRow = table?.rows.find((row) =>
+    normalizeText(row.label).includes("nguoi lon"),
+  );
+
+  if (!adultRow) return null;
+
+  return parseTicketPrice(isWeekendDate(startDate) ? adultRow.weekend : adultRow.weekday);
+};
+
+const buildStandardSeatPrices = (basePrice) => {
+  const numericBasePrice = Number(basePrice);
+  if (!Number.isFinite(numericBasePrice) || numericBasePrice <= 0) {
+    return null;
+  }
+
+  return {
+    base_price: numericBasePrice,
+    normal_price: numericBasePrice,
+    vip_price: numericBasePrice + VIP_SEAT_SURCHARGE,
+    couple_price: numericBasePrice * 2,
+  };
+};
 
 const addMinutes = (date, minutes) =>
   new Date(date.getTime() + minutes * 60 * 1000);
@@ -257,6 +300,7 @@ const ShowtimesPage = () => {
   const [feedback, setFeedback] = useState({ type: "", message: "" });
   const [conflictShowtimes, setConflictShowtimes] = useState([]);
   const [autoScheduleSlots, setAutoScheduleSlots] = useState([]);
+  const [priceMode, setPriceMode] = useState("auto");
 
   const isEditing = Boolean(editingShowtime);
 
@@ -332,6 +376,47 @@ const ShowtimesPage = () => {
     [formData.room_id, rooms],
   );
 
+  const standardPricing = useMemo(() => {
+    if (!selectedRoom || !formData.start_date) return null;
+    const basePrice = getStandardBasePrice({
+      roomType: selectedRoom.room_type,
+      startDate: formData.start_date,
+    });
+
+    if (!basePrice) return null;
+
+    return {
+      ...buildStandardSeatPrices(basePrice),
+      roomType: String(selectedRoom.room_type || "2D").toUpperCase(),
+      dayType: isWeekendDate(formData.start_date) ? "Cuối tuần / lễ" : "Ngày thường",
+    };
+  }, [formData.start_date, selectedRoom]);
+
+  const applyStandardPricing = useCallback(() => {
+    if (!standardPricing) return;
+
+    setFormData((current) => ({
+      ...current,
+      base_price: String(standardPricing.base_price),
+      normal_price: String(standardPricing.normal_price),
+      vip_price: String(standardPricing.vip_price),
+      couple_price: String(standardPricing.couple_price),
+    }));
+    setPriceMode("auto");
+    setFormErrors((current) => ({
+      ...current,
+      base_price: "",
+      normal_price: "",
+      vip_price: "",
+      couple_price: "",
+    }));
+  }, [standardPricing]);
+
+  useEffect(() => {
+    if (!standardPricing || priceMode !== "auto") return;
+    applyStandardPricing();
+  }, [applyStandardPricing, priceMode, standardPricing]);
+
   const filteredShowtimes = useMemo(() => {
     const query = searchQuery.trim();
 
@@ -404,6 +489,9 @@ const ShowtimesPage = () => {
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFormErrors((prev) => ({ ...prev, [field]: "" }));
+    if (["base_price", "normal_price", "vip_price", "couple_price"].includes(field)) {
+      setPriceMode("custom");
+    }
     if (["movie_id", "room_id", "start_date"].includes(field)) {
       setAutoScheduleSlots([]);
       setConflictShowtimes([]);
@@ -419,6 +507,7 @@ const ShowtimesPage = () => {
     setFeedback({ type: "", message: "" });
     setConflictShowtimes([]);
     setAutoScheduleSlots([]);
+    setPriceMode("auto");
   };
 
   const closeForm = () => {
@@ -449,6 +538,7 @@ const ShowtimesPage = () => {
 
     const currentStartTime = new Date(showtime.start_time);
     setEditingShowtime(showtime);
+    setPriceMode("custom");
     setFormData({
       movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
       room_id: showtime.room_id ? String(showtime.room_id) : "",
@@ -1076,6 +1166,33 @@ const ShowtimesPage = () => {
                 ) : null}
               </label>
 
+              <div className="showtime-pricing-panel">
+                <div>
+                  <span className="showtime-pricing-eyebrow">Giá vé mặc định</span>
+                  <strong>
+                    {standardPricing
+                      ? `${standardPricing.roomType} · ${standardPricing.dayType}`
+                      : "Chọn phòng và ngày chiếu để tính giá"}
+                  </strong>
+                  <small>
+                    {standardPricing
+                      ? `Snapshot sẽ lưu: thường ${formatCurrency(standardPricing.normal_price)}, VIP ${formatCurrency(standardPricing.vip_price)}, đôi ${formatCurrency(standardPricing.couple_price)}.`
+                      : "Bảng giá chuẩn quyết định giá mặc định, suất chiếu lưu giá tại thời điểm tạo."}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary showtime-pricing-apply"
+                  disabled={!standardPricing}
+                  onClick={applyStandardPricing}
+                >
+                  Áp dụng giá chuẩn
+                </button>
+                <span className={`showtime-pricing-mode ${priceMode}`}>
+                  {priceMode === "auto" ? "Giá chuẩn" : "Giá ngoại lệ"}
+                </span>
+              </div>
+
               {[
                 ["normal_price", "Giá ghế thường"],
                 ["vip_price", "Giá ghế VIP"],
@@ -1083,8 +1200,22 @@ const ShowtimesPage = () => {
               ].map(([field, label]) => (
                 <label className="form-group" key={field}>
                   <span className="form-label">{label}</span>
-                  <input className={`form-input ${formErrors[field] ? "error" : ""}`} type="number" min="0" step="1000" value={formData[field]} onChange={(event) => updateField(field, event.target.value)} placeholder="Ví dụ: 80000" />
-                  {formErrors[field] ? <span className="form-error">{formErrors[field]}</span> : <span className="form-hint">Để trống để tính theo giá cơ bản.</span>}
+                  <input
+                    className={`form-input ${formErrors[field] ? "error" : ""}`}
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={formData[field]}
+                    onChange={(event) => updateField(field, event.target.value)}
+                    placeholder="Ví dụ: 80000"
+                  />
+                  {formErrors[field] ? (
+                    <span className="form-error">{formErrors[field]}</span>
+                  ) : (
+                    <span className="form-hint">
+                      Giá snapshot của suất chiếu; chỉnh tay khi có ngoại lệ.
+                    </span>
+                  )}
                 </label>
               ))}
 
@@ -1248,7 +1379,9 @@ const ShowtimesPage = () => {
                 {formErrors.base_price ? (
                   <span className="form-error">{formErrors.base_price}</span>
                 ) : (
-                  <span className="form-hint">{text.priceHint}</span>
+                  <span className="form-hint">
+                    Tự tính từ bảng giá chuẩn khi chọn phòng và ngày chiếu.
+                  </span>
                 )}
               </label>
             </div>
@@ -1268,6 +1401,14 @@ const ShowtimesPage = () => {
                 <span>
                   <HiOutlineCash />
                   {formatCurrency(formData.base_price)}
+                </span>
+                <span>
+                  <HiOutlineCash />
+                  Thường {formatCurrency(formData.normal_price)} · VIP {formatCurrency(formData.vip_price)} · Đôi {formatCurrency(formData.couple_price)}
+                </span>
+                <span>
+                  <HiOutlineCash />
+                  {priceMode === "auto" ? "Đang áp dụng giá chuẩn" : "Đang dùng giá ngoại lệ"}
                 </span>
               </div>
             </aside>

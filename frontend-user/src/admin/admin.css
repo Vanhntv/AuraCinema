@@ -1535,6 +1535,63 @@
   margin-bottom: 0;
 }
 
+.showtime-pricing-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.26);
+  border-radius: var(--radius-md);
+  background: rgba(139, 92, 246, 0.08);
+}
+
+.showtime-pricing-panel > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.showtime-pricing-eyebrow {
+  color: var(--color-accent-light);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.showtime-pricing-panel strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+.showtime-pricing-panel small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.showtime-pricing-apply {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.showtime-pricing-mode {
+  justify-self: end;
+  padding: 8px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.showtime-pricing-mode.custom {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fde68a;
+}
+
 .showtime-time-row {
   display: flex;
   align-items: center;
