@@ -184,7 +184,9 @@ const ShowtimesPage = () => {
 
   const fetchRooms = useCallback(async () => {
     try {
-      const response = await axiosClient.get("/rooms");
+      const response = await axiosClient.get("/rooms", {
+        params: { active_only: true },
+      });
       setRooms(response.data?.data || []);
     } catch (error) {
       console.error(error);

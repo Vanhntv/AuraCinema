@@ -31,6 +31,11 @@ const menuItems = [
         icon: <HiOutlineOfficeBuilding />,
         label: "Rạp chiếu",
       },
+      {
+        path: "/admin/rooms",
+        icon: <HiOutlineViewGrid />,
+        label: "Phòng chiếu",
+      },
       { path: "/admin/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
     ],
   },

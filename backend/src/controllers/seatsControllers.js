@@ -1,6 +1,8 @@
+import Booking from "../models/Booking.js";
 import Room from "../models/Room.js";
 import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
+import Showtime from "../models/Showtime.js";
 
 const buildSeatFilter = (query) => {
   const { q, room_id, seat_type_id, status } = query;
@@ -51,6 +53,38 @@ const parseBoolean = (value, fallback = false) => {
   return fallback;
 };
 
+const getRoomUsage = async (roomId) => {
+  const showtimes = await Showtime.find({
+    room_id: roomId,
+    deleted_at: null,
+  }).select("_id start_time");
+  const now = new Date();
+  const futureShowtimeCount = showtimes.filter(
+    (showtime) => showtime.start_time >= now,
+  ).length;
+  const showtimeIds = showtimes.map((showtime) => showtime._id);
+  const bookingCount = showtimeIds.length
+    ? await Booking.countDocuments({
+        showtime_id: { $in: showtimeIds },
+        status: { $ne: "cancelled" },
+      })
+    : 0;
+
+  return { futureShowtimeCount, bookingCount };
+};
+
+const assertSeatMapCanChange = async (roomId) => {
+  const usage = await getRoomUsage(roomId);
+
+  if (usage.futureShowtimeCount > 0 || usage.bookingCount > 0) {
+    const error = new Error(
+      "Khong the thay doi so do ghe khi phong co suat chieu tuong lai hoac ve da ban",
+    );
+    error.statusCode = 409;
+    throw error;
+  }
+};
+
 const normalizeSeatPayload = (payload, defaults = {}) => {
   return {
     room_id: payload.room_id ?? defaults.room_id,
@@ -97,7 +131,7 @@ export const getAllSeats = async (req, res) => {
       data: seats,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -231,8 +265,11 @@ export const createSeat = async (req, res) => {
       seat_type_id: seat.seat_type_id,
       seat_row: String(seat.seat_row).trim(),
       seat_number: Number(seat.seat_number),
+      seat_code: `${String(seat.seat_row).trim()}${Number(seat.seat_number)}`,
       status: parseBoolean(seat.status, true),
     }));
+
+    await Promise.all(roomIds.map((roomId) => assertSeatMapCanChange(roomId)));
 
     const seenKeys = new Set();
     for (const seat of preparedSeats) {
@@ -388,6 +425,9 @@ export const updateSeat = async (req, res) => {
       seat.seat_number = normalizedSeatNumber;
     }
 
+    await assertSeatMapCanChange(seat.room_id);
+    seat.seat_code = `${seat.seat_row}${seat.seat_number}`;
+
     if (status !== undefined) {
       seat.status = parseBoolean(status, seat.status);
     }
@@ -417,7 +457,7 @@ export const updateSeat = async (req, res) => {
       data: seat,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -440,6 +480,8 @@ export const deleteSeat = async (req, res) => {
       });
     }
 
+    await assertSeatMapCanChange(seat.room_id);
+
     seat.deleted_at = new Date();
     await seat.save();
 
@@ -448,7 +490,7 @@ export const deleteSeat = async (req, res) => {
       message: "Xoa seat thanh cong",
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });

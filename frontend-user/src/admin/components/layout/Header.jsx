@@ -15,6 +15,7 @@ const pageTitles = {
   "/admin/movies": "Phim",
   "/admin/trailers": "Trailer",
   "/admin/cinemas": "Rạp chiếu",
+  "/admin/rooms": "Phòng chiếu",
   "/admin/showtimes": "Suất chiếu",
   "/admin/users": "Người dùng",
   "/admin/settings": "Cài đặt",
