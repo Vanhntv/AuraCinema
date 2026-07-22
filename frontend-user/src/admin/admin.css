@@ -78,50 +78,47 @@
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* Reset & Base */
-*,
-*::before,
-*::after {
+/* Admin-scoped Reset & Base */
+.admin-layout,
+.admin-layout *,
+.admin-layout *::before,
+.admin-layout *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
+.admin-layout {
   font-family: var(--font-family);
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
   line-height: 1.6;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-a {
+.admin-layout a {
   text-decoration: none;
   color: inherit;
 }
 
-button {
+.admin-layout button {
   font-family: var(--font-family);
   cursor: pointer;
   border: none;
   outline: none;
 }
 
-input,
-textarea,
-select {
+.admin-layout input,
+.admin-layout textarea,
+.admin-layout select {
   font-family: var(--font-family);
   outline: none;
 }
 
-ul,
-ol {
+.admin-layout ul,
+.admin-layout ol {
   list-style: none;
 }
 

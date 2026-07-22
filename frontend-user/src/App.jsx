@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
@@ -16,15 +16,16 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AccountPage from './pages/AccountPage';
 import ProtectedRoute from './routes/ProtectedRoute';
-import AdminLayout from './admin/components/layout/AdminLayout';
-import AdminRoute from './admin/routes/AdminRoute';
-import AdminDashboardPage from './admin/pages/DashboardPage';
-import AdminGenresPage from './admin/pages/GenresPage';
-import AdminMoviesPage from './admin/pages/MoviesPage';
-import AdminCinemasPage from './admin/pages/CinemasPage';
-import AdminShowtimesPage from './admin/pages/ShowtimesPage';
-import AdminTrailersPage from './admin/pages/TrailersPage';
-import AdminUsersPage from './admin/pages/UsersPage';
+
+const AdminLayout = lazy(() => import('./admin/components/layout/AdminLayout'));
+const AdminRoute = lazy(() => import('./admin/routes/AdminRoute'));
+const AdminDashboardPage = lazy(() => import('./admin/pages/DashboardPage'));
+const AdminGenresPage = lazy(() => import('./admin/pages/GenresPage'));
+const AdminMoviesPage = lazy(() => import('./admin/pages/MoviesPage'));
+const AdminCinemasPage = lazy(() => import('./admin/pages/CinemasPage'));
+const AdminShowtimesPage = lazy(() => import('./admin/pages/ShowtimesPage'));
+const AdminTrailersPage = lazy(() => import('./admin/pages/TrailersPage'));
+const AdminUsersPage = lazy(() => import('./admin/pages/UsersPage'));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -83,9 +84,17 @@ function App() {
         <Route
           path="/admin"
           element={
-            <AdminRoute>
-              <AdminLayout />
-            </AdminRoute>
+            <Suspense
+              fallback={
+                <main className="auth-shell">
+                  <p className="auth-loading">Đang tải trang quản trị...</p>
+                </main>
+              }
+            >
+              <AdminRoute>
+                <AdminLayout />
+              </AdminRoute>
+            </Suspense>
           }
         >
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
