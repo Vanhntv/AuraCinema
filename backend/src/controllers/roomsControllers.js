@@ -92,19 +92,39 @@ const resolveDefaultSeatType = async () => {
   });
 };
 
-const buildSeatDocuments = ({ roomId, rowCount, columnCount, seatTypeId }) => {
+const normalizeSeatLayout = (seatLayout = []) => {
+  if (!Array.isArray(seatLayout)) {
+    return new Map();
+  }
+
+  return new Map(
+    seatLayout
+      .filter((seat) => seat?.seat_code && seat?.seat_type_id)
+      .map((seat) => [String(seat.seat_code).trim().toUpperCase(), seat.seat_type_id]),
+  );
+};
+
+const buildSeatDocuments = ({
+  roomId,
+  rowCount,
+  columnCount,
+  seatTypeId,
+  seatTypeByCode = new Map(),
+}) => {
   const seats = [];
 
   for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
     const seatRow = String.fromCharCode(65 + rowIndex);
 
     for (let columnIndex = 1; columnIndex <= columnCount; columnIndex += 1) {
+      const seatCode = `${seatRow}${columnIndex}`;
+
       seats.push({
         room_id: roomId,
-        seat_type_id: seatTypeId,
+        seat_type_id: seatTypeByCode.get(seatCode) || seatTypeId,
         seat_row: seatRow,
         seat_number: columnIndex,
-        seat_code: `${seatRow}${columnIndex}`,
+        seat_code: seatCode,
         status: true,
       });
     }
@@ -145,6 +165,29 @@ const ensureRoomNameIsUnique = async ({ cinemaId, name, excludeId = null }) => {
   if (duplicateRoom) {
     const error = new Error("Ten phong da ton tai trong rap nay");
     error.statusCode = 409;
+    throw error;
+  }
+};
+
+const assertSeatTypesExist = async (seatLayout = []) => {
+  const seatTypeIds = [
+    ...new Set(
+      (Array.isArray(seatLayout) ? seatLayout : [])
+        .map((seat) => seat?.seat_type_id)
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+
+  if (!seatTypeIds.length) {
+    return;
+  }
+
+  const seatTypes = await SeatType.find({ _id: { $in: seatTypeIds } }).select("_id");
+
+  if (seatTypes.length !== seatTypeIds.length) {
+    const error = new Error("seat_layout co seat_type_id khong hop le");
+    error.statusCode = 400;
     throw error;
   }
 };
@@ -330,6 +373,7 @@ export const createRoom = async (req, res) => {
       row_count,
       column_count,
       status,
+      seat_layout,
     } = req.body;
 
     if (!cinema_id) {
@@ -390,6 +434,8 @@ export const createRoom = async (req, res) => {
     });
 
     const defaultSeatType = await resolveDefaultSeatType();
+    await assertSeatTypesExist(seat_layout);
+    const seatTypeByCode = normalizeSeatLayout(seat_layout);
 
     createdRoom = await Room.create({
       cinema_id,
@@ -410,6 +456,7 @@ export const createRoom = async (req, res) => {
         rowCount,
         columnCount,
         seatTypeId: defaultSeatType._id,
+        seatTypeByCode,
       }),
     );
 
@@ -454,6 +501,7 @@ export const updateRoom = async (req, res) => {
       row_count,
       column_count,
       status,
+      seat_layout,
     } = req.body;
 
     const room = await Room.findOne({
@@ -509,8 +557,9 @@ export const updateRoom = async (req, res) => {
       column_count !== undefined
         ? parsePositiveInteger(column_count, "column_count")
         : room.column_count;
+    const isSeatLayoutUpdating = seat_layout !== undefined;
     const isSeatMapChanging =
-      row_count !== undefined || column_count !== undefined;
+      row_count !== undefined || column_count !== undefined || isSeatLayoutUpdating;
 
     if (isSeatMapChanging) {
       await assertSeatMapCanChange(room._id);
@@ -550,6 +599,8 @@ export const updateRoom = async (req, res) => {
 
     if (isSeatMapChanging) {
       const defaultSeatType = await resolveDefaultSeatType();
+      await assertSeatTypesExist(seat_layout);
+      const seatTypeByCode = normalizeSeatLayout(seat_layout);
       room.row_count = nextRowCount;
       room.column_count = nextColumnCount;
       room.capacity = nextRowCount * nextColumnCount;
@@ -561,6 +612,7 @@ export const updateRoom = async (req, res) => {
           rowCount: nextRowCount,
           columnCount: nextColumnCount,
           seatTypeId: defaultSeatType._id,
+          seatTypeByCode,
         }),
       );
     } else if (capacity !== undefined) {

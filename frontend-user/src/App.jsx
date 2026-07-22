@@ -22,7 +22,6 @@ const AdminRoute = lazy(() => import('./admin/routes/AdminRoute'));
 const AdminDashboardPage = lazy(() => import('./admin/pages/DashboardPage'));
 const AdminGenresPage = lazy(() => import('./admin/pages/GenresPage'));
 const AdminMoviesPage = lazy(() => import('./admin/pages/MoviesPage'));
-const AdminCinemasPage = lazy(() => import('./admin/pages/CinemasPage'));
 const AdminRoomsPage = lazy(() => import('./admin/pages/RoomsPage'));
 const AdminShowtimesPage = lazy(() => import('./admin/pages/ShowtimesPage'));
 const AdminTrailersPage = lazy(() => import('./admin/pages/TrailersPage'));
@@ -102,7 +101,6 @@ function App() {
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="genres" element={<AdminGenresPage />} />
           <Route path="movies" element={<AdminMoviesPage />} />
-          <Route path="cinemas" element={<AdminCinemasPage />} />
           <Route path="rooms" element={<AdminRoomsPage />} />
           <Route path="showtimes" element={<AdminShowtimesPage />} />
           <Route path="trailers" element={<AdminTrailersPage />} />

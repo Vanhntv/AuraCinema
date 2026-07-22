@@ -6,7 +6,6 @@ import {
   HiOutlineTicket,
   HiOutlineUsers,
   HiOutlineCog,
-  HiOutlineOfficeBuilding,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -26,11 +25,6 @@ const menuItems = [
     items: [
       { path: "/admin/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/admin/movies", icon: <HiOutlineFilm />, label: "Phim" },
-      {
-        path: "/admin/cinemas",
-        icon: <HiOutlineOfficeBuilding />,
-        label: "Rạp chiếu",
-      },
       {
         path: "/admin/rooms",
         icon: <HiOutlineViewGrid />,
