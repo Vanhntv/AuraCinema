@@ -28,12 +28,12 @@ function RegisterPage() {
     setError("");
 
     if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
-      setError("Mat khau phai co it nhat 8 ky tu, gom chu hoa va so.");
+      setError("Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.");
       return;
     }
 
     if (formData.password !== formData.confirm_password) {
-      setError("Mat khau xac nhan khong khop.");
+      setError("Mật khẩu xác nhận không khớp.");
       return;
     }
 
@@ -49,11 +49,11 @@ function RegisterPage() {
       });
       navigate("/login", {
         replace: true,
-        state: { message: "Dang ky thanh cong. Vui long dang nhap." },
+        state: { message: "Đăng ký thành công. Vui lòng đăng nhập." },
       });
     } catch (err) {
       setError(
-        err.response?.data?.message || "Dang ky that bai. Vui long thu lai."
+        err.response?.data?.message || "Đăng ký thất bại. Vui lòng thử lại."
       );
     } finally {
       setSubmitting(false);
@@ -65,15 +65,15 @@ function RegisterPage() {
       <section className="auth-panel auth-panel-wide" aria-labelledby="register-title">
         <div className="auth-brand">
           <span>AuraCinema</span>
-          <h1 id="register-title">Tao tai khoan</h1>
-          <p>Dang ky de bat dau dat ve va luu cac phim yeu thich.</p>
+          <h1 id="register-title">Tạo tài khoản</h1>
+          <p>Đăng ký để bắt đầu đặt vé và lưu các phim yêu thích.</p>
         </div>
 
         <form className="auth-form auth-form-grid" noValidate onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
 
           <label className="auth-field-full">
-            Ho va ten
+            Họ và tên
             <input
               autoComplete="name"
               name="full_name"
@@ -99,25 +99,25 @@ function RegisterPage() {
           </label>
 
           <label>
-            So dien thoai
+            Số điện thoại
             <input
               autoComplete="tel"
               name="phone"
               onChange={handleChange}
-              placeholder="Nhap so dien thoai"
+              placeholder="Nhập số điện thoại"
               type="tel"
               value={formData.phone}
             />
           </label>
 
           <label>
-            Mat khau
+            Mật khẩu
             <input
               autoComplete="new-password"
               minLength={8}
               name="password"
               onChange={handleChange}
-              placeholder="Toi thieu 8 ky tu, co chu hoa va so"
+              placeholder="Tối thiểu 8 ký tự, có chữ hoa và số"
               required
               type="password"
               value={formData.password}
@@ -125,13 +125,13 @@ function RegisterPage() {
           </label>
 
           <label>
-            Xac nhan mat khau
+            Xác nhận mật khẩu
             <input
               autoComplete="new-password"
               minLength={8}
               name="confirm_password"
               onChange={handleChange}
-              placeholder="Nhap lai mat khau"
+              placeholder="Nhập lại mật khẩu"
               required
               type="password"
               value={formData.confirm_password}
@@ -139,12 +139,12 @@ function RegisterPage() {
           </label>
 
           <button className="auth-submit auth-field-full" disabled={submitting} type="submit">
-            {submitting ? "Dang tao tai khoan..." : "Dang ky"}
+            {submitting ? "Đang tạo tài khoản..." : "Đăng ký"}
           </button>
         </form>
 
         <p className="auth-switch">
-          Da co tai khoan? <Link to="/login">Dang nhap</Link>
+          Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
         </p>
       </section>
     </main>
