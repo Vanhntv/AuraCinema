@@ -4,6 +4,7 @@ import Room from "../models/Room.js";
 import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
+import mongoose from "mongoose";
 
 const ROOM_STATUSES = ["active", "maintenance", "inactive"];
 const ROOM_TYPES = ["2D", "3D"];
@@ -167,6 +168,31 @@ const ensureRoomNameIsUnique = async ({ cinemaId, name, excludeId = null }) => {
     error.statusCode = 409;
     throw error;
   }
+};
+
+const resolveDefaultCinemaId = async () => {
+  const cinema = await Cinema.findOne({ deleted_at: null }).select("_id");
+
+  if (!cinema) {
+    const error = new Error("He thong chua co rap mac dinh de gan phong");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return cinema._id;
+};
+
+const shouldRepairRoomCinema = async (cinemaId) => {
+  if (!cinemaId || !mongoose.Types.ObjectId.isValid(String(cinemaId))) {
+    return true;
+  }
+
+  const cinemaExists = await Cinema.exists({
+    _id: cinemaId,
+    deleted_at: null,
+  });
+
+  return !cinemaExists;
 };
 
 const assertSeatTypesExist = async (seatLayout = []) => {
@@ -648,10 +674,11 @@ export const updateRoomStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const normalizedStatus = normalizeRoomStatus(status);
     const room = await Room.findOne({
       _id: id,
       deleted_at: null,
-    });
+    }).lean();
 
     if (!room) {
       return res.status(404).json({
@@ -660,14 +687,32 @@ export const updateRoomStatus = async (req, res) => {
       });
     }
 
-    room.status = normalizeRoomStatus(status);
-    await room.save();
-    await populateRoom(room);
+    const updatePayload = {
+      status: normalizedStatus,
+    };
+
+    if (await shouldRepairRoomCinema(room.cinema_id)) {
+      updatePayload.cinema_id = await resolveDefaultCinemaId();
+    }
+
+    const updatedRoom = await Room.findOneAndUpdate(
+      {
+        _id: id,
+        deleted_at: null,
+      },
+      {
+        $set: updatePayload,
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    ).populate("cinema_id", "name city address");
 
     res.status(200).json({
       success: true,
       message: "Cap nhat trang thai room thanh cong",
-      data: room,
+      data: updatedRoom,
     });
   } catch (error) {
     sendError(res, error);
