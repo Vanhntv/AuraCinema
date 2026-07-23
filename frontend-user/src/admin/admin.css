@@ -3040,6 +3040,11 @@
   color: #fca5a5;
 }
 
+.room-status-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .seat-layout-panel {
   grid-column: 1 / -1;
   display: grid;
