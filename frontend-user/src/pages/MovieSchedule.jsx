@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import BookingModal from "../components/BookingModal";
 import MovieDetailModal from "../components/MovieDetailModal";
 import { getShowtimes } from "../services/showtimeService";
@@ -30,6 +31,16 @@ function formatPrice(value) {
     : "Đang cập nhật";
 }
 
+function formatRoomType(value) {
+  return String(value || "2D").toUpperCase() === "3D" ? "3D" : "2D";
+}
+
+function getShowtimeDateValue(showtime) {
+  const date = new Date(showtime?.start_time);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+}
+
 function groupShowtimes(showtimes) {
   const movies = new Map();
 
@@ -49,15 +60,19 @@ function groupShowtimes(showtimes) {
 
     const movie = movies.get(movieId);
     const cinemaId = String(showtime.cinema_id || showtime.cinemaName || "unknown");
-    if (!movie.cinemas.has(cinemaId)) {
-      movie.cinemas.set(cinemaId, {
+    const roomType = formatRoomType(showtime.roomType);
+    const scheduleGroupId = `${cinemaId}-${roomType}`;
+    if (!movie.cinemas.has(scheduleGroupId)) {
+      movie.cinemas.set(scheduleGroupId, {
         id: showtime.cinema_id,
+        groupId: scheduleGroupId,
         name: showtime.cinemaName || "Rạp đang cập nhật",
         city: showtime.cinemaCity || "",
+        roomType,
         showtimes: [],
       });
     }
-    movie.cinemas.get(cinemaId).showtimes.push(showtime);
+    movie.cinemas.get(scheduleGroupId).showtimes.push(showtime);
   });
 
   return Array.from(movies.values()).map((movie) => ({
@@ -67,10 +82,16 @@ function groupShowtimes(showtimes) {
 }
 
 function MovieSchedule() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dateOptions] = useState(buildDateOptions);
-  const [selectedDate, setSelectedDate] = useState(dateOptions[0].value);
+  const dateQuery = searchParams.get("date");
+  const [selectedDate, setSelectedDate] = useState(
+    dateOptions.some((option) => option.value === dateQuery)
+      ? dateQuery
+      : dateOptions[0].value,
+  );
   const [showtimes, setShowtimes] = useState([]);
-  const [selectedCinema, setSelectedCinema] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [bookingMovie, setBookingMovie] = useState(null);
@@ -105,31 +126,43 @@ function MovieSchedule() {
     };
   }, [selectedDate]);
 
-  const cinemas = useMemo(() => {
-    const cinemaMap = new Map();
-    showtimes.forEach((showtime) => {
-      if (showtime.cinema_id) {
-        cinemaMap.set(String(showtime.cinema_id), showtime.cinemaName);
-      }
-    });
-    return Array.from(cinemaMap, ([id, name]) => ({ id, name }));
-  }, [showtimes]);
+  useEffect(() => {
+    if (
+      dateQuery &&
+      dateQuery !== selectedDate &&
+      dateOptions.some((option) => option.value === dateQuery)
+    ) {
+      setSelectedDate(dateQuery);
+    }
+  }, [dateOptions, dateQuery, selectedDate]);
 
   const movies = useMemo(() => {
     const keyword = searchTerm.trim().toLocaleLowerCase("vi");
     const filtered = showtimes.filter((showtime) => {
-      const matchesCinema =
-        selectedCinema === "all" || String(showtime.cinema_id) === selectedCinema;
       const matchesSearch =
         !keyword || showtime.movieTitle?.toLocaleLowerCase("vi").includes(keyword);
-      return matchesCinema && matchesSearch;
+      return matchesSearch;
     });
     return groupShowtimes(filtered);
-  }, [searchTerm, selectedCinema, showtimes]);
+  }, [searchTerm, showtimes]);
 
-  const openBooking = (movie) => {
+  const [bookingShowtime, setBookingShowtime] = useState(null);
+
+  const openBooking = (movie, showtime = null) => {
+    if (showtime?.id || showtime?._id) {
+      const showtimeDate = getShowtimeDateValue(showtime) || selectedDate;
+      navigate(`/dat-ve/${showtime.id || showtime._id}?date=${showtimeDate}`);
+      return;
+    }
+
     setSelectedMovie(null);
     setBookingMovie(movie);
+    setBookingShowtime(showtime);
+  };
+
+  const closeBooking = () => {
+    setBookingMovie(null);
+    setBookingShowtime(null);
   };
 
   return (
@@ -150,7 +183,10 @@ function MovieSchedule() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setSelectedDate(option.value)}
+                onClick={() => {
+                  setSelectedDate(option.value);
+                  setSearchParams({ date: option.value });
+                }}
                 className={`min-w-[108px] rounded-2xl border px-4 py-3 text-center transition ${active ? "border-[#ff6070] bg-[#ff5364] text-white shadow-[0_10px_30px_rgba(255,83,100,0.25)]" : "border-white/10 bg-white/[0.03] text-slate-400 hover:border-white/20 hover:text-white"}`}
               >
                 <span className="block text-[11px] font-bold uppercase">{option.label || option.day}</span>
@@ -160,15 +196,11 @@ function MovieSchedule() {
           })}
         </div>
 
-        <div className="mb-8 grid grid-cols-[1fr_280px] gap-4 max-md:grid-cols-1">
+        <div className="mb-8">
           <label className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-[#161b24] px-4 focus-within:border-[#ff6070]">
             <span className="text-slate-500">⌕</span>
             <input className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-500" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Tìm tên phim..." />
           </label>
-          <select className="h-12 rounded-xl border border-white/10 bg-[#161b24] px-4 text-sm text-white outline-none focus:border-[#ff6070]" value={selectedCinema} onChange={(event) => setSelectedCinema(event.target.value)}>
-            <option value="all">Tất cả rạp</option>
-            {cinemas.map((cinema) => <option key={cinema.id} value={cinema.id}>{cinema.name}</option>)}
-          </select>
         </div>
 
         {isLoading && (
@@ -200,11 +232,11 @@ function MovieSchedule() {
                   <p className="mb-5 text-xs text-slate-500">{movie.duration ? `${movie.duration} phút` : "Thời lượng đang cập nhật"}</p>
                   <div className="grid gap-4">
                     {movie.cinemas.map((cinema) => (
-                      <div key={cinema.id || cinema.name} className="rounded-2xl bg-[#111720] p-4">
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-bold text-slate-100">{cinema.name}</h3>{cinema.city && <p className="mt-0.5 text-[11px] text-slate-500">{cinema.city}</p>}</div><span className="text-[11px] text-slate-500">2D Phụ đề</span></div>
+                      <div key={cinema.groupId || cinema.id || cinema.name} className="rounded-2xl bg-[#111720] p-4">
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-sm font-bold text-slate-100">{cinema.name}</h3>{cinema.city && <p className="mt-0.5 text-[11px] text-slate-500">{cinema.city}</p>}</div><span className="text-[11px] text-slate-500">{cinema.roomType} Phụ đề</span></div>
                         <div className="flex flex-wrap gap-2">
                           {cinema.showtimes.map((showtime) => (
-                            <button key={showtime.id} type="button" onClick={() => openBooking(movie)} className="group rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-left transition hover:border-[#ff6070] hover:bg-[#ff5364]/10">
+                            <button key={showtime.id} type="button" onClick={() => openBooking(movie, showtime)} className="group rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2 text-left transition hover:border-[#ff6070] hover:bg-[#ff5364]/10">
                               <span className="block text-sm font-black text-white group-hover:text-[#ff6070]">{showtime.startTime}</span>
                               <span className="text-[10px] text-slate-500">{showtime.roomName} · {formatPrice(showtime.base_price)}</span>
                             </button>
@@ -221,7 +253,7 @@ function MovieSchedule() {
       </div>
 
       <MovieDetailModal movie={selectedMovie} onClose={() => setSelectedMovie(null)} onBook={openBooking} />
-      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
+      <BookingModal movie={bookingMovie} initialShowtime={bookingShowtime} onClose={closeBooking} />
     </main>
   );
 }

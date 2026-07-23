@@ -10,6 +10,7 @@ import {
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
 const VIP_SEAT_SURCHARGE = 20000;
+const COUPLE_SEAT_SURCHARGE = 20000;
 const STANDARD_TICKET_PRICES = {
   "2D": { weekday: 50000, weekend: 55000 },
   "3D": { weekday: 65000, weekend: 70000 },
@@ -77,7 +78,7 @@ const resolveStandardPricing = ({ room, startTime }) => {
     seat_prices: {
       normal: basePrice,
       vip: basePrice + VIP_SEAT_SURCHARGE,
-      couple: basePrice * 2,
+      couple: basePrice * 2 + COUPLE_SEAT_SURCHARGE,
     },
   };
 };
@@ -85,7 +86,7 @@ const resolveStandardPricing = ({ room, startTime }) => {
 const buildStandardSeatPrices = (basePrice) => ({
   normal: basePrice,
   vip: basePrice + VIP_SEAT_SURCHARGE,
-  couple: basePrice * 2,
+  couple: basePrice * 2 + COUPLE_SEAT_SURCHARGE,
 });
 
 const resolveShowtimePricingSnapshot = ({ base_price, seat_prices, room, startTime }) => {
@@ -267,6 +268,7 @@ const mapShowtime = (showtime) => ({
   movieStatus: showtime.movie_id?.status ?? null,
   room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
   roomName: showtime.room_id?.name ?? null,
+  roomType: showtime.room_id?.room_type ?? "2D",
   cinema_id:
     showtime.room_id?.cinema_id?._id ?? showtime.room_id?.cinema_id ?? null,
   cinemaName: showtime.room_id?.cinema_id?.name ?? null,
