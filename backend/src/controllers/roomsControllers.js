@@ -250,6 +250,29 @@ const getRoomUsage = async (roomId) => {
   };
 };
 
+const getBlockingRoomShowtimeCount = (roomId) =>
+  Showtime.countDocuments({
+    room_id: roomId,
+    deleted_at: null,
+    status: { $ne: "cancelled" },
+    end_time: { $gt: new Date() },
+  });
+
+const appendRoomUsageSummary = async (rooms) =>
+  Promise.all(
+    rooms.map(async (room) => {
+      const blockingShowtimeCount = await getBlockingRoomShowtimeCount(room._id);
+
+      return {
+        ...room.toObject(),
+        usage: {
+          blockingShowtimeCount,
+          canChangeStatus: blockingShowtimeCount === 0,
+        },
+      };
+    }),
+  );
+
 const assertSeatMapCanChange = async (roomId) => {
   const usage = await getRoomUsage(roomId);
 
@@ -312,10 +335,11 @@ export const getAllRooms = async (req, res) => {
     const rooms = await Room.find(filter)
       .populate("cinema_id", "name city address")
       .sort({ created_at: -1 });
+    const roomsWithUsage = await appendRoomUsageSummary(rooms);
 
     res.status(200).json({
       success: true,
-      data: rooms,
+      data: roomsWithUsage,
     });
   } catch (error) {
     sendError(res, error);
@@ -338,9 +362,10 @@ export const getRoomById = async (req, res) => {
       });
     }
 
-    const [seats, usage] = await Promise.all([
+    const [seats, usage, blockingShowtimeCount] = await Promise.all([
       getRoomSeats(room._id),
       getRoomUsage(room._id),
+      getBlockingRoomShowtimeCount(room._id),
     ]);
 
     res.status(200).json({
@@ -348,7 +373,11 @@ export const getRoomById = async (req, res) => {
       data: {
         ...room.toObject(),
         seats,
-        usage,
+        usage: {
+          ...usage,
+          blockingShowtimeCount,
+          canChangeStatus: blockingShowtimeCount === 0,
+        },
       },
     });
   } catch (error) {
@@ -377,10 +406,11 @@ export const getRoomsByCinema = async (req, res) => {
     const rooms = await Room.find(filter)
       .populate("cinema_id", "name city address")
       .sort({ created_at: -1 });
+    const roomsWithUsage = await appendRoomUsageSummary(rooms);
 
     res.status(200).json({
       success: true,
-      data: rooms,
+      data: roomsWithUsage,
     });
   } catch (error) {
     sendError(res, error);
@@ -620,7 +650,21 @@ export const updateRoom = async (req, res) => {
     }
 
     if (status !== undefined) {
-      room.status = normalizeRoomStatus(status, room.status);
+      const nextStatus = normalizeRoomStatus(status, room.status);
+
+      if (nextStatus !== (room.status || "active")) {
+        const blockingShowtimeCount = await getBlockingRoomShowtimeCount(room._id);
+
+        if (blockingShowtimeCount > 0) {
+          return res.status(409).json({
+            success: false,
+            message:
+              "Không thể đổi trạng thái phòng khi phòng đang có suất chiếu đang chiếu hoặc sắp chiếu.",
+          });
+        }
+      }
+
+      room.status = nextStatus;
     }
 
     if (isSeatMapChanging) {
@@ -687,6 +731,20 @@ export const updateRoomStatus = async (req, res) => {
       });
     }
 
+    const currentStatus = room.status || "active";
+
+    if (normalizedStatus !== currentStatus) {
+      const blockingShowtimeCount = await getBlockingRoomShowtimeCount(room._id);
+
+      if (blockingShowtimeCount > 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Không thể đổi trạng thái phòng khi phòng đang có suất chiếu đang chiếu hoặc sắp chiếu.",
+        });
+      }
+    }
+
     const updatePayload = {
       status: normalizedStatus,
     };
@@ -732,6 +790,16 @@ export const deleteRoom = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Khong tim thay room",
+      });
+    }
+
+    const blockingShowtimeCount = await getBlockingRoomShowtimeCount(room._id);
+
+    if (blockingShowtimeCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Không thể khóa phòng khi phòng đang có suất chiếu đang chiếu hoặc sắp chiếu.",
       });
     }
 

@@ -40,12 +40,14 @@ const statusLabels = {
 
 const roomTypes = ["2D", "3D"];
 const PAGE_SIZE = 10;
+const lockedRoomStatusMessage = "Phòng đang có suất chiếu đang chiếu hoặc sắp chiếu nên không thể đổi trạng thái.";
 
 const getSeatCode = (seat) => seat.seat_code || `${seat.seat_row}${seat.seat_number}`;
 const getRoomCinemaId = (room) => {
   if (!room?.cinema_id) return "";
   return typeof room.cinema_id === "object" ? room.cinema_id._id || "" : String(room.cinema_id);
 };
+const cannotChangeRoomStatus = (room) => room?.usage?.canChangeStatus === false;
 const normalizeRoomName = (value = "") =>
   value
     .normalize("NFD")
@@ -299,6 +301,7 @@ function RoomsPage() {
   const [seatLayout, setSeatLayout] = useState({});
   const [quickStartSeat, setQuickStartSeat] = useState("");
   const [quickEndSeat, setQuickEndSeat] = useState("");
+  const isEditingStatusLocked = cannotChangeRoomStatus(editingRoom);
 
   const addToast = useCallback((type, message) => {
     setToasts((current) => [...current, { id: Date.now() + Math.random(), type, message }]);
@@ -579,6 +582,11 @@ function RoomsPage() {
   };
 
   const handleStatusChange = async (room, status) => {
+    if (cannotChangeRoomStatus(room)) {
+      addToast("error", lockedRoomStatusMessage);
+      return;
+    }
+
     try {
       await updateRoomStatus(room._id, status);
       addToast("success", `Đã đổi trạng thái phòng sang ${statusLabels[status]}.`);
@@ -861,11 +869,18 @@ function RoomsPage() {
 
               <label className="form-group">
                 <span className="form-label">Trạng thái</span>
-                <select className="form-input" value={formData.status} onChange={(event) => updateField("status", event.target.value)}>
+                <select
+                  className="form-input"
+                  value={formData.status}
+                  onChange={(event) => updateField("status", event.target.value)}
+                  disabled={isEditingStatusLocked}
+                  title={isEditingStatusLocked ? lockedRoomStatusMessage : "Đổi trạng thái phòng"}
+                >
                   {Object.entries(statusLabels).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
+                {isEditingStatusLocked ? <span className="form-hint">{lockedRoomStatusMessage}</span> : null}
               </label>
 
               <label className="form-group">
@@ -1000,33 +1015,48 @@ function RoomsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pagedRooms.map((room) => (
-                  <tr key={room._id}>
-                    <td className="table-cell-name">{room.name}</td>
-                    <td>{room.room_type || "2D"}</td>
-                    <td>{room.row_count || "?"} x {room.column_count || "?"} ({room.capacity || 0} ghế)</td>
-                    <td>
-                      <select className={`room-status-select ${room.status || "active"}`} value={room.status || "active"} onChange={(event) => handleStatusChange(room, event.target.value)}>
-                        {Object.entries(statusLabels).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="table-actions">
-                        <button className="btn btn-icon btn-ghost" title="Xem sơ đồ ghế" onClick={() => viewRoomDetail(room)}>
-                          <HiOutlineEye />
-                        </button>
-                        <button className="btn btn-icon btn-ghost" title="Cập nhật" onClick={() => openEditForm(room)}>
-                          <HiOutlinePencil />
-                        </button>
-                        <button className="btn btn-icon btn-ghost" title="Khóa phòng" onClick={() => openDeleteConfirm(room)}>
-                          <HiOutlineTrash />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {pagedRooms.map((room) => {
+                  const isStatusLocked = cannotChangeRoomStatus(room);
+
+                  return (
+                    <tr key={room._id}>
+                      <td className="table-cell-name">{room.name}</td>
+                      <td>{room.room_type || "2D"}</td>
+                      <td>{room.row_count || "?"} x {room.column_count || "?"} ({room.capacity || 0} ghế)</td>
+                      <td>
+                        <select
+                          className={`room-status-select ${room.status || "active"}`}
+                          value={room.status || "active"}
+                          onChange={(event) => handleStatusChange(room, event.target.value)}
+                          disabled={isStatusLocked}
+                          title={isStatusLocked ? lockedRoomStatusMessage : "Đổi trạng thái phòng"}
+                        >
+                          {Object.entries(statusLabels).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          <button className="btn btn-icon btn-ghost" title="Xem sơ đồ ghế" onClick={() => viewRoomDetail(room)}>
+                            <HiOutlineEye />
+                          </button>
+                          <button className="btn btn-icon btn-ghost" title="Cập nhật" onClick={() => openEditForm(room)}>
+                            <HiOutlinePencil />
+                          </button>
+                          <button
+                            className="btn btn-icon btn-ghost"
+                            title={isStatusLocked ? lockedRoomStatusMessage : "Khóa phòng"}
+                            onClick={() => openDeleteConfirm(room)}
+                            disabled={isStatusLocked}
+                          >
+                            <HiOutlineTrash />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
