@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getMovies } from '../services/movieService'
+import { getShowtimes } from '../services/showtimeService'
 import BookingModal from './BookingModal'
 import MovieDetailModal from './MovieDetailModal'
 
@@ -16,6 +17,59 @@ function getReleaseYear(dateValue) {
   const date = new Date(dateValue)
   if (Number.isNaN(date.getTime())) return ''
   return date.getFullYear()
+}
+
+function normalizeText(value = '') {
+  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function isComingSoonMovie(movie) {
+  const status = normalizeText(movie.status || movie.movieStatus)
+  const releaseDate = new Date(movie.release_date || movie.releaseDate)
+  const isFutureRelease = !Number.isNaN(releaseDate.getTime()) && releaseDate > new Date()
+
+  return (
+    status === 'coming_soon' ||
+    status === 'comingsoon' ||
+    status === 'upcoming' ||
+    status.includes('sap_chieu') ||
+    status.includes('sap chieu') ||
+    isFutureRelease
+  )
+}
+
+function isNowShowingMovie(movie) {
+  return !isComingSoonMovie(movie) && movie.status === 'now_showing'
+}
+
+function getMovieId(movie) {
+  return String(movie?._id || movie?.id || movie?.movie_id || '')
+}
+
+function getScheduledMovieId(showtime) {
+  return String(showtime?.movie_id || '')
+}
+
+function buildScheduledMovies(showtimes, movies) {
+  const moviesById = new Map(movies.map((movie) => [getMovieId(movie), movie]))
+  const scheduledMovies = new Map()
+
+  showtimes.forEach((showtime) => {
+    const movieId = getScheduledMovieId(showtime)
+    if (!movieId || scheduledMovies.has(movieId)) return
+
+    const movie = moviesById.get(movieId) || {
+      _id: movieId,
+      title: showtime.movieTitle,
+      poster: showtime.moviePoster,
+      duration: showtime.movieDuration,
+      status: showtime.movieStatus,
+    }
+
+    scheduledMovies.set(movieId, movie)
+  })
+
+  return Array.from(scheduledMovies.values())
 }
 
 function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
@@ -103,6 +157,7 @@ function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
 
 function NowShowingMovies() {
   const [movies, setMovies] = useState([])
+  const [scheduledShowtimes, setScheduledShowtimes] = useState([])
   const [selectedMovie, setSelectedMovie] = useState(null)
   const [bookingMovie, setBookingMovie] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -114,10 +169,14 @@ function NowShowingMovies() {
     async function loadMovies() {
       try {
         setIsLoading(true)
-        const data = await getMovies()
+        const [movieData, showtimeData] = await Promise.all([
+          getMovies({ limit: 1000 }),
+          getShowtimes({ status: 'scheduled' }),
+        ])
 
         if (isMounted) {
-          setMovies(data)
+          setMovies(movieData)
+          setScheduledShowtimes(showtimeData?.data || [])
           setError('')
         }
       } catch (err) {
@@ -143,8 +202,14 @@ function NowShowingMovies() {
     setBookingMovie(movie)
   }
 
-  const nowShowingMovies = movies.filter((movie) => movie.status === 'now_showing')
-  const comingSoonMovies = movies.filter((movie) => movie.status === 'coming_soon')
+  const nowShowingMovies = movies.filter(isNowShowingMovie)
+  const comingSoonMovies = [
+    ...movies.filter(isComingSoonMovie),
+    ...buildScheduledMovies(scheduledShowtimes, movies),
+  ].filter((movie, index, list) => {
+    const movieId = getMovieId(movie)
+    return movieId && list.findIndex((item) => getMovieId(item) === movieId) === index
+  })
 
   return (
     <section className="mx-auto w-[min(1280px,calc(100%_-_40px))] py-14 max-sm:w-[calc(100%_-_28px)] max-sm:py-10">
@@ -193,7 +258,7 @@ function NowShowingMovies() {
           />
           <MovieGroup
             title="Phim sắp chiếu"
-            movies={comingSoonMovies.slice(0, 4)}
+            movies={comingSoonMovies}
             emptyText="Chưa có phim sắp chiếu."
             onOpenDetail={setSelectedMovie}
             onOpenBooking={openBooking}

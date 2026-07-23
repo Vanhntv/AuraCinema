@@ -174,8 +174,14 @@ const formatDuration = (duration) => {
 };
 
 const getRoomLabel = (room) => {
-  const cinemaName = room.cinema_id?.name || room.cinemaName;
-  return cinemaName ? `${room.name} - ${cinemaName}` : room.name;
+  const roomName = room?.name || "Phòng chiếu";
+  const capacity =
+    Number(room?.capacity) ||
+    (Number(room?.row_count) > 0 && Number(room?.column_count) > 0
+      ? Number(room.row_count) * Number(room.column_count)
+      : null);
+
+  return capacity ? `${roomName} (sức chứa ${capacity} ghế)` : roomName;
 };
 
 const getShowtimeId = (showtime) => showtime.id || showtime._id;
@@ -233,6 +239,7 @@ const formatTimeInputValue = (date) =>
 
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
 const VIP_SEAT_SURCHARGE = 20000;
+const COUPLE_SEAT_SURCHARGE = 20000;
 
 const parseTicketPrice = (value) => {
   const price = Number(String(value || "").replace(/[^\d]/g, ""));
@@ -271,7 +278,7 @@ const buildStandardSeatPrices = (basePrice) => {
     base_price: numericBasePrice,
     normal_price: numericBasePrice,
     vip_price: numericBasePrice + VIP_SEAT_SURCHARGE,
-    couple_price: numericBasePrice * 2,
+    couple_price: numericBasePrice * 2 + COUPLE_SEAT_SURCHARGE,
   };
 };
 

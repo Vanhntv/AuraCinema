@@ -4,7 +4,47 @@ import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
 
-const seatTypeName = (seat) => String(seat.seat_id?.seat_type_id?.name || "").trim().toLowerCase();
+const normalizeText = (value = "") =>
+  String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+const seatTypeName = (seat) => normalizeText(seat.seat_id?.seat_type_id?.name || "").trim();
+
+const isCoupleSeat = (seat) => {
+  const typeName = seatTypeName(seat);
+  return typeName.includes("doi") || typeName.includes("couple") || typeName.includes("double");
+};
+
+const calculateBookingTotalPrice = (seats = []) => {
+  const countedSeatIds = new Set();
+  const sortedSeats = [...seats].sort((first, second) => {
+    const firstRow = String(first.seat_id?.seat_row || "");
+    const secondRow = String(second.seat_id?.seat_row || "");
+    if (firstRow !== secondRow) return firstRow.localeCompare(secondRow);
+    return Number(first.seat_id?.seat_number || 0) - Number(second.seat_id?.seat_number || 0);
+  });
+
+  return sortedSeats.reduce((total, seat, index) => {
+    const seatId = String(seat._id);
+    if (countedSeatIds.has(seatId)) return total;
+
+    if (!isCoupleSeat(seat)) {
+      countedSeatIds.add(seatId);
+      return total + Number(seat.price || 0);
+    }
+
+    const nextSeat = sortedSeats[index + 1];
+    const isPairedCouple =
+      nextSeat &&
+      isCoupleSeat(nextSeat) &&
+      String(nextSeat.seat_id?.seat_row || "") === String(seat.seat_id?.seat_row || "") &&
+      Number(nextSeat.seat_id?.seat_number || 0) === Number(seat.seat_id?.seat_number || 0) + 1;
+
+    countedSeatIds.add(seatId);
+    if (isPairedCouple) countedSeatIds.add(String(nextSeat._id));
+
+    return total + Number(seat.price || 0);
+  }, 0);
+};
 
 export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
@@ -47,7 +87,7 @@ export const createBooking = async (req, res) => {
         throw Object.assign(new Error("Ghế vừa được người khác đặt"), { statusCode: 409 });
       }
 
-      const totalPrice = seats.reduce((total, seat) => total + Number(seat.price), 0);
+      const totalPrice = calculateBookingTotalPrice(seats);
       [createdBooking] = await Booking.create([{
         user_id: user._id,
         showtime_id,
