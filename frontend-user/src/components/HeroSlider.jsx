@@ -37,13 +37,9 @@ const buildSelectedSlides = (movies, selectedBannerUrls) => {
   return selectedBannerUrls
     .map((url, index) => {
       const slide = slidesByUrl.get(url);
-      return slide || {
-        id: `selected-${index}-${url}`,
-        title: "Aura Cinema",
-        imageUrl: url,
-      };
+      return slide ? { ...slide, id: `${slide.id}-${index}` } : null;
     })
-    .filter((slide) => slide.imageUrl);
+    .filter(Boolean);
 };
 
 function HeroSlider() {

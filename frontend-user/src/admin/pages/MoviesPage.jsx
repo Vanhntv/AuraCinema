@@ -13,7 +13,6 @@ import {
   getMovies,
   updateMovie,
 } from "../services/movieService";
-import BannerManagerModal from "../components/movies/BannerManagerModal";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import MovieModal from "../components/movies/MovieModal";
 import MovieTable from "../components/movies/MovieTable";
@@ -56,7 +55,6 @@ const MoviesPage = () => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deletingMovie, setDeletingMovie] = useState(null);
   const [trailerMovie, setTrailerMovie] = useState(null);
-  const [bannerMovie, setBannerMovie] = useState(null);
   const [bannerSettings, setBannerSettings] = useState(defaultBannerSettings);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsSubmitting, setSettingsSubmitting] = useState(false);
@@ -109,11 +107,17 @@ const MoviesPage = () => {
         getMovies("", 1, 1000),
       ]);
       const settings = response.data || {};
+      const bannerMovies = movieResponse.data || [];
+      const availableBannerUrls = new Set(
+        bannerMovies.flatMap((movie) => normalizeMovieBanners(movie)),
+      );
+      const selectedBannerUrls = (
+        settings.selected_banner_urls || defaultBannerSettings.selected_banner_urls
+      ).filter((url) => availableBannerUrls.has(url));
 
-      setBannerCatalogMovies(movieResponse.data || []);
+      setBannerCatalogMovies(bannerMovies);
       setBannerSettings({
-        selected_banner_urls:
-          settings.selected_banner_urls || defaultBannerSettings.selected_banner_urls,
+        selected_banner_urls: selectedBannerUrls,
         slide_interval_seconds: Math.round(
           (settings.slide_interval_ms ||
             defaultBannerSettings.slide_interval_seconds * 1000) / 1000,
@@ -213,25 +217,6 @@ const MoviesPage = () => {
     }
   };
 
-  const handleSubmitBanners = async (movie, banners) => {
-    try {
-      setSubmitting(true);
-      await updateMovie(movie._id, {
-        banners,
-        banner: banners[0] || "",
-      });
-      addToast("success", `Đã cập nhật banner cho "${movie.title}"`);
-      setBannerMovie(null);
-      fetchMovies(currentPage, searchQuery);
-      fetchBannerSettings();
-    } catch (error) {
-      const msg =
-        error.response?.data?.message || "Có lỗi xảy ra, vui lòng thử lại";
-      addToast("error", msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleBannerSettingsChange = (field, value) => {
     setBannerSettings((current) => ({
@@ -382,7 +367,7 @@ const MoviesPage = () => {
               })}
             </div>
           ) : (
-            <div className="banner-manager-empty">
+            <div className="home-banner-empty">
               Chưa có banner nào. Hãy thêm banner ở từng phim trước.
             </div>
           )}
@@ -435,7 +420,6 @@ const MoviesPage = () => {
               onEdit={handleEdit}
               onDelete={handleDeleteClick}
               onViewTrailer={setTrailerMovie}
-              onManageBanners={setBannerMovie}
             />
 
             {totalPages > 1 && (
@@ -496,14 +480,6 @@ const MoviesPage = () => {
         title={trailerMovie ? `${trailerMovie.title} - Trailer` : "Trailer"}
         trailerUrl={trailerMovie?.trailer_url}
         onClose={() => setTrailerMovie(null)}
-      />
-
-      <BannerManagerModal
-        isOpen={!!bannerMovie}
-        movie={bannerMovie}
-        isLoading={submitting}
-        onClose={() => setBannerMovie(null)}
-        onSubmit={handleSubmitBanners}
       />
     </div>
   );

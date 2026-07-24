@@ -152,15 +152,12 @@ const MovieModal = ({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validate()) {
+      const bannerUrl =
+        typeof formData.banner === "string" ? formData.banner.trim() : "";
       const submitData = {
         ...formData,
-        banners: Array.from(
-          new Set(
-            [formData.banner, ...(formData.banners || [])]
-              .map((item) => (typeof item === "string" ? item.trim() : ""))
-              .filter(Boolean),
-          ),
-        ),
+        banner: bannerUrl,
+        banners: bannerUrl ? [bannerUrl] : [],
         duration: Number(formData.duration),
         age_limit:
           formData.age_limit === "" ? null : Number(formData.age_limit),

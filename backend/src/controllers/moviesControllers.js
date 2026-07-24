@@ -46,11 +46,11 @@ const normalizeMoviePayload = (body) => {
         : null;
   }
 
-  if (payload.banners !== undefined) {
+  if (payload.banner !== undefined) {
+    payload.banners = payload.banner ? [payload.banner] : [];
+  } else if (payload.banners !== undefined) {
     payload.banners = normalizeUrlList(payload.banners);
     payload.banner = payload.banners[0] || null;
-  } else if (payload.banner !== undefined) {
-    payload.banners = payload.banner ? [payload.banner] : [];
   }
 
   return payload;
