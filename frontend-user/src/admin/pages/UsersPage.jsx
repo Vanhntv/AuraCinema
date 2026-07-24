@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiOutlineEye,
   HiOutlineKey,
@@ -613,11 +613,21 @@ const UsersPage = () => {
   const [rewardUser, setRewardUser] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
+  const hasLoadedInitialUsersRef = useRef(false);
+  const lastToastRef = useRef({ key: "", timestamp: 0 });
 
   const activeUsers = useMemo(() => users.filter((user) => resolveAccountStatus(user) === "active").length, [users]);
   const bannedUsers = useMemo(() => users.filter((user) => resolveAccountStatus(user) === "banned").length, [users]);
 
   const addToast = useCallback((type, message) => {
+    const key = `${type}:${message}`;
+    const now = Date.now();
+
+    if (lastToastRef.current.key === key && now - lastToastRef.current.timestamp < 1500) {
+      return;
+    }
+
+    lastToastRef.current = { key, timestamp: now };
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, type, message }]);
   }, []);
@@ -653,6 +663,9 @@ const UsersPage = () => {
   );
 
   useEffect(() => {
+    if (hasLoadedInitialUsersRef.current) return;
+
+    hasLoadedInitialUsersRef.current = true;
     fetchUsers(1);
   }, [fetchUsers]);
 
