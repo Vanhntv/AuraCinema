@@ -7,6 +7,7 @@ const emptyFormData = {
   title: "",
   poster: "",
   banner: "",
+  banners: [],
   description: "",
   duration: "",
   release_date: "",
@@ -34,6 +35,16 @@ const getInitialGenreIds = (movie) => {
   const genres = movie?.genres || movie?.genreIds || [];
   if (!Array.isArray(genres)) return [];
   return genres.map(getGenreId).filter(Boolean);
+};
+
+const normalizeBanners = (movie) => {
+  const banners = Array.isArray(movie?.banners) ? movie.banners : [];
+  const urls = banners
+    .concat(movie?.banner ? [movie.banner] : [])
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+
+  return Array.from(new Set(urls));
 };
 
 const MovieModal = ({
@@ -73,10 +84,12 @@ const MovieModal = ({
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
+        const initialBanners = normalizeBanners(initialData);
         setFormData({
           title: initialData.title || "",
           poster: initialData.poster || "",
-          banner: initialData.banner || "",
+          banner: initialData.banner || initialBanners[0] || "",
+          banners: initialBanners,
           description: initialData.description || "",
           duration: initialData.duration || "",
           release_date: toDateInputValue(
@@ -141,6 +154,13 @@ const MovieModal = ({
     if (validate()) {
       const submitData = {
         ...formData,
+        banners: Array.from(
+          new Set(
+            [formData.banner, ...(formData.banners || [])]
+              .map((item) => (typeof item === "string" ? item.trim() : ""))
+              .filter(Boolean),
+          ),
+        ),
         duration: Number(formData.duration),
         age_limit:
           formData.age_limit === "" ? null : Number(formData.age_limit),

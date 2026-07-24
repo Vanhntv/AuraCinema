@@ -1,11 +1,10 @@
 import { NavLink } from "react-router-dom";
 import {
-  HiOutlineViewGrid,
   HiOutlineFilm,
   HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUsers,
-  HiOutlineCog,
+  HiOutlineViewGrid,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
 
@@ -37,7 +36,6 @@ const menuItems = [
     section: "Hệ thống",
     items: [
       { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
-      { path: "/admin/settings", icon: <HiOutlineCog />, label: "Cài đặt" },
     ],
   },
 ];

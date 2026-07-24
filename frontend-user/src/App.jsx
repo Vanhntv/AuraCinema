@@ -107,7 +107,7 @@ function App() {
           <Route path="showtimes" element={<AdminShowtimesPage />} />
           <Route path="trailers" element={<AdminTrailersPage />} />
           <Route path="users" element={<AdminUsersPage />} />
-          <Route path="settings" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="settings" element={<Navigate to="/admin/movies" replace />} />
         </Route>
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
       </Routes>

@@ -1,6 +1,6 @@
-import { HiOutlinePencil, HiOutlinePlay, HiOutlineTrash } from "react-icons/hi";
+import { HiOutlinePhotograph, HiOutlinePencil, HiOutlinePlay, HiOutlineTrash } from "react-icons/hi";
 
-const MovieTable = ({ movies, onEdit, onDelete, onViewTrailer }) => {
+const MovieTable = ({ movies, onEdit, onDelete, onViewTrailer, onManageBanners }) => {
   const formatDate = (dateStr) => {
     if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString("vi-VN", {
@@ -108,6 +108,15 @@ const MovieTable = ({ movies, onEdit, onDelete, onViewTrailer }) => {
                     id={`btn-trailer-${movie._id}`}
                   >
                     <HiOutlinePlay />
+                  </button>
+                  <button
+                    className="btn btn-icon btn-ghost"
+                    style={{ color: "var(--color-warning)" }}
+                    onClick={() => onManageBanners(movie)}
+                    title="Quản lý banner"
+                    id={`btn-banners-${movie._id}`}
+                  >
+                    <HiOutlinePhotograph />
                   </button>
                   <button
                     className="btn btn-icon btn-ghost"
