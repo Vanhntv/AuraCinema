@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../utils/authRedirect";
 
@@ -14,6 +15,7 @@ function LoginPage() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const from = location.state?.from?.pathname || "/";
 
@@ -83,9 +85,17 @@ function LoginPage() {
               onChange={handleChange}
               placeholder="Nhập mật khẩu"
               required
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={formData.password}
             />
+            <button
+              type="button"
+              className="auth-password-toggle"
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              onClick={() => setShowPassword((current) => !current)}
+            >
+              {showPassword ? <HiOutlineEyeOff /> : <HiOutlineEye />}
+            </button>
           </label>
 
           <div className="auth-form-link">

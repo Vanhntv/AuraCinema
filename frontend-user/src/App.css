@@ -80,6 +80,7 @@
 }
 
 .auth-form label {
+  position: relative;
   display: grid;
   gap: 8px;
   color: #fff;
@@ -101,6 +102,43 @@
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
+}
+
+.auth-form label:has(.auth-password-toggle) input {
+  padding-right: 48px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 9px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  transition:
+    color 0.2s,
+    background 0.2s;
+}
+
+.auth-password-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+}
+
+.auth-password-toggle svg {
+  width: 20px;
+  height: 20px;
 }
 
 .auth-form input::placeholder {
