@@ -15,6 +15,12 @@ const movieSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    banners: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
     trailer_url: {
       type: String,
       default: null,

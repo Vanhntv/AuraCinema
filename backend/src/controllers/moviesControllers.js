@@ -1,6 +1,14 @@
 import Movie from "../models/Movie.js";
 import Trailer from "../models/Trailer.js";
 
+const normalizeUrlList = (value) => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+};
+
 const normalizeMoviePayload = (body) => {
   const payload = { ...body };
 
@@ -29,6 +37,20 @@ const normalizeMoviePayload = (body) => {
       typeof payload.trailer_url === "string" && payload.trailer_url.trim()
         ? payload.trailer_url.trim()
         : null;
+  }
+
+  if (payload.banner !== undefined) {
+    payload.banner =
+      typeof payload.banner === "string" && payload.banner.trim()
+        ? payload.banner.trim()
+        : null;
+  }
+
+  if (payload.banners !== undefined) {
+    payload.banners = normalizeUrlList(payload.banners);
+    payload.banner = payload.banners[0] || null;
+  } else if (payload.banner !== undefined) {
+    payload.banners = payload.banner ? [payload.banner] : [];
   }
 
   return payload;
@@ -78,6 +100,11 @@ const attachTrailerUrl = async (movies) => {
 
   const data = list.map((movie) => {
     const plain = movie.toObject ? movie.toObject() : movie;
+    plain.banners = normalizeUrlList(plain.banners);
+    if (!plain.banners.length && plain.banner) {
+      plain.banners = [plain.banner];
+    }
+    plain.banner = plain.banner || plain.banners[0] || "";
     plain.trailer_url = plain.trailer_url || trailerMap[plain._id.toString()] || "";
     return plain;
   });
@@ -114,10 +141,11 @@ export const getAllMovies = async (req, res) => {
 
     const total = await Movie.countDocuments(filter);
     const totalPages = Math.ceil(total / limitNum);
+    const data = await attachTrailerUrl(movies);
 
     res.status(200).json({
       success: true,
-      data: movies,
+      data,
       pagination: {
         page: pageNum,
         limit: limitNum,

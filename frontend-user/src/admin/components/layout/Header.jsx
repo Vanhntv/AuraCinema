@@ -17,7 +17,6 @@ const pageTitles = {
   "/admin/rooms": "Phòng chiếu",
   "/admin/showtimes": "Suất chiếu",
   "/admin/users": "Người dùng",
-  "/admin/settings": "Cài đặt",
 };
 
 const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
