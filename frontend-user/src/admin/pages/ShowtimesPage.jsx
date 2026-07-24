@@ -110,6 +110,23 @@ const normalizeShowtimeErrorMessage = (message, fallback) => {
   return message;
 };
 
+const isAuthzError = (error) => [401, 403].includes(error?.response?.status);
+
+const getScheduleCheckErrorMessage = (error) => {
+  if (error?.response?.status === 401) {
+    return "Phi\u00ean \u0111\u0103ng nh\u1eadp \u0111\u00e3 h\u1ebft h\u1ea1n. Vui l\u00f2ng \u0111\u0103ng nh\u1eadp l\u1ea1i b\u1eb1ng t\u00e0i kho\u1ea3n qu\u1ea3n tr\u1ecb.";
+  }
+
+  if (error?.response?.status === 403) {
+    return "T\u00e0i kho\u1ea3n hi\u1ec7n t\u1ea1i kh\u00f4ng c\u00f3 quy\u1ec1n ki\u1ec3m tra tr\u00f9ng l\u1ecbch. H\u00e3y \u0111\u0103ng nh\u1eadp l\u1ea1i b\u1eb1ng t\u00e0i kho\u1ea3n admin ho\u1eb7c ki\u1ec3m tra role c\u1ee7a t\u00e0i kho\u1ea3n.";
+  }
+
+  return (
+    error?.response?.data?.message ||
+    "Kh\u00f4ng th\u1ec3 ki\u1ec3m tra l\u1ecbch chi\u1ebfu hi\u1ec7n c\u00f3."
+  );
+};
+
 const normalizeText = (value = "") =>
   value
     .normalize("NFD")
@@ -972,6 +989,10 @@ const ShowtimesPage = () => {
                 : "",
             };
           } catch (error) {
+            if (isAuthzError(error)) {
+              throw error;
+            }
+
             return {
               slot,
               hasConflict: Boolean(error.response?.data?.conflict),
@@ -1033,10 +1054,9 @@ const ShowtimesPage = () => {
     } catch (error) {
       setFeedback({
         type: "error",
-        message:
-          error.response?.data?.message ||
-          "Không thể kiểm tra lịch chiếu hiện có.",
+        message: getScheduleCheckErrorMessage(error),
       });
+      setConflictShowtimes([]);
     } finally {
       setAutoScheduling(false);
     }
