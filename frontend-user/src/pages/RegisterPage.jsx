@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 
 function RegisterPage() {
@@ -14,6 +15,8 @@ function RegisterPage() {
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -119,9 +122,17 @@ function RegisterPage() {
               onChange={handleChange}
               placeholder="Tối thiểu 8 ký tự, có chữ hoa và số"
               required
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={formData.password}
             />
+            <button
+              type="button"
+              className="auth-password-toggle"
+              aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+              onClick={() => setShowPassword((current) => !current)}
+            >
+              {showPassword ? <HiOutlineEyeOff /> : <HiOutlineEye />}
+            </button>
           </label>
 
           <label>
@@ -133,9 +144,19 @@ function RegisterPage() {
               onChange={handleChange}
               placeholder="Nhập lại mật khẩu"
               required
-              type="password"
+              type={showConfirmPassword ? "text" : "password"}
               value={formData.confirm_password}
             />
+            <button
+              type="button"
+              className="auth-password-toggle"
+              aria-label={
+                showConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận"
+              }
+              onClick={() => setShowConfirmPassword((current) => !current)}
+            >
+              {showConfirmPassword ? <HiOutlineEyeOff /> : <HiOutlineEye />}
+            </button>
           </label>
 
           <button className="auth-submit auth-field-full" disabled={submitting} type="submit">
