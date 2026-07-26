@@ -567,6 +567,7 @@ export const consumeVoucherQuantityService = async ({
 
   const filter = {
     deleted_at: null,
+    status: true,
     quantity: { $gte: consumeQuantity },
   };
 
@@ -608,6 +609,12 @@ export const consumeVoucherQuantityService = async ({
     if (!existingVoucher) {
       const error = new Error("Khong tim thay voucher");
       error.statusCode = 404;
+      throw error;
+    }
+
+    if (!existingVoucher.status) {
+      const error = new Error("Voucher dang bi vo hieu hoa");
+      error.statusCode = 409;
       throw error;
     }
 

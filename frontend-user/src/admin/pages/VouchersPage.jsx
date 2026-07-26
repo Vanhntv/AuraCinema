@@ -7,11 +7,12 @@ import {
   HiOutlineTicket,
   HiOutlineTrendingUp,
 } from "react-icons/hi";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, getVoucherById, getVouchers, updateVoucher } from "../services/voucherService";
+import { createVoucher, getVoucherById, getVouchers, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -33,6 +34,7 @@ const VouchersPage = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editVoucher, setEditVoucher] = useState(null);
+  const [statusTarget, setStatusTarget] = useState(null);
 
   const activeInPage = useMemo(
     () => vouchers.filter((voucher) => voucher.status).length,
@@ -159,6 +161,25 @@ const VouchersPage = () => {
     }
   };
 
+  const handleConfirmToggleStatus = async () => {
+    if (!statusTarget?._id) return;
+
+    try {
+      setSubmitting(true);
+      await toggleVoucherStatus(statusTarget._id);
+      addToast(
+        "success",
+        `Đã ${statusTarget.status ? "tạm dừng" : "kích hoạt"} mã "${statusTarget.code}"`
+      );
+      setStatusTarget(null);
+      fetchVouchers(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái mã giảm giá");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -271,6 +292,7 @@ const VouchersPage = () => {
               rowStart={(currentPage - 1) * PAGE_SIZE}
               onView={handleViewDetail}
               onEdit={handleEditVoucher}
+              onToggleStatus={setStatusTarget}
             />
             <div className="pagination">
               <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
@@ -306,6 +328,20 @@ const VouchersPage = () => {
         onSubmit={handleUpdateVoucher}
         isLoading={submitting}
         initialData={editVoucher}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(statusTarget)}
+        title={statusTarget?.status ? "Tạm dừng mã giảm giá" : "Kích hoạt mã giảm giá"}
+        message={
+          statusTarget?.status
+            ? `Bạn có chắc chắn muốn tạm dừng mã "${statusTarget?.code}"? Khách hàng sẽ không thể dùng mã này cho đơn mới, các đơn đã áp dụng mã không bị ảnh hưởng.`
+            : `Bạn có chắc chắn muốn kích hoạt lại mã "${statusTarget?.code}"? Khách hàng có thể dùng mã nếu mã còn hạn và còn lượt.`
+        }
+        confirmLabel={statusTarget?.status ? "Tạm dừng mã" : "Kích hoạt mã"}
+        confirmClassName={statusTarget?.status ? "btn-danger" : "btn-primary"}
+        onConfirm={handleConfirmToggleStatus}
+        onCancel={() => setStatusTarget(null)}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />

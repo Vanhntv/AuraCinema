@@ -1,4 +1,4 @@
-import { HiOutlineEye, HiOutlinePencil } from "react-icons/hi";
+import { HiOutlineEye, HiOutlinePause, HiOutlinePencil, HiOutlinePlay } from "react-icons/hi";
 
 const discountTypeLabels = {
   percent: "Phần trăm",
@@ -54,7 +54,7 @@ const formatDiscountValue = (voucher) => {
   return formatCurrency(voucher.discount_value);
 };
 
-const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit }) => (
+const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }) => (
   <div className="table-wrapper vouchers-table-wrapper">
     <table className="data-table vouchers-table">
       <thead>
@@ -68,7 +68,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit }) => (
           <th style={{ width: "140px" }}>Lượt dùng</th>
           <th style={{ width: "130px" }}>Phạm vi</th>
           <th style={{ width: "150px" }}>Trạng thái</th>
-          <th style={{ width: "110px", textAlign: "center" }}>Thao tác</th>
+          <th style={{ width: "150px", textAlign: "center" }}>Thao tác</th>
         </tr>
       </thead>
       <tbody>
@@ -132,6 +132,13 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit }) => (
                       onClick={() => onEdit(voucher)}
                     >
                       <HiOutlinePencil />
+                    </button>
+                    <button
+                      className="btn btn-icon btn-ghost"
+                      title={voucher.status ? "Tạm dừng mã" : "Kích hoạt mã"}
+                      onClick={() => onToggleStatus(voucher)}
+                    >
+                      {voucher.status ? <HiOutlinePause /> : <HiOutlinePlay />}
                     </button>
                   </div>
                 </td>

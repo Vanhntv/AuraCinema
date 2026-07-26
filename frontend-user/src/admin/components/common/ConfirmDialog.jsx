@@ -1,6 +1,14 @@
 import { HiOutlineExclamation } from "react-icons/hi";
 
-const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
+const ConfirmDialog = ({
+  isOpen,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+  confirmLabel = "Xác nhận xóa",
+  confirmClassName = "btn-danger",
+}) => {
   if (!isOpen) return null;
 
   return (
@@ -16,8 +24,8 @@ const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel }) => {
             <button className="btn btn-secondary" onClick={onCancel}>
               {"H\u1ee7y b\u1ecf"}
             </button>
-            <button className="btn btn-danger" onClick={onConfirm}>
-              {"X\u00e1c nh\u1eadn x\u00f3a"}
+            <button className={`btn ${confirmClassName}`} onClick={onConfirm}>
+              {confirmLabel}
             </button>
           </div>
         </div>
