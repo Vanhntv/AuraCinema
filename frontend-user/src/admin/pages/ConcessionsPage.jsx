@@ -11,6 +11,7 @@ import Toast from "../components/common/Toast";
 import ConcessionContentModal from "../components/concessions/ConcessionContentModal";
 import ConcessionModal from "../components/concessions/ConcessionModal";
 import ConcessionPriceModal from "../components/concessions/ConcessionPriceModal";
+import ConcessionStatusModal from "../components/concessions/ConcessionStatusModal";
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
   createConcession,
@@ -36,6 +37,7 @@ const ConcessionsPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceTarget, setPriceTarget] = useState(null);
   const [contentTarget, setContentTarget] = useState(null);
+  const [statusTarget, setStatusTarget] = useState(null);
 
   const activeCount = useMemo(
     () => items.filter((item) => item.status).length,
@@ -129,19 +131,23 @@ const ConcessionsPage = () => {
     }
   };
 
-  const handleToggleStatus = async (item) => {
+  const handleUpdateStatus = async (item, nextStatus) => {
     try {
-      await updateConcessionStatus(item._id, !item.status);
+      setSubmitting(true);
+      await updateConcessionStatus(item._id, nextStatus);
       addToast(
         "success",
-        `Đã chuyển "${item.name}" sang ${item.status ? "ngừng bán" : "đang bán"}`,
+        `Đã chuyển "${item.name}" sang ${nextStatus ? "đang bán" : "ngừng bán"}`,
       );
+      setStatusTarget(null);
       fetchConcessions(currentPage);
     } catch (error) {
       addToast(
         "error",
         error.response?.data?.message || "Không thể cập nhật trạng thái dịch vụ",
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -287,7 +293,7 @@ const ConcessionsPage = () => {
             <ConcessionTable
               items={items}
               rowStart={(currentPage - 1) * PAGE_SIZE}
-              onToggleStatus={handleToggleStatus}
+              onToggleStatus={setStatusTarget}
               onEditPrice={setPriceTarget}
               onEditContent={setContentTarget}
             />
@@ -333,6 +339,13 @@ const ConcessionsPage = () => {
         item={contentTarget}
         onClose={() => setContentTarget(null)}
         onSubmit={handleUpdateContent}
+        isLoading={submitting}
+      />
+
+      <ConcessionStatusModal
+        item={statusTarget}
+        onClose={() => setStatusTarget(null)}
+        onSubmit={handleUpdateStatus}
         isLoading={submitting}
       />
 
