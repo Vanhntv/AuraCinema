@@ -12,7 +12,7 @@ import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, deleteVoucher, getVoucherById, getVouchers, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
+import { createVoucher, deleteVoucher, getVoucherById, getVouchers, getVoucherUsageHistory, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +32,7 @@ const VouchersPage = () => {
   const [toasts, setToasts] = useState([]);
   const [detailVoucher, setDetailVoucher] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailUsageHistory, setDetailUsageHistory] = useState([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editVoucher, setEditVoucher] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
@@ -110,11 +111,17 @@ const VouchersPage = () => {
     try {
       setDetailVoucher(voucher);
       setDetailLoading(true);
-      const response = await getVoucherById(voucher._id);
-      setDetailVoucher(response.data);
+      setDetailUsageHistory([]);
+      const [detailResponse, usageResponse] = await Promise.all([
+        getVoucherById(voucher._id),
+        getVoucherUsageHistory(voucher._id, { limit: 20 }),
+      ]);
+      setDetailVoucher(detailResponse.data);
+      setDetailUsageHistory(usageResponse.data || []);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể tải chi tiết mã giảm giá");
       setDetailVoucher(null);
+      setDetailUsageHistory([]);
     } finally {
       setDetailLoading(false);
     }
@@ -331,7 +338,11 @@ const VouchersPage = () => {
       <VoucherDetailModal
         voucher={detailVoucher}
         loading={detailLoading}
-        onClose={() => setDetailVoucher(null)}
+        usageHistory={detailUsageHistory}
+        onClose={() => {
+          setDetailVoucher(null);
+          setDetailUsageHistory([]);
+        }}
       />
 
       <VoucherModal

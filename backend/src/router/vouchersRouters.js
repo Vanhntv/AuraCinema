@@ -5,6 +5,7 @@ import {
   deleteVoucher,
   getAllVouchers,
   getVoucherById,
+  getVoucherUsageHistory,
   verifyVoucher,
   toggleVoucherStatus,
   updateVoucher,
@@ -17,6 +18,7 @@ const adminOnly = [authMiddleware, authorizeRoles("admin")];
 router.post("/verify", optionalAuthMiddleware, verifyVoucher);
 router.get("/verify", optionalAuthMiddleware, verifyVoucher);
 router.get("/", adminOnly, getAllVouchers);
+router.get("/:id/usages", adminOnly, getVoucherUsageHistory);
 router.get("/:id", adminOnly, getVoucherById);
 router.post("/", adminOnly, createVoucher);
 router.post("/:id/consume", adminOnly, consumeVoucherQuantity);

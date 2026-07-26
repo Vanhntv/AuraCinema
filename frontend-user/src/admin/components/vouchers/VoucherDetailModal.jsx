@@ -13,6 +13,26 @@ const scopeLabels = {
   member: "Thành viên",
 };
 
+const paymentStatusLabels = {
+  pending: "Chờ thanh toán",
+  paid: "Đã thanh toán",
+  failed: "Thanh toán lỗi",
+  refunded: "Đã hoàn tiền",
+};
+
+const bookingStatusLabels = {
+  confirmed: "Đã đặt",
+  cancelled: "Đã hủy",
+  unknown: "Không rõ",
+};
+
+const usageStatusLabels = {
+  reserved: "Đã giữ lượt",
+  used: "Đã sử dụng",
+  refunded: "Đã hoàn lượt",
+  cancelled: "Đã hủy lượt",
+};
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -77,7 +97,13 @@ const DetailField = ({ label, value }) => (
   </div>
 );
 
-const VoucherDetailModal = ({ voucher, loading, onClose }) => {
+const shortId = (value) => {
+  if (!value) return "-";
+  const id = String(value);
+  return id.length > 8 ? `#${id.slice(-8).toUpperCase()}` : `#${id.toUpperCase()}`;
+};
+
+const VoucherDetailModal = ({ voucher, loading, usageHistory = [], onClose }) => {
   if (!voucher && !loading) return null;
 
   const status = resolveVoucherStatus(voucher);
@@ -171,6 +197,59 @@ const VoucherDetailModal = ({ voucher, loading, onClose }) => {
                   <DetailField label="Người tạo" value={voucher.created_by?.full_name || voucher.created_by?.email || voucher.created_by} />
                   <DetailField label="Ngày tạo" value={formatDateTime(voucher.created_at)} />
                   <DetailField label="Ngày cập nhật" value={formatDateTime(voucher.updated_at)} />
+                </div>
+              </section>
+
+              <section className="voucher-detail-section">
+                <div className="voucher-detail-heading">
+                  <span>Lịch sử sử dụng mã</span>
+                </div>
+                <div className="table-wrapper vouchers-table-wrapper">
+                  <table className="data-table vouchers-table">
+                    <thead>
+                      <tr>
+                        <th>Mã đơn hàng</th>
+                        <th>Khách hàng</th>
+                        <th>Mã giảm giá</th>
+                        <th>Tổng trước giảm</th>
+                        <th>Số tiền giảm</th>
+                        <th>Tổng sau giảm</th>
+                        <th>Thời gian dùng</th>
+                        <th>Thanh toán</th>
+                        <th>Đơn hàng</th>
+                        <th>Lượt dùng</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usageHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan="10">
+                            <div className="table-empty">
+                              <div className="table-empty-text">Mã này chưa có lịch sử sử dụng</div>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        usageHistory.map((item) => (
+                          <tr key={item.id}>
+                            <td>{shortId(item.order_id)}</td>
+                            <td>
+                              <div className="table-cell-name">{item.customer?.full_name || "Khách hàng"}</div>
+                              <div className="table-cell-desc">{item.customer?.email || "Chưa có email"}</div>
+                            </td>
+                            <td><span className="voucher-code">{item.code}</span></td>
+                            <td>{formatCurrency(item.subtotal_price)}</td>
+                            <td className="voucher-discount-value">-{formatCurrency(item.discount_amount)}</td>
+                            <td>{formatCurrency(item.final_price)}</td>
+                            <td>{formatDateTime(item.used_at)}</td>
+                            <td>{paymentStatusLabels[item.payment_status] || item.payment_status || "-"}</td>
+                            <td>{bookingStatusLabels[item.booking_status] || item.booking_status || "-"}</td>
+                            <td>{usageStatusLabels[item.usage_status] || item.usage_status || "-"}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </>

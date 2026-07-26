@@ -230,6 +230,35 @@ const toVoucherListItem = (voucher) => {
 
 export const normalizeVoucherForResponse = toVoucherListItem;
 
+const toVoucherUsageHistoryItem = (usage) => {
+  const data = typeof usage.toObject === "function" ? usage.toObject() : { ...usage };
+  const booking = data.booking_id;
+  const user = data.user_id;
+
+  return {
+    id: data._id,
+    order_id: booking?._id || data.booking_id,
+    customer: user
+      ? {
+          id: user._id,
+          full_name: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          member_tier: user.member_tier,
+        }
+      : null,
+    voucher_id: data.voucher_id,
+    code: data.code,
+    subtotal_price: data.subtotal_price,
+    discount_amount: data.discount_amount,
+    final_price: data.final_price,
+    used_at: data.used_at,
+    payment_status: booking?.payment_status || data.payment_status,
+    booking_status: booking?.status || "unknown",
+    usage_status: data.status,
+  };
+};
+
 const buildVoucherFilter = (query = {}) => {
   const { q, search, status, discount_type, apply_scope } = query;
   const normalizedStatus = isMissing(status) ? "" : String(status).trim().toLowerCase();
@@ -538,6 +567,45 @@ export const getVoucherByIdService = async (id) => {
 
   const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
   return voucher ? normalizeVoucherForResponse(voucher) : null;
+};
+
+export const listVoucherUsageHistoryService = async (id, query = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error("Voucher khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 10, 1), 50);
+  const skip = (page - 1) * limit;
+  const filter = { voucher_id: id };
+
+  if (!isMissing(query.status)) {
+    filter.status = String(query.status).trim();
+  }
+
+  const [items, totalItems] = await Promise.all([
+    VoucherUsage.find(filter)
+      .populate("user_id", "full_name email phone member_tier")
+      .populate("booking_id", "status payment_status total_price subtotal_price discount_amount created_at")
+      .sort({ used_at: -1, created_at: -1 })
+      .skip(skip)
+      .limit(limit),
+    VoucherUsage.countDocuments(filter),
+  ]);
+
+  return {
+    data: items.map(toVoucherUsageHistoryItem),
+    pagination: {
+      page,
+      limit,
+      totalItems,
+      totalPages: Math.max(Math.ceil(totalItems / limit), 1),
+      hasNextPage: page * limit < totalItems,
+      hasPrevPage: page > 1,
+    },
+  };
 };
 
 export const createVoucherService = async (payload, user = null) => {

@@ -3,6 +3,7 @@ import {
   consumeVoucherQuantityService,
   deleteVoucherService,
   getVoucherByIdService,
+  listVoucherUsageHistoryService,
   listVouchers,
   toggleVoucherStatusService,
   verifyVoucherService,
@@ -30,6 +31,21 @@ export const getAllVouchers = async (req, res) => {
     }
 
     return res.status(200).json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const getVoucherUsageHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await listVoucherUsageHistoryService(id, req.query);
+
+    res.status(200).json({
       success: true,
       data: result.data,
       pagination: result.pagination,

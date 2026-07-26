@@ -12,6 +12,11 @@ export const getVoucherById = async (id) => {
   return response.data;
 };
 
+export const getVoucherUsageHistory = async (id, params = {}) => {
+  const response = await axiosClient.get(`${API_URL}/${id}/usages`, { params });
+  return response.data;
+};
+
 export const createVoucher = async (data) => {
   const response = await axiosClient.post(API_URL, data);
   return response.data;
