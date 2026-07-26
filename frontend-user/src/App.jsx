@@ -16,6 +16,7 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AccountPage from './pages/AccountPage';
+import SupportInfoPage from './pages/SupportInfoPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 const AdminLayout = lazy(() => import('./admin/components/layout/AdminLayout'));
@@ -69,6 +70,10 @@ function App() {
         <Route path="/khuyen-mai/:slug" element={<PromotionDetailPage />} />
         <Route path="/gia-ve" element={<TicketPricePage />} />
         <Route path="/gioi-thieu" element={<AboutPage />} />
+        <Route path="/dieu-khoan-su-dung" element={<SupportInfoPage />} />
+        <Route path="/chinh-sach-bao-mat" element={<SupportInfoPage />} />
+        <Route path="/huong-dan-dat-ve" element={<SupportInfoPage />} />
+        <Route path="/cau-hoi-thuong-gap" element={<SupportInfoPage />} />
         <Route path="/dang-ky" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/dang-nhap" element={<LoginPage />} />
