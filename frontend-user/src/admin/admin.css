@@ -3878,6 +3878,33 @@
   accent-color: var(--color-accent);
 }
 
+.gift-thumb {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  display: flex;
+  height: 48px;
+  justify-content: center;
+  overflow: hidden;
+  width: 56px;
+}
+
+.gift-thumb img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.gift-thumb svg {
+  font-size: 22px;
+}
+
+.gifts-table td {
+  vertical-align: middle;
+}
+
 @media (max-width: 768px) {
   .voucher-detail-grid {
     grid-template-columns: 1fr;
