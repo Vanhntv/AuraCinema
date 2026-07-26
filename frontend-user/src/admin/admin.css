@@ -3726,3 +3726,67 @@
 .voucher-sort-select {
   min-width: 190px;
 }
+
+.voucher-detail-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.voucher-detail-section:first-child {
+  padding-top: 0;
+}
+
+.voucher-detail-section:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.voucher-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.voucher-detail-heading > span:first-child {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.voucher-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.voucher-detail-field {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+}
+
+.voucher-detail-field span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.voucher-detail-field strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-primary);
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .voucher-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

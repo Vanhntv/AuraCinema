@@ -7,8 +7,9 @@ import {
   HiOutlineTrendingUp,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
+import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { getVouchers } from "../services/voucherService";
+import { getVoucherById, getVouchers } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -25,6 +26,8 @@ const VouchersPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [detailVoucher, setDetailVoucher] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const activeInPage = useMemo(
     () => vouchers.filter((voucher) => voucher.status).length,
@@ -93,6 +96,20 @@ const VouchersPage = () => {
     setSortBy(nextSortBy);
     setSortOrder(nextSortOrder);
     fetchVouchers(1, { sort_by: nextSortBy, sort_order: nextSortOrder });
+  };
+
+  const handleViewDetail = async (voucher) => {
+    try {
+      setDetailVoucher(voucher);
+      setDetailLoading(true);
+      const response = await getVoucherById(voucher._id);
+      setDetailVoucher(response.data);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tải chi tiết mã giảm giá");
+      setDetailVoucher(null);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   return (
@@ -198,7 +215,11 @@ const VouchersPage = () => {
           </div>
         ) : (
           <>
-            <VoucherTable vouchers={vouchers} rowStart={(currentPage - 1) * PAGE_SIZE} />
+            <VoucherTable
+              vouchers={vouchers}
+              rowStart={(currentPage - 1) * PAGE_SIZE}
+              onView={handleViewDetail}
+            />
             <div className="pagination">
               <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
                 Trang trước
@@ -213,6 +234,12 @@ const VouchersPage = () => {
           </>
         )}
       </div>
+
+      <VoucherDetailModal
+        voucher={detailVoucher}
+        loading={detailLoading}
+        onClose={() => setDetailVoucher(null)}
+      />
 
       <Toast toasts={toasts} onRemove={removeToast} />
     </>

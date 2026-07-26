@@ -75,6 +75,8 @@ const toVoucherListItem = (voucher) => {
   };
 };
 
+export const normalizeVoucherForResponse = toVoucherListItem;
+
 const buildVoucherFilter = (query = {}) => {
   const { q, search, status, discount_type, apply_scope } = query;
   const filter = {
@@ -313,7 +315,8 @@ export const getVoucherByIdService = async (id) => {
     throw error;
   }
 
-  return Voucher.findOne({ _id: id, deleted_at: null });
+  const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
+  return voucher ? normalizeVoucherForResponse(voucher) : null;
 };
 
 export const createVoucherService = async (payload) => {
