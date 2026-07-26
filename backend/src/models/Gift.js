@@ -34,6 +34,11 @@ const giftSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    value_label: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     quantity: {
       type: Number,
       required: true,

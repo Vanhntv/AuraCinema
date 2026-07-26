@@ -1,4 +1,4 @@
-import { getGiftByIdService, listGifts } from "../services/giftService.js";
+import { createGiftService, getGiftByIdService, listGifts } from "../services/giftService.js";
 
 const sendError = (res, error) => {
   const statusCode = error.statusCode || 500;
@@ -36,6 +36,20 @@ export const getGiftById = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      data: gift,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const createGift = async (req, res) => {
+  try {
+    const gift = await createGiftService(req.body, req.user);
+
+    return res.status(201).json({
+      success: true,
+      message: "Tạo quà tặng thành công.",
       data: gift,
     });
   } catch (error) {

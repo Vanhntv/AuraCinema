@@ -5,13 +5,14 @@ import {
   HiOutlinePause,
   HiOutlinePencil,
   HiOutlinePlay,
+  HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineTrash,
   HiOutlineX,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
-import { getGiftById, getGifts } from "../services/giftService";
+import { createGift, getGiftById, getGifts } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -65,6 +66,10 @@ const formatDateTime = (value) => {
 };
 
 const formatGiftValue = (gift) => {
+  if (gift.value_label) {
+    return gift.value_label;
+  }
+
   if (gift.type === "point") {
     return `${Number(gift.value || 0).toLocaleString("vi-VN")} điểm`;
   }
@@ -201,6 +206,249 @@ const GiftDetailModal = ({ gift, loading, onClose }) => {
   );
 };
 
+const emptyGiftForm = {
+  name: "",
+  code: "",
+  description: "",
+  image_url: "",
+  type: "ticket",
+  value_label: "",
+  value: "",
+  quantity: "",
+  min_order: "",
+  member_tier: "",
+  birthday: false,
+  campaign: "",
+  condition_note: "",
+  start_date: "",
+  end_date: "",
+  status: "active",
+};
+
+const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState(emptyGiftForm);
+  const [errors, setErrors] = useState({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormData(emptyGiftForm);
+    setErrors({});
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+    const quantity = Number(formData.quantity);
+    const value = formData.value === "" ? 0 : Number(formData.value);
+    const minOrder = formData.min_order === "" ? null : Number(formData.min_order);
+    const startDate = formData.start_date ? new Date(formData.start_date) : null;
+    const endDate = formData.end_date ? new Date(formData.end_date) : null;
+    const imagePattern = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i;
+
+    if (!formData.name.trim()) nextErrors.name = "Tên quà là bắt buộc";
+    if (!/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
+      nextErrors.code = "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự";
+    }
+    if (!formData.value_label.trim() && (!Number.isFinite(value) || value <= 0)) {
+      nextErrors.value_label = "Vui lòng nhập giá trị quà";
+    }
+    if (["voucher", "point"].includes(formData.type) && (!Number.isFinite(value) || value <= 0)) {
+      nextErrors.value = formData.type === "point"
+        ? "Quà điểm thưởng phải có số điểm lớn hơn 0"
+        : "Quà voucher phải có giá trị lớn hơn 0";
+    }
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      nextErrors.quantity = "Tổng số lượng phải là số nguyên lớn hơn 0";
+    }
+    if (minOrder !== null && (!Number.isFinite(minOrder) || minOrder < 0)) {
+      nextErrors.min_order = "Đơn tối thiểu không hợp lệ";
+    }
+    if (!formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
+    if (!formData.end_date) nextErrors.end_date = "Ngày kết thúc là bắt buộc";
+    if (startDate && endDate && endDate <= startDate) {
+      nextErrors.end_date = "Ngày kết thúc phải sau ngày bắt đầu";
+    }
+    if (formData.image_url.trim() && !imagePattern.test(formData.image_url.trim())) {
+      nextErrors.image_url = "Ảnh phải là URL jpg, jpeg, png, webp hoặc gif";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!validate()) return;
+
+    onSubmit({
+      name: formData.name.trim(),
+      code: formData.code.trim().toUpperCase(),
+      description: formData.description.trim(),
+      image_url: formData.image_url.trim(),
+      type: formData.type,
+      value_label: formData.value_label.trim(),
+      value: formData.value === "" ? 0 : Number(formData.value),
+      quantity: Number(formData.quantity),
+      condition: {
+        min_order: formData.min_order === "" ? null : Number(formData.min_order),
+        member_tier: formData.member_tier,
+        birthday: formData.birthday,
+        campaign: formData.campaign.trim(),
+        note: formData.condition_note.trim(),
+      },
+      start_date: formData.start_date,
+      end_date: formData.end_date,
+      status: formData.status,
+    });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Thêm quà tặng</h2>
+          <button type="button" className="modal-close" onClick={onClose}>
+            <HiOutlineX />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body voucher-form">
+            <section className="voucher-form-section">
+              <h3>Thông tin cơ bản</h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Tên quà <span className="required">*</span></label>
+                  <input className={`form-input ${errors.name ? "error" : ""}`} value={formData.name} onChange={(event) => handleChange("name", event.target.value)} />
+                  {errors.name && <p className="form-error">{errors.name}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Mã quà <span className="required">*</span></label>
+                  <input className={`form-input ${errors.code ? "error" : ""}`} value={formData.code} onChange={(event) => handleChange("code", event.target.value.toUpperCase())} />
+                  {errors.code && <p className="form-error">{errors.code}</p>}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mô tả</label>
+                <textarea className="form-input form-textarea" value={formData.description} onChange={(event) => handleChange("description", event.target.value)} />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Ảnh</label>
+                  <input className={`form-input ${errors.image_url ? "error" : ""}`} placeholder="https://..." value={formData.image_url} onChange={(event) => handleChange("image_url", event.target.value)} />
+                  {errors.image_url && <p className="form-error">{errors.image_url}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Loại quà <span className="required">*</span></label>
+                  <select className="form-input" value={formData.type} onChange={(event) => handleChange("type", event.target.value)}>
+                    <option value="ticket">Vé</option>
+                    <option value="combo">Combo</option>
+                    <option value="voucher">Voucher</option>
+                    <option value="point">Điểm</option>
+                    <option value="physical">Quà vật phẩm</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="voucher-form-section">
+              <h3>Giá trị và số lượng</h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Giá trị hiển thị <span className="required">*</span></label>
+                  <input className={`form-input ${errors.value_label ? "error" : ""}`} placeholder="Combo Big, Voucher 50.000 VNĐ, 500 điểm" value={formData.value_label} onChange={(event) => handleChange("value_label", event.target.value)} />
+                  {errors.value_label && <p className="form-error">{errors.value_label}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Giá trị quy đổi</label>
+                  <input className={`form-input ${errors.value ? "error" : ""}`} type="number" min="0" value={formData.value} onChange={(event) => handleChange("value", event.target.value)} />
+                  {errors.value && <p className="form-error">{errors.value}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Tổng số lượng <span className="required">*</span></label>
+                  <input className={`form-input ${errors.quantity ? "error" : ""}`} type="number" min="1" value={formData.quantity} onChange={(event) => handleChange("quantity", event.target.value)} />
+                  {errors.quantity && <p className="form-error">{errors.quantity}</p>}
+                </div>
+              </div>
+            </section>
+
+            <section className="voucher-form-section">
+              <h3>Điều kiện nhận</h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Đơn tối thiểu</label>
+                  <input className={`form-input ${errors.min_order ? "error" : ""}`} type="number" min="0" placeholder="300000" value={formData.min_order} onChange={(event) => handleChange("min_order", event.target.value)} />
+                  {errors.min_order && <p className="form-error">{errors.min_order}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Hạng thành viên</label>
+                  <select className="form-input" value={formData.member_tier} onChange={(event) => handleChange("member_tier", event.target.value)}>
+                    <option value="">Không yêu cầu</option>
+                    <option value="member">Member</option>
+                    <option value="gold">Gold</option>
+                    <option value="vip">VIP</option>
+                    <option value="vvip">VVIP</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Chương trình</label>
+                  <input className="form-input" placeholder="Sinh nhật Aura, Khách Gold..." value={formData.campaign} onChange={(event) => handleChange("campaign", event.target.value)} />
+                </div>
+              </div>
+              <div className="segmented-options">
+                <label>
+                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} />
+                  Sinh nhật
+                </label>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Ghi chú điều kiện</label>
+                <textarea className="form-input form-textarea" placeholder="Ví dụ: Đơn trên 300.000 VNĐ, khách Gold, sinh nhật..." value={formData.condition_note} onChange={(event) => handleChange("condition_note", event.target.value)} />
+              </div>
+            </section>
+
+            <section className="voucher-form-section">
+              <h3>Thời gian</h3>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Ngày bắt đầu <span className="required">*</span></label>
+                  <input className={`form-input ${errors.start_date ? "error" : ""}`} type="datetime-local" value={formData.start_date} onChange={(event) => handleChange("start_date", event.target.value)} />
+                  {errors.start_date && <p className="form-error">{errors.start_date}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Ngày kết thúc <span className="required">*</span></label>
+                  <input className={`form-input ${errors.end_date ? "error" : ""}`} type="datetime-local" value={formData.end_date} onChange={(event) => handleChange("end_date", event.target.value)} />
+                  {errors.end_date && <p className="form-error">{errors.end_date}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Trạng thái</label>
+                  <select className="form-input" value={formData.status} onChange={(event) => handleChange("status", event.target.value)}>
+                    <option value="active">Kích hoạt</option>
+                    <option value="draft">Nháp</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Hủy bỏ</button>
+            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : "Tạo quà tặng"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const GiftsPage = () => {
   const [gifts, setGifts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -216,6 +464,8 @@ const GiftsPage = () => {
   const [toasts, setToasts] = useState([]);
   const [detailGift, setDetailGift] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const addToast = useCallback((type, message) => {
     const id = Date.now() + Math.random();
@@ -291,6 +541,20 @@ const GiftsPage = () => {
     }
   };
 
+  const handleCreateGift = async (payload) => {
+    try {
+      setSubmitting(true);
+      const response = await createGift(payload);
+      addToast("success", response.message || "Tạo quà tặng thành công.");
+      setIsCreateModalOpen(false);
+      fetchGifts(1);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tạo quà tặng");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -299,6 +563,10 @@ const GiftsPage = () => {
           <p>Theo dõi mã quà, số lượng, thời gian áp dụng và trạng thái phát quà.</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+            <HiOutlinePlus />
+            Thêm quà
+          </button>
           <button className="btn btn-secondary" onClick={() => fetchGifts(currentPage)} disabled={loading}>
             <HiOutlineRefresh />
             Làm mới
@@ -482,6 +750,13 @@ const GiftsPage = () => {
           setDetailGift(null);
           setDetailLoading(false);
         }}
+      />
+
+      <GiftCreateModal
+        isOpen={isCreateModalOpen}
+        isLoading={submitting}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateGift}
       />
     </>
   );
