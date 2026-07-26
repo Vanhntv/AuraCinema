@@ -29,6 +29,30 @@ const USED_VOUCHER_EDITABLE_FIELDS = new Set([
   "status",
 ]);
 
+export const VOUCHER_MESSAGES = {
+  CREATED: "Tạo mã giảm giá thành công.",
+  UPDATED: "Cập nhật mã giảm giá thành công.",
+  EXISTS: "Mã giảm giá đã tồn tại.",
+  NOT_FOUND: "Mã giảm giá không tồn tại.",
+  INVALID: "Mã giảm giá không hợp lệ.",
+  VALID: "Mã giảm giá hợp lệ.",
+  INACTIVE: "Mã giảm giá đang tạm dừng.",
+  NOT_STARTED: "Mã giảm giá chưa đến thời gian sử dụng.",
+  EXPIRED: "Mã giảm giá đã hết hạn.",
+  OUT_OF_USAGE: "Mã giảm giá đã hết lượt sử dụng.",
+  MIN_ORDER: "Đơn hàng chưa đạt giá trị tối thiểu.",
+  CUSTOMER_LIMIT: "Bạn đã sử dụng hết số lượt cho phép.",
+  WRONG_MOVIE: "Mã không áp dụng cho phim này.",
+  WRONG_MEMBER_TIER: "Hạng thành viên của bạn không đủ điều kiện áp dụng mã.",
+  TICKET_SCOPE: "Mã này chỉ áp dụng cho vé xem phim.",
+  CONCESSION_SCOPE: "Mã này chỉ áp dụng cho bắp nước.",
+  PAUSED: "Tạm dừng mã giảm giá thành công.",
+  ACTIVATED: "Kích hoạt mã giảm giá thành công.",
+  DELETE_BLOCKED: "Không thể xóa mã đã phát sinh giao dịch. Mã đã được chuyển sang trạng thái Đã hủy.",
+  DELETED: "Xóa mã giảm giá thành công.",
+  RECHECK_REQUIRED: "Mã giảm giá không còn hợp lệ. Vui lòng kiểm tra lại trước khi thanh toán.",
+};
+
 const parseVoucherAmount = (value) => {
   if (isMissing(value)) {
     return null;
@@ -106,18 +130,18 @@ const getEligibleAmount = (voucher, context) => {
 
 const checkVoucherScope = (voucher, context, user) => {
   if (voucher.apply_scope === "ticket" && Number(context.ticketAmount || 0) <= 0) {
-    return "Ma chi ap dung cho ve xem phim";
+    return VOUCHER_MESSAGES.TICKET_SCOPE;
   }
 
   if (voucher.apply_scope === "concession" && Number(context.concessionAmount || 0) <= 0) {
-    return "Ma chi ap dung cho bap nuoc";
+    return VOUCHER_MESSAGES.CONCESSION_SCOPE;
   }
 
   if (voucher.apply_scope === "movie") {
-    if (Number(context.ticketAmount || 0) <= 0) return "Ma chi ap dung cho ve xem phim";
+    if (Number(context.ticketAmount || 0) <= 0) return VOUCHER_MESSAGES.TICKET_SCOPE;
     const movieIds = (voucher.applicable_movie_ids || []).map((id) => String(id));
     if (movieIds.length > 0 && !movieIds.includes(String(context.movieId))) {
-      return "Ma khong ap dung cho phim nay";
+      return VOUCHER_MESSAGES.WRONG_MOVIE;
     }
   }
 
@@ -125,7 +149,7 @@ const checkVoucherScope = (voucher, context, user) => {
     const tiers = (voucher.applicable_member_tiers || []).map((tier) => String(tier).toLowerCase());
     const memberTier = String(user?.member_tier || "").toLowerCase();
     if (tiers.length > 0 && !tiers.includes(memberTier)) {
-      return "Hang thanh vien khong du dieu kien ap dung ma";
+      return VOUCHER_MESSAGES.WRONG_MEMBER_TIER;
     }
   }
 
