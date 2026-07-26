@@ -74,10 +74,10 @@ function TabButton({ tab, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`min-w-[140px] rounded-full px-5 py-3 text-sm font-extrabold transition-all duration-200 sm:min-w-[160px] ${
+      className={`min-w-[132px] rounded-full px-5 py-2.5 text-sm font-bold transition-all duration-200 sm:min-w-[150px] ${
         active
-          ? 'bg-gradient-to-r from-[#ff5364] via-[#ff6b4a] to-[#b86a2f] text-white shadow-[0_16px_40px_rgba(255,83,100,0.3)]'
-          : 'border border-white/10 bg-white/[0.03] text-slate-300 hover:border-[#ff6070]/40 hover:text-white'
+          ? 'bg-gradient-to-r from-[#ff4f5f] to-[#ff7a32] text-white shadow-[0_10px_24px_rgba(255,83,100,0.16)]'
+          : 'border border-white/10 bg-white/[0.025] text-slate-300 hover:border-white/20 hover:bg-white/[0.05] hover:text-white'
       }`}
     >
       {tab.label}
@@ -87,17 +87,17 @@ function TabButton({ tab, active, onClick }) {
 
 function SectionShell({ eyebrow, title, description, children }) {
   return (
-    <section className="rounded-[32px] border border-white/10 bg-[#111823] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.25)] sm:p-8">
-      <div className="max-w-4xl">
-        <span className="block text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">
+    <section className="rounded-[26px] border border-white/[0.08] bg-[#111823] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)] sm:p-6 lg:p-7">
+      <div className="max-w-3xl">
+        <span className="block text-xs font-bold tracking-[0.16em] text-[#ff6070]">
           {eyebrow}
         </span>
-        <h1 className="mt-3 text-3xl font-black uppercase tracking-tight text-white sm:text-4xl">
+        <h1 className="mt-2 text-2xl font-extrabold leading-tight tracking-tight text-white sm:text-3xl">
           {title}
         </h1>
-        <p className="mt-4 text-base leading-7 text-slate-300">{description}</p>
+        <p className="mt-3 text-[15px] leading-7 text-slate-300">{description}</p>
       </div>
-      <div className="mt-8">{children}</div>
+      <div className="mt-6">{children}</div>
     </section>
   );
 }
@@ -108,16 +108,16 @@ function ImageGrid({ images, columnsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-
       {images.map((image) => (
         <figure
           key={image.title}
-          className="group overflow-hidden rounded-[24px] border border-white/10 bg-[#0f141c]"
+          className="group overflow-hidden rounded-[18px] border border-white/[0.08] bg-[#0f141c] transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.025]"
         >
           <img
             src={image.src}
             alt={image.title}
-            className="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="aspect-[16/10] w-full object-cover transition-transform duration-200 group-hover:scale-[1.025]"
           />
-          <figcaption className="p-4">
-            <h3 className="text-base font-black text-white">{image.title}</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-400">{image.description}</p>
+          <figcaption className="p-3.5">
+            <h3 className="text-[15px] font-extrabold text-white">{image.title}</h3>
+            <p className="mt-1.5 text-sm leading-6 text-slate-400">{image.description}</p>
           </figcaption>
         </figure>
       ))}
@@ -130,64 +130,64 @@ function AboutPage() {
 
   const contentMap = {
     intro: (
-      <div className="grid gap-8">
-        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">Thông tin rạp</h2>
-            <dl className="mt-5 grid gap-4">
+      <div className="grid gap-5">
+        <div className="grid items-start gap-4 lg:grid-cols-2">
+          <article className="rounded-[22px] border border-white/[0.08] bg-white/[0.025] p-5">
+            <h2 className="text-xl font-extrabold text-white">Thông tin rạp</h2>
+            <dl className="mt-4 grid gap-3">
               {cinemaInfo.map((item) => (
-                <div className="rounded-2xl border border-white/10 bg-[#0f141c] p-4" key={item.label}>
-                  <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                <div className="rounded-[16px] border border-white/[0.07] bg-[#0f141c]/80 p-3.5" key={item.label}>
+                  <dt className="text-[11px] font-bold tracking-[0.14em] text-slate-400">
                     {item.label}
                   </dt>
-                  <dd className="mt-2 text-lg font-extrabold text-white">{item.value}</dd>
+                  <dd className="mt-1.5 text-base font-bold leading-6 text-white">{item.value}</dd>
                 </div>
               ))}
             </dl>
           </article>
 
-          <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">AuraCinema có gì?</h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">
+          <article className="rounded-[22px] border border-white/[0.08] bg-white/[0.025] p-5">
+            <h2 className="text-xl font-extrabold text-white">AuraCinema có gì?</h2>
+            <p className="mt-3 text-[15px] leading-7 text-slate-300">
               AuraCinema được xây dựng cho những buổi xem phim nhẹ nhàng và tiện lợi:
               tìm lịch chiếu nhanh, chọn ghế rõ ràng, đặt vé gọn và đến rạp là có thể
               bắt đầu tận hưởng bộ phim mình thích.
             </p>
-            <div className="mt-6 rounded-[24px] border border-[#ff6070]/20 bg-[#ff6070]/10 p-4 text-sm leading-7 text-[#ffd2d6]">
+            <div className="mt-4 rounded-[18px] border border-[#ff6070]/15 bg-[#ff6070]/[0.07] p-4 text-sm leading-7 text-[#ffd2d6]">
               Chúng tôi tập trung vào trải nghiệm quen thuộc của khán giả: lịch chiếu dễ xem,
               không gian sạch sẽ, dịch vụ nhanh và đội ngũ hỗ trợ thân thiện.
             </div>
           </article>
         </div>
 
-        <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black uppercase text-white">Không gian AuraCinema</h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-400">
+        <article className="rounded-[22px] border border-white/[0.08] bg-white/[0.025] p-5">
+          <h2 className="text-xl font-extrabold text-white">Không gian AuraCinema</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
             Từ sảnh rạp, quầy bắp nước đến phòng chiếu và khu vực chờ, mọi khu vực
             được sắp xếp để khách dễ di chuyển, dễ nhận vé và có thời gian thoải mái
             trước khi suất chiếu bắt đầu.
           </p>
-          <div className="mt-5">
+          <div className="mt-4">
             <ImageGrid images={auraSpaces} />
           </div>
         </article>
       </div>
     ),
     services: (
-      <div className="grid gap-6 sm:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-2">
         {services.map((service) => (
           <article
             key={service.title}
-            className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03]"
+            className="grid overflow-hidden rounded-[22px] border border-white/[0.08] bg-white/[0.025] transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:bg-white/[0.04] md:grid-cols-[180px_1fr] xl:grid-cols-[200px_1fr]"
           >
             <img
               src={service.src}
               alt={service.title}
-              className="aspect-[16/9] w-full object-cover"
+              className="aspect-[16/9] w-full object-cover md:h-full md:min-h-[170px]"
             />
-            <div className="p-6">
-              <h2 className="text-2xl font-black uppercase text-white">{service.title}</h2>
-              <p className="mt-4 text-base leading-7 text-slate-300">{service.description}</p>
+            <div className="p-5">
+              <h2 className="text-xl font-extrabold text-white">{service.title}</h2>
+              <p className="mt-2.5 text-[15px] leading-7 text-slate-300">{service.description}</p>
             </div>
           </article>
         ))}
@@ -196,14 +196,14 @@ function AboutPage() {
   };
 
   return (
-    <main className="bg-[#0f141c] px-4 py-10 text-white sm:px-6 lg:px-8">
+    <main className="bg-[#0f141c] px-4 py-8 text-white sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-[1360px]">
         <SectionShell
           eyebrow={pageCopy.eyebrow}
           title={pageCopy.title}
           description={pageCopy.description}
         >
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2.5">
             {tabs.map((tab) => (
               <TabButton
                 key={tab.id}
@@ -214,7 +214,7 @@ function AboutPage() {
             ))}
           </div>
 
-          <div className="mt-8">{contentMap[activeTab]}</div>
+          <div className="mt-6">{contentMap[activeTab]}</div>
         </SectionShell>
       </div>
     </main>
