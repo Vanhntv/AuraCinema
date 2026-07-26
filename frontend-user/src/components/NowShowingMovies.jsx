@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { HiOutlineSearch, HiOutlineX } from 'react-icons/hi'
 import { useNavigate } from 'react-router-dom'
 import { getMovies } from '../services/movieService'
 import { getShowtimes } from '../services/showtimeService'
@@ -22,6 +23,12 @@ function getReleaseYear(dateValue) {
 
 function normalizeText(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function matchesMovieSearch(movie, searchTerm) {
+  const keyword = normalizeText(searchTerm).trim()
+  if (!keyword) return true
+  return normalizeText(movie?.title).includes(keyword)
 }
 
 function isComingSoonMovie(movie) {
@@ -156,6 +163,31 @@ function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
   )
 }
 
+function MovieSearchBox({ value, onChange, onClear }) {
+  return (
+    <div className="relative w-full max-w-md max-sm:max-w-none">
+      <HiOutlineSearch className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Tìm kiếm phim..."
+        className="h-12 w-full rounded-full border border-white/10 bg-white/[0.04] pl-11 pr-11 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-white outline-none transition duration-200 placeholder:text-slate-500 hover:border-white/20 focus:border-[#ff6070]/50 focus:bg-white/[0.06]"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={onClear}
+          className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-slate-300 transition duration-200 hover:border-[#ff6070]/35 hover:text-white"
+          aria-label="Xóa tìm kiếm"
+        >
+          <HiOutlineX className="h-4 w-4" />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
 function NowShowingMovies() {
   const navigate = useNavigate()
   const [movies, setMovies] = useState([])
@@ -164,6 +196,7 @@ function NowShowingMovies() {
   const [bookingMovie, setBookingMovie] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     let isMounted = true
@@ -204,14 +237,31 @@ function NowShowingMovies() {
     setBookingMovie(movie)
   }
 
-  const nowShowingMovies = movies.filter(isNowShowingMovie)
-  const comingSoonMovies = [
-    ...movies.filter(isComingSoonMovie),
-    ...buildScheduledMovies(scheduledShowtimes, movies),
-  ].filter((movie, index, list) => {
-    const movieId = getMovieId(movie)
-    return movieId && list.findIndex((item) => getMovieId(item) === movieId) === index
-  })
+  const nowShowingMovies = useMemo(
+    () => movies.filter(isNowShowingMovie),
+    [movies],
+  )
+  const comingSoonMovies = useMemo(
+    () => [
+      ...movies.filter(isComingSoonMovie),
+      ...buildScheduledMovies(scheduledShowtimes, movies),
+    ].filter((movie, index, list) => {
+      const movieId = getMovieId(movie)
+      return movieId && list.findIndex((item) => getMovieId(item) === movieId) === index
+    }),
+    [movies, scheduledShowtimes],
+  )
+  const filteredNowShowingMovies = useMemo(
+    () => nowShowingMovies.filter((movie) => matchesMovieSearch(movie, searchTerm)),
+    [nowShowingMovies, searchTerm],
+  )
+  const filteredComingSoonMovies = useMemo(
+    () => comingSoonMovies.filter((movie) => matchesMovieSearch(movie, searchTerm)),
+    [comingSoonMovies, searchTerm],
+  )
+  const hasSearchTerm = Boolean(searchTerm.trim())
+  const hasSearchResults =
+    filteredNowShowingMovies.length > 0 || filteredComingSoonMovies.length > 0
 
   return (
     <section className="mx-auto w-[min(1280px,calc(100%_-_40px))] py-14 max-sm:w-[calc(100%_-_28px)] max-sm:py-10">
@@ -230,6 +280,14 @@ function NowShowingMovies() {
         >
           Xem tất cả
         </a>
+      </div>
+
+      <div className="mb-8">
+        <MovieSearchBox
+          value={searchTerm}
+          onChange={setSearchTerm}
+          onClear={() => setSearchTerm('')}
+        />
       </div>
 
       {isLoading && (
@@ -251,20 +309,28 @@ function NowShowingMovies() {
 
       {!isLoading && !error && (
         <>
-          <MovieGroup
-            title="Phim đang chiếu"
-            movies={nowShowingMovies.slice(0, 4)}
-            emptyText="Chưa có phim đang chiếu."
-            onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-            onOpenBooking={openBooking}
-          />
-          <MovieGroup
-            title="Phim sắp chiếu"
-            movies={comingSoonMovies}
-            emptyText="Chưa có phim sắp chiếu."
-            onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-            onOpenBooking={openBooking}
-          />
+          {hasSearchTerm && !hasSearchResults ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-slate-300">
+              Không tìm thấy phim phù hợp.
+            </div>
+          ) : (
+            <>
+              <MovieGroup
+                title="Phim đang chiếu"
+                movies={(hasSearchTerm ? filteredNowShowingMovies : nowShowingMovies).slice(0, 4)}
+                emptyText="Chưa có phim đang chiếu."
+                onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
+                onOpenBooking={openBooking}
+              />
+              <MovieGroup
+                title="Phim sắp chiếu"
+                movies={hasSearchTerm ? filteredComingSoonMovies : comingSoonMovies}
+                emptyText="Chưa có phim sắp chiếu."
+                onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
+                onOpenBooking={openBooking}
+              />
+            </>
+          )}
         </>
       )}
 
