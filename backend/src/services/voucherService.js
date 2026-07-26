@@ -761,6 +761,7 @@ export const consumeVoucherQuantityService = async ({
 export const verifyVoucherService = async (payload = {}) => {
   const code = normalizeVoucherCode(payload.code ?? payload.voucher_code);
   const context = normalizeVoucherContext(payload);
+  const session = payload.session ?? null;
 
   if (isMissing(code)) {
     const error = new Error("code la bat buoc");
@@ -768,7 +769,7 @@ export const verifyVoucherService = async (payload = {}) => {
     throw error;
   }
 
-  const voucher = await Voucher.findOne({ code, deleted_at: null });
+  const voucher = await Voucher.findOne({ code, deleted_at: null }).session(session);
 
   if (!voucher) {
     return {
@@ -807,7 +808,7 @@ export const verifyVoucherService = async (payload = {}) => {
   }
 
   const user = context.userId
-    ? await User.findOne({ _id: context.userId, deleted_at: null, status: true })
+    ? await User.findOne({ _id: context.userId, deleted_at: null, status: true }).session(session)
     : null;
 
   const scopeError = checkVoucherScope(voucher, context, user);
@@ -822,6 +823,7 @@ export const verifyVoucherService = async (payload = {}) => {
     const usedByCustomer = await countVoucherUsageByUser({
       voucherId: voucher._id,
       userId: context.userId,
+      session,
     });
 
     if (usedByCustomer >= Number(voucher.usage_limit_per_user || 1)) {

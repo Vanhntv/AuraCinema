@@ -217,6 +217,7 @@ export const createBooking = async (req, res) => {
           concession_amount: comboTotalPrice,
           movie_id: showtime.movie_id,
           user_id: user._id,
+          session,
         });
 
         if (!voucherResult.valid) {
@@ -224,12 +225,15 @@ export const createBooking = async (req, res) => {
         }
 
         discountAmount = Number(voucherResult.discount_amount || 0);
+        const now = new Date();
         const updateVoucherResult = await Voucher.updateOne(
           {
             _id: voucherResult.voucher.id,
             deleted_at: null,
             status: true,
             quantity: { $gt: 0 },
+            start_date: { $lte: now },
+            end_date: { $gte: now },
           },
           {
             $inc: {
@@ -241,7 +245,7 @@ export const createBooking = async (req, res) => {
         );
 
         if (updateVoucherResult.modifiedCount !== 1) {
-          throw Object.assign(new Error("Voucher da het luot su dung"), { statusCode: 409 });
+          throw Object.assign(new Error("Ma giam gia khong con hop le. Vui long kiem tra lai truoc khi thanh toan."), { statusCode: 409 });
         }
 
         voucherSnapshot = {
