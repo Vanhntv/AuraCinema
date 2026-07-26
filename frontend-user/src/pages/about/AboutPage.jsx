@@ -1,5 +1,73 @@
 import { useState } from 'react';
-import { aboutContent } from '../../data/aboutContent';
+
+const pageCopy = {
+  eyebrow: 'Giới thiệu rạp phim',
+  title: 'Rạp chiếu phim AuraCinema',
+  description:
+    'AuraCinema là điểm hẹn xem phim dành cho khán giả yêu điện ảnh, với lịch chiếu rõ ràng, đặt vé nhanh và không gian rạp thoải mái.',
+};
+
+const tabs = [
+  { id: 'intro', label: 'Giới thiệu' },
+  { id: 'services', label: 'Dịch vụ' },
+];
+
+const cinemaInfo = [
+  { label: 'Ngày thành lập', value: '01/05/2026' },
+  { label: 'Địa chỉ', value: '87 Láng Hạ, Ba Đình, Hà Nội' },
+  { label: 'Hotline', value: '1900 1234' },
+  { label: 'Email', value: 'support@auracinema.vn' },
+];
+
+const auraSpaces = [
+  {
+    title: 'Sảnh rạp',
+    description: 'Không gian đón khách rộng rãi, dễ tìm quầy vé và khu vực check-in.',
+    src: 'https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Quầy bắp nước',
+    description: 'Combo bắp nước được chuẩn bị nhanh để bạn sẵn sàng vào suất chiếu.',
+    src: 'https://images.unsplash.com/photo-1585647347384-2593bc35786b?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Phòng chiếu',
+    description: 'Ghế ngồi thoải mái, màn hình lớn và âm thanh sống động cho từng bộ phim.',
+    src: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Khu vực chờ',
+    description: 'Nơi gặp bạn bè, kiểm tra vé và thư giãn trước khi phim bắt đầu.',
+    src: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=900&auto=format&fit=crop&q=80',
+  },
+];
+
+const services = [
+  {
+    title: 'Đặt vé trực tuyến',
+    description:
+      'Chọn phim, suất chiếu và ghế ngồi ngay trên website. Thông tin vé được hiển thị rõ để bạn kiểm tra trước khi xác nhận.',
+    src: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Combo bắp nước',
+    description:
+      'Các combo bắp nước tiện lợi cho một người, cặp đôi hoặc nhóm bạn, giúp buổi xem phim trọn vẹn hơn.',
+    src: 'https://images.unsplash.com/photo-1524985069026-dd778a71c7b4?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Ưu đãi thành viên',
+    description:
+      'Tích điểm, theo dõi hạng thành viên và nhận các chương trình ưu đãi phù hợp với lịch xem phim của bạn.',
+    src: 'https://images.unsplash.com/photo-1607083206968-13611e3d76db?w=900&auto=format&fit=crop&q=80',
+  },
+  {
+    title: 'Hỗ trợ khách hàng',
+    description:
+      'Đội ngũ hỗ trợ luôn sẵn sàng giúp bạn kiểm tra lịch chiếu, thông tin vé và các vấn đề phát sinh khi đặt vé.',
+    src: 'https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=900&auto=format&fit=crop&q=80',
+  },
+];
 
 function TabButton({ tab, active, onClick }) {
   return (
@@ -34,195 +102,95 @@ function SectionShell({ eyebrow, title, description, children }) {
   );
 }
 
-function MetricCard({ metric }) {
-  return (
-    <article className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-      <div className="text-sm font-bold uppercase tracking-[0.18em] text-slate-400">
-        {metric.label}
-      </div>
-      <div className="mt-3 text-4xl font-black text-white">{metric.value}</div>
-      <div className="mt-2 text-sm text-slate-400">{metric.note}</div>
-    </article>
-  );
-}
-
-function ImageGrid({ images, columnsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' }) {
+function ImageGrid({ images, columnsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' }) {
   return (
     <div className={`grid gap-4 ${columnsClass}`}>
       {images.map((image) => (
         <figure
-          key={image.src}
+          key={image.title}
           className="group overflow-hidden rounded-[24px] border border-white/10 bg-[#0f141c]"
         >
           <img
             src={image.src}
-            alt={image.alt}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            alt={image.title}
+            className="aspect-[4/3] w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
+          <figcaption className="p-4">
+            <h3 className="text-base font-black text-white">{image.title}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-400">{image.description}</p>
+          </figcaption>
         </figure>
       ))}
     </div>
   );
 }
 
-function OrgNode({ node, depth = 0 }) {
-  const hasChildren = Boolean(node.children?.length);
-
-  return (
-    <div className="flex flex-col items-center">
-      <div
-        className={`rounded-[22px] border px-5 py-4 text-center shadow-[0_14px_30px_rgba(0,0,0,0.18)] ${
-          depth === 0
-            ? 'border-[#ff6070]/30 bg-gradient-to-r from-[#ff5364] via-[#ff6b4a] to-[#b86a2f] text-white'
-            : 'border-white/10 bg-white/[0.03] text-white'
-        }`}
-      >
-        <div className="text-sm font-black uppercase tracking-[0.16em]">{node.title}</div>
-        <div className={`mt-1 text-sm ${depth === 0 ? 'text-white/80' : 'text-slate-400'}`}>
-          {node.subtitle}
-        </div>
-      </div>
-
-      {hasChildren && (
-        <div className="mt-6 flex w-full flex-col items-center">
-          <div className="h-8 w-px bg-white/15" />
-          <div className="flex w-full flex-col gap-4 lg:flex-row lg:justify-center">
-            {node.children.map((child) => (
-              <div key={child.title} className="flex flex-col items-center">
-                <div className="w-px h-8 bg-white/15" />
-                <OrgNode node={child} depth={depth + 1} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AboutPage() {
   const [activeTab, setActiveTab] = useState('intro');
-  const { page, sections, tabs, intro, services, theaters } = aboutContent;
 
   const contentMap = {
     intro: (
       <div className="grid gap-8">
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
+        <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
           <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">{intro.legal.title}</h2>
+            <h2 className="text-2xl font-black uppercase text-white">Thông tin rạp</h2>
             <dl className="mt-5 grid gap-4">
-              <div className="rounded-2xl border border-white/10 bg-[#0f141c] p-4">
-                <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  {intro.legal.foundedLabel}
-                </dt>
-                <dd className="mt-2 text-lg font-extrabold text-white">
-                  {intro.legal.foundedValue}
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-[#0f141c] p-4">
-                <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  {intro.legal.headquartersLabel}
-                </dt>
-                <dd className="mt-2 text-lg font-extrabold text-white">
-                  {intro.legal.headquartersValue}
-                </dd>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-[#0f141c] p-4">
-                <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                  {intro.legal.contactLabel}
-                </dt>
-                <dd className="mt-2 text-lg font-extrabold text-white">
-                  {intro.legal.contactValue}
-                </dd>
-              </div>
+              {cinemaInfo.map((item) => (
+                <div className="rounded-2xl border border-white/10 bg-[#0f141c] p-4" key={item.label}>
+                  <dt className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                    {item.label}
+                  </dt>
+                  <dd className="mt-2 text-lg font-extrabold text-white">{item.value}</dd>
+                </div>
+              ))}
             </dl>
           </article>
 
           <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">{sections.introOverview}</h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">{intro.summary}</p>
+            <h2 className="text-2xl font-black uppercase text-white">AuraCinema có gì?</h2>
+            <p className="mt-4 text-base leading-7 text-slate-300">
+              AuraCinema được xây dựng cho những buổi xem phim nhẹ nhàng và tiện lợi:
+              tìm lịch chiếu nhanh, chọn ghế rõ ràng, đặt vé gọn và đến rạp là có thể
+              bắt đầu tận hưởng bộ phim mình thích.
+            </p>
             <div className="mt-6 rounded-[24px] border border-[#ff6070]/20 bg-[#ff6070]/10 p-4 text-sm leading-7 text-[#ffd2d6]">
-              {intro.chartNote}
+              Chúng tôi tập trung vào trải nghiệm quen thuộc của khán giả: lịch chiếu dễ xem,
+              không gian sạch sẽ, dịch vụ nhanh và đội ngũ hỗ trợ thân thiện.
             </div>
           </article>
         </div>
 
         <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black uppercase text-white">{sections.orgChart}</h2>
-          <div className="mt-8 overflow-x-auto pb-3">
-            <div className="min-w-[720px]">
-              <OrgNode node={intro.organizationChart[0]} />
-            </div>
-          </div>
-        </article>
-
-        <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-2xl font-black uppercase text-white">{sections.introImages}</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-400">{sections.serviceImagesHint}</p>
+          <h2 className="text-2xl font-black uppercase text-white">Không gian AuraCinema</h2>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-400">
+            Từ sảnh rạp, quầy bắp nước đến phòng chiếu và khu vực chờ, mọi khu vực
+            được sắp xếp để khách dễ di chuyển, dễ nhận vé và có thời gian thoải mái
+            trước khi suất chiếu bắt đầu.
+          </p>
           <div className="mt-5">
-            <ImageGrid images={intro.imageGrid} />
+            <ImageGrid images={auraSpaces} />
           </div>
         </article>
       </div>
     ),
     services: (
-      <div className="grid gap-6">
-        {services.groups.map((group) => (
+      <div className="grid gap-6 sm:grid-cols-2">
+        {services.map((service) => (
           <article
-            key={group.title}
-            className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6"
+            key={service.title}
+            className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03]"
           >
-            <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
-              <div>
-                <h2 className="text-2xl font-black uppercase text-white">{group.title}</h2>
-                <p className="mt-4 text-base leading-7 text-slate-300">{group.description}</p>
-              </div>
-              <ImageGrid images={group.images} columnsClass="grid-cols-1 sm:grid-cols-2" />
+            <img
+              src={service.src}
+              alt={service.title}
+              className="aspect-[16/9] w-full object-cover"
+            />
+            <div className="p-6">
+              <h2 className="text-2xl font-black uppercase text-white">{service.title}</h2>
+              <p className="mt-4 text-base leading-7 text-slate-300">{service.description}</p>
             </div>
           </article>
         ))}
-      </div>
-    ),
-    theaters: (
-      <div className="grid gap-8">
-        <section className="grid gap-4 sm:grid-cols-3">
-          {theaters.metrics.map((metric) => (
-            <MetricCard key={metric.label} metric={metric} />
-          ))}
-        </section>
-
-        <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-          <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">{theaters.building.title}</h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">
-              {theaters.building.description}
-            </p>
-            <div className="mt-6 rounded-[24px] border border-white/10 bg-[#0f141c] p-5">
-              <div className="text-sm font-bold uppercase tracking-[0.18em] text-[#ff6070]">
-                {theaters.building.starHall.title}
-              </div>
-              <div className="mt-3 grid gap-3 text-sm leading-6 text-slate-300">
-                <div>
-                  <span className="font-bold text-white">Nâng cấp:</span>{' '}
-                  {theaters.building.starHall.upgradeDate}
-                </div>
-                <div>
-                  <span className="font-bold text-white">Sức chứa:</span>{' '}
-                  {theaters.building.starHall.capacity}
-                </div>
-                <div>{theaters.building.starHall.note}</div>
-              </div>
-            </div>
-          </article>
-
-          <article className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-2xl font-black uppercase text-white">{sections.theaterSpace}</h2>
-            <p className="mt-4 text-base leading-7 text-slate-300">{theaters.spaceNote}</p>
-            <div className="mt-5">
-              <ImageGrid images={theaters.imageGrid} columnsClass="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
-            </div>
-          </article>
-        </section>
       </div>
     ),
   };
@@ -231,9 +199,9 @@ function AboutPage() {
     <main className="bg-[#0f141c] px-4 py-10 text-white sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-[1360px]">
         <SectionShell
-          eyebrow={page.eyebrow}
-          title={page.title}
-          description={page.description}
+          eyebrow={pageCopy.eyebrow}
+          title={pageCopy.title}
+          description={pageCopy.description}
         >
           <div className="flex flex-wrap gap-3">
             {tabs.map((tab) => (
