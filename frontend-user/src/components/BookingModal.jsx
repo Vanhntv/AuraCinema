@@ -497,11 +497,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   };
 
   const isPageVariant = variant === "page";
+  const isInlineVariant = variant === "inline";
+  const isEmbeddedVariant = isPageVariant || isInlineVariant;
   const shellClassName = isPageVariant
     ? "mx-auto w-[min(1320px,calc(100%_-_40px))] py-10 max-sm:w-[calc(100%_-_28px)]"
+    : isInlineVariant
+      ? "w-full pt-8"
     : "fixed inset-0 z-[60] grid place-items-center bg-black/75 px-5 py-8 backdrop-blur-sm";
   const panelClassName = isPageVariant
     ? "min-h-[calc(100vh_-_180px)] rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-[0_30px_90px_rgba(0,0,0,0.35)] md:p-8"
+    : isInlineVariant
+      ? "rounded-3xl border border-white/10 bg-[#101722] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] md:p-7"
     : "max-h-[90vh] w-[min(1000px,100%)] overflow-y-auto rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-[0_30px_90px_rgba(0,0,0,0.55)] md:p-8";
   const handleClose = async () => {
     await releaseHeldSeats();
@@ -509,7 +515,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   };
 
   return (
-    <div className={shellClassName} onClick={isPageVariant ? undefined : handleClose} role={isPageVariant ? undefined : "dialog"} aria-modal={isPageVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
+    <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
       <div className={panelClassName} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-5">
           <div><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">Đặt vé</p><h2 className="mt-2 text-3xl font-black text-white max-sm:text-2xl">{movie.title}</h2></div>
@@ -518,7 +524,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
         <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid content-start gap-7">
-            <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[#ff6070] text-white" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.label} · {option.displayDate}</button>)}</div></div>
+            {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[#ff6070] text-white" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.label} · {option.displayDate}</button>)}</div></div>}
 
             <div><h3 className="text-lg font-black text-white">{step === "select-seat" ? "Chọn ghế" : "Chọn suất chiếu"}</h3>
               {step === "select-showtime" ? <div className="mt-4 space-y-3">
@@ -527,7 +533,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 {!isLoading && !error && !showtimes.length && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Không có suất chiếu cho ngày này.</p>}
                 <div className="flex flex-wrap gap-3">{showtimes.map((showtime) => <button key={showtime.id} type="button" onClick={() => handleShowtimeSelect(showtime)} className="rounded-full bg-white/10 px-5 py-3 text-sm font-extrabold text-slate-200 hover:bg-[#ff6070] hover:text-white">{showtime.startTime} · {showtime.roomName}</button>)}</div>
               </div> : <div className="mt-4 space-y-4">
-                {!isPageVariant && (
+                {!isEmbeddedVariant && (
                   <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-[#ff6070]" type="button" onClick={async () => { await releaseHeldSeats(); setStep("select-showtime"); setSelectedSeats([]); setSeatError(""); }}>← Chọn suất khác</button>
                 )}
                 <div className="flex flex-wrap gap-4 text-xs text-slate-300">{Object.entries(SEAT_TYPES).map(([type, config]) => <span key={type} className="flex items-center gap-2"><i className={`h-4 w-5 rounded ${config.color}`} />{config.label}</span>)}<span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff5364]" />Ghế đang chọn</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff8a96]/60" />Đang được giữ</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-slate-800 opacity-50" />Đã đặt</span></div>

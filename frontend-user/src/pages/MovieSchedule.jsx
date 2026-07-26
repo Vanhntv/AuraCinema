@@ -224,11 +224,11 @@ function MovieSchedule() {
           <div className="grid gap-5">
             {movies.map((movie) => (
               <article key={movie._id} className="flex gap-6 rounded-3xl border border-white/10 bg-white/[0.025] p-5 transition hover:border-white/15 max-sm:flex-col">
-                <button type="button" className="h-[240px] w-[160px] shrink-0 overflow-hidden rounded-2xl bg-slate-800 max-sm:h-auto max-sm:w-full max-sm:aspect-[16/9]" onClick={() => setSelectedMovie(movie)}>
+                <button type="button" className="h-[240px] w-[160px] shrink-0 overflow-hidden rounded-2xl bg-slate-800 max-sm:h-auto max-sm:w-full max-sm:aspect-[16/9]" onClick={() => navigate(`/phim/${movie._id}`)}>
                   <img src={movie.poster} alt={movie.title} className="h-full w-full object-cover transition duration-500 hover:scale-105" onError={(event) => { event.currentTarget.src = FALLBACK_POSTER; }} />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <button type="button" className="text-left" onClick={() => setSelectedMovie(movie)}><h2 className="mb-1 text-xl font-black uppercase hover:text-[#ff6070]">{movie.title}</h2></button>
+                  <button type="button" className="text-left" onClick={() => navigate(`/phim/${movie._id}`)}><h2 className="mb-1 text-xl font-black uppercase hover:text-[#ff6070]">{movie.title}</h2></button>
                   <p className="mb-5 text-xs text-slate-500">{movie.duration ? `${movie.duration} phút` : "Thời lượng đang cập nhật"}</p>
                   <div className="grid gap-4">
                     {movie.cinemas.map((cinema) => (

@@ -17,6 +17,7 @@ import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AccountPage from './pages/AccountPage';
 import SupportInfoPage from './pages/SupportInfoPage';
+import MovieDetailPage from './pages/MovieDetailPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 const AdminLayout = lazy(() => import('./admin/components/layout/AdminLayout'));
@@ -63,6 +64,7 @@ function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/lich-chieu" element={<MovieSchedule />} />
+        <Route path="/phim/:movieId" element={<MovieDetailPage />} />
         <Route path="/dat-ve/:showtimeId" element={<BookingPage />} />
         <Route path="/tin-tuc" element={<NewsPage />} />
         <Route path="/tin-tuc/:slug" element={<NewsDetailPage />} />

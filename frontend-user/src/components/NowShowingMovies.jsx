@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getMovies } from '../services/movieService'
 import { getShowtimes } from '../services/showtimeService'
 import BookingModal from './BookingModal'
@@ -156,6 +157,7 @@ function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
 }
 
 function NowShowingMovies() {
+  const navigate = useNavigate()
   const [movies, setMovies] = useState([])
   const [scheduledShowtimes, setScheduledShowtimes] = useState([])
   const [selectedMovie, setSelectedMovie] = useState(null)
@@ -253,14 +255,14 @@ function NowShowingMovies() {
             title="Phim đang chiếu"
             movies={nowShowingMovies.slice(0, 4)}
             emptyText="Chưa có phim đang chiếu."
-            onOpenDetail={setSelectedMovie}
+            onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
             onOpenBooking={openBooking}
           />
           <MovieGroup
             title="Phim sắp chiếu"
             movies={comingSoonMovies}
             emptyText="Chưa có phim sắp chiếu."
-            onOpenDetail={setSelectedMovie}
+            onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
             onOpenBooking={openBooking}
           />
         </>
