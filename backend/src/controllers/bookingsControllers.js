@@ -4,9 +4,12 @@ import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
-import Voucher from "../models/Voucher.js";
 import VoucherUsage from "../models/VoucherUsage.js";
-import { refundVoucherUsageForBooking, verifyVoucherService } from "../services/voucherService.js";
+import {
+  refundVoucherUsageForBooking,
+  reserveVoucherUsageForPayment,
+  verifyVoucherService,
+} from "../services/voucherService.js";
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -227,28 +230,11 @@ export const createBooking = async (req, res) => {
         }
 
         discountAmount = Number(voucherResult.discount_amount || 0);
-        const now = new Date();
-        const updateVoucherResult = await Voucher.updateOne(
-          {
-            _id: voucherResult.voucher.id,
-            deleted_at: null,
-            status: true,
-            quantity: { $gt: 0 },
-            start_date: { $lte: now },
-            end_date: { $gte: now },
-          },
-          {
-            $inc: {
-              quantity: -1,
-              usage_count: 1,
-            },
-          },
-          { session },
-        );
-
-        if (updateVoucherResult.modifiedCount !== 1) {
-          throw Object.assign(new Error("Ma giam gia khong con hop le. Vui long kiem tra lai truoc khi thanh toan."), { statusCode: 409 });
-        }
+        await reserveVoucherUsageForPayment({
+          voucherId: voucherResult.voucher.id,
+          quantity: 1,
+          session,
+        });
 
         voucherSnapshot = {
           voucher_id: voucherResult.voucher.id,

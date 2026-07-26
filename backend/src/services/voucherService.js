@@ -183,6 +183,70 @@ export const refundVoucherUsageForBooking = async ({
   return usage;
 };
 
+export const reserveVoucherUsageForPayment = async ({
+  voucherId,
+  quantity = 1,
+  session = null,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(voucherId)) {
+    const error = new Error("Voucher khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const reserveQuantity = Number(quantity);
+  if (!Number.isInteger(reserveQuantity) || reserveQuantity <= 0) {
+    const error = new Error("quantity voucher khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const now = new Date();
+  const updateResult = await Voucher.updateOne(
+    {
+      _id: voucherId,
+      deleted_at: null,
+      status: true,
+      quantity: { $gte: reserveQuantity },
+      start_date: { $lte: now },
+      end_date: { $gte: now },
+    },
+    {
+      $inc: {
+        quantity: -reserveQuantity,
+        usage_count: reserveQuantity,
+      },
+    },
+    { session },
+  );
+
+  if (updateResult.modifiedCount === 1) {
+    return true;
+  }
+
+  const voucher = await Voucher.findOne({ _id: voucherId, deleted_at: null }).session(session);
+  if (!voucher) {
+    const error = new Error("Khong tim thay voucher");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  let message = "Ma giam gia khong con hop le. Vui long kiem tra lai truoc khi thanh toan.";
+  if (Number(voucher.quantity || 0) < reserveQuantity) {
+    message = "Voucher da het luot su dung";
+  } else if (!voucher.status) {
+    message = "Voucher dang bi vo hieu hoa";
+  } else if (voucher.start_date && now < voucher.start_date) {
+    message = "Voucher chua den thoi gian ap dung";
+  } else if (voucher.end_date && now > voucher.end_date) {
+    message = "Voucher da het han";
+  }
+
+  const error = new Error(message);
+  error.statusCode = 409;
+  throw error;
+};
+
 const deriveVoucherStatus = (data) => {
   const now = new Date();
   const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
