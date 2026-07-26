@@ -405,7 +405,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const totalPrice = seatTotal + concessionTotal;
   const discountAmount = Number(appliedVoucher?.discount_amount || 0);
-  const finalTotal = Math.max(totalPrice - discountAmount, 0);
+  const finalTotal = appliedVoucher
+    ? Number(appliedVoucher.final_amount ?? Math.max(totalPrice - discountAmount, 0))
+    : totalPrice;
 
   useEffect(() => {
     if (!appliedVoucher) return;

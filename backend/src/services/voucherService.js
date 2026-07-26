@@ -47,32 +47,38 @@ const parseVoucherAmount = (value) => {
 const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
   if (orderAmount === null) {
     return {
+      eligible_amount: null,
+      raw_discount_amount: null,
       discount_amount: null,
       final_amount: null,
     };
   }
 
+  const eligibleAmount = Math.max(Number(orderAmount || 0), 0);
   const discountType = voucher.discount_type;
-  const discountValue = Number(voucher.discount_value ?? 0);
+  const discountValue = Math.max(Number(voucher.discount_value ?? 0), 0);
+  const maxDiscountAmount = Math.max(Number(voucher.max_discount_amount ?? 0), 0);
 
+  let rawDiscountAmount = 0;
   let discountAmount = 0;
 
   if (discountType === "percent") {
-    discountAmount = (orderAmount * discountValue) / 100;
+    rawDiscountAmount = (eligibleAmount * discountValue) / 100;
+    discountAmount = maxDiscountAmount > 0
+      ? Math.min(rawDiscountAmount, maxDiscountAmount)
+      : rawDiscountAmount;
   } else {
+    rawDiscountAmount = discountValue;
     discountAmount = discountValue;
   }
 
-  const maxDiscountAmount = Number(voucher.max_discount_amount ?? 0);
-  if (maxDiscountAmount > 0) {
-    discountAmount = Math.min(discountAmount, maxDiscountAmount);
-  }
-
-  discountAmount = Math.min(Math.max(discountAmount, 0), orderAmount);
+  discountAmount = Math.min(Math.max(discountAmount, 0), eligibleAmount);
 
   return {
+    eligible_amount: eligibleAmount,
+    raw_discount_amount: rawDiscountAmount,
     discount_amount: discountAmount,
-    final_amount: Math.max(orderAmount - discountAmount, 0),
+    final_amount: Math.max(eligibleAmount - discountAmount, 0),
   };
 };
 
@@ -420,11 +426,12 @@ const prepareUpdatePayload = (payload) => {
 
 const buildVoucherVerificationResponse = (voucher, context = {}) => {
   const eligibleAmount = getEligibleAmount(voucher, context);
-  const { discount_amount, final_amount } = calculateVoucherDiscount({
+  const discountResult = calculateVoucherDiscount({
     voucher,
     orderAmount: eligibleAmount,
   });
   const orderAmount = context.orderAmount ?? null;
+  const discountAmount = Number(discountResult.discount_amount || 0);
 
   return {
     valid: true,
@@ -443,9 +450,12 @@ const buildVoucherVerificationResponse = (voucher, context = {}) => {
       status: voucher.status,
     },
     order_amount: orderAmount,
-    eligible_amount: eligibleAmount,
-    discount_amount,
-    final_amount: orderAmount === null ? final_amount : Math.max(orderAmount - Number(discount_amount || 0), 0),
+    eligible_amount: discountResult.eligible_amount,
+    raw_discount_amount: discountResult.raw_discount_amount,
+    discount_amount: discountAmount,
+    final_amount: orderAmount === null
+      ? discountResult.final_amount
+      : Math.max(orderAmount - discountAmount, 0),
   };
 };
 
