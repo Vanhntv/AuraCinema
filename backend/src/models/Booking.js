@@ -8,6 +8,15 @@ const bookingSchema = new mongoose.Schema(
     customer_name: { type: String, required: true, trim: true },
     customer_email: { type: String, required: true, trim: true, lowercase: true },
     customer_phone: { type: String, default: null, trim: true },
+    combos: [
+      {
+        combo_id: { type: mongoose.Schema.Types.ObjectId, ref: "Combo", required: true },
+        name: { type: String, required: true, trim: true },
+        price: { type: Number, required: true, min: 0 },
+        quantity: { type: Number, required: true, min: 1 },
+        subtotal: { type: Number, required: true, min: 0 },
+      },
+    ],
     total_price: { type: Number, required: true, min: 0 },
     status: { type: String, enum: ["confirmed", "cancelled"], default: "confirmed" },
     payment_status: {

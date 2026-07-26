@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   HiOutlineFilm,
+  HiOutlineShoppingBag,
   HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUsers,
@@ -24,12 +25,9 @@ const menuItems = [
     items: [
       { path: "/admin/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/admin/movies", icon: <HiOutlineFilm />, label: "Phim" },
-      {
-        path: "/admin/rooms",
-        icon: <HiOutlineViewGrid />,
-        label: "Phòng chiếu",
-      },
+      { path: "/admin/rooms", icon: <HiOutlineViewGrid />, label: "Phòng chiếu" },
       { path: "/admin/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
+      { path: "/admin/concessions", icon: <HiOutlineShoppingBag />, label: "Bắp Nước" },
     ],
   },
   {

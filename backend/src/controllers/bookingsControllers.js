@@ -143,7 +143,17 @@ const reserveComboStock = async ({ combos, session }) => {
     throw error;
   }
 
-  return comboDocs;
+  return combos.map((item) => {
+    const combo = comboById.get(String(item.combo_id));
+    const price = Number(combo.price || 0);
+    return {
+      combo_id: combo._id,
+      name: combo.name,
+      price,
+      quantity: item.quantity,
+      subtotal: price * item.quantity,
+    };
+  });
 };
 
 export const createBooking = async (req, res) => {
@@ -179,7 +189,7 @@ export const createBooking = async (req, res) => {
       const types = new Set(seats.map(seatTypeName));
       if (types.size > 1) throw Object.assign(new Error("Không thể đặt nhiều loại ghế cùng lúc"), { statusCode: 400 });
 
-      await reserveComboStock({ combos, session });
+      const reservedCombos = await reserveComboStock({ combos, session });
 
       const updateResult = await ShowtimeSeat.updateMany(
         { _id: { $in: seats.map((seat) => seat._id) }, status: "held", held_by: req.user.id },
@@ -190,7 +200,9 @@ export const createBooking = async (req, res) => {
         throw Object.assign(new Error("Ghế vừa được người khác đặt"), { statusCode: 409 });
       }
 
-      const totalPrice = calculateBookingTotalPrice(seats);
+      const seatTotalPrice = calculateBookingTotalPrice(seats);
+      const comboTotalPrice = reservedCombos.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+      const totalPrice = seatTotalPrice + comboTotalPrice;
       [createdBooking] = await Booking.create([{
         user_id: user._id,
         showtime_id,
@@ -198,6 +210,7 @@ export const createBooking = async (req, res) => {
         customer_name: user.full_name,
         customer_email: user.email,
         customer_phone: user.phone,
+        combos: reservedCombos,
         total_price: totalPrice,
       }], { session });
     });
@@ -233,6 +246,7 @@ export const getMyBookings = async (req, res) => {
           populate: { path: "seat_type_id", select: "name" },
         },
       })
+      .populate({ path: "combos.combo_id", select: "name image type" })
       .sort({ created_at: -1 });
     return res.json({ success: true, data: bookings });
   } catch (error) {

@@ -5,6 +5,7 @@ export const normalizeComboPayload = (payload, defaults = {}) => {
     name: payload.name ?? defaults.name,
     image: payload.image ?? defaults.image,
     description: payload.description ?? defaults.description,
+    type: payload.type ?? defaults.type,
     price: payload.price ?? defaults.price,
     stock: payload.stock ?? defaults.stock,
     status: payload.status ?? defaults.status,
@@ -83,6 +84,22 @@ const validateComboDescription = (description, prefix) => {
   return null;
 };
 
+const validateComboType = (type, prefix) => {
+  if (isEmptyValue(type)) {
+    return null;
+  }
+
+  if (typeof type !== "string") {
+    return `${prefix}type khong hop le`;
+  }
+
+  if (!["combo", "popcorn", "drink", "snack"].includes(type.trim().toLowerCase())) {
+    return `${prefix}type khong hop le`;
+  }
+
+  return null;
+};
+
 const validateComboPrice = (price, prefix, required = true) => {
   if (!required && isEmptyValue(price)) {
     return null;
@@ -98,8 +115,8 @@ const validateComboPrice = (price, prefix, required = true) => {
     return `${prefix}price khong hop le`;
   }
 
-  if (value < 0) {
-    return `${prefix}price khong duoc am`;
+  if (value <= 0) {
+    return `${prefix}price phai lon hon 0`;
   }
 
   return null;
@@ -162,6 +179,9 @@ export const validateComboPayload = (combo, index = null) => {
   const descriptionError = validateComboDescription(combo.description, prefix);
   if (descriptionError) return descriptionError;
 
+  const typeError = validateComboType(combo.type, prefix);
+  if (typeError) return typeError;
+
   const priceError = validateComboPrice(combo.price, prefix, true);
   if (priceError) return priceError;
 
@@ -190,6 +210,11 @@ export const validateComboUpdatePayload = (combo, index = null) => {
   if ("description" in combo) {
     const descriptionError = validateComboDescription(combo.description, prefix);
     if (descriptionError) return descriptionError;
+  }
+
+  if ("type" in combo) {
+    const typeError = validateComboType(combo.type, prefix);
+    if (typeError) return typeError;
   }
 
   if ("price" in combo) {

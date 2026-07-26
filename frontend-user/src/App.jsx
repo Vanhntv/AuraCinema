@@ -29,6 +29,7 @@ const AdminRoomsPage = lazy(() => import('./admin/pages/RoomsPage'));
 const AdminShowtimesPage = lazy(() => import('./admin/pages/ShowtimesPage'));
 const AdminTrailersPage = lazy(() => import('./admin/pages/TrailersPage'));
 const AdminUsersPage = lazy(() => import('./admin/pages/UsersPage'));
+const AdminConcessionsPage = lazy(() => import('./admin/pages/ConcessionsPage'));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -112,6 +113,7 @@ function App() {
           <Route path="movies" element={<AdminMoviesPage />} />
           <Route path="rooms" element={<AdminRoomsPage />} />
           <Route path="showtimes" element={<AdminShowtimesPage />} />
+          <Route path="concessions" element={<AdminConcessionsPage />} />
           <Route path="trailers" element={<AdminTrailersPage />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="settings" element={<Navigate to="/admin/movies" replace />} />

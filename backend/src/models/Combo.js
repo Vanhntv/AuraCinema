@@ -16,10 +16,16 @@ const comboSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    type: {
+      type: String,
+      enum: ["combo", "popcorn", "drink", "snack"],
+      default: "combo",
+      trim: true,
+    },
     price: {
       type: Number,
       required: true,
-      min: 0,
+      min: 1,
     },
     stock: {
       type: Number,

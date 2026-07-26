@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
 import { createBooking } from "../services/bookingService";
+import { getAvailableConcessions } from "../services/concessionService";
 import { useAuth } from "../hooks/useAuth";
 
 const SEAT_TYPES = {
@@ -132,6 +133,15 @@ function getSeatStatus(seat) {
   return String(seat?.status || "available").trim().toLowerCase();
 }
 
+function resolveImageUrl(image) {
+  if (!image) return "";
+  if (/^https?:\/\//i.test(image)) return image;
+
+  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+  const origin = apiBase.replace(/\/api\/?$/, "");
+  return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
+}
+
 function isHeldSeat(seat) {
   const status = getSeatStatus(seat);
   return (
@@ -162,6 +172,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [bookingResult, setBookingResult] = useState(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [concessions, setConcessions] = useState([]);
+  const [selectedConcessions, setSelectedConcessions] = useState({});
+  const [isLoadingConcessions, setIsLoadingConcessions] = useState(false);
+  const [concessionError, setConcessionError] = useState("");
   const initialShowtimeId = getShowtimeId(initialShowtime);
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
@@ -218,6 +232,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setBookingResult(null);
     setHoldExpiresAt(null);
     setRemainingSeconds(0);
+    setSelectedConcessions({});
   }, [movie?._id, initialShowtimeId]);
 
   useEffect(() => {
@@ -242,6 +257,35 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     loadShowtimes();
     return () => { isActive = false; };
   }, [initialShowtimeId, movie?._id, selectedDate.value]);
+
+  useEffect(() => {
+    if (!movie?._id) return undefined;
+
+    let isActive = true;
+
+    async function loadConcessions() {
+      try {
+        setIsLoadingConcessions(true);
+        setConcessionError("");
+        const response = await getAvailableConcessions();
+        const payload = response?.data || {};
+        const list = Array.isArray(payload) ? payload : payload.data || [];
+        if (isActive) setConcessions(list.filter((item) => item.status));
+      } catch (requestError) {
+        if (isActive) {
+          setConcessions([]);
+          setConcessionError(requestError.response?.data?.message || "Không thể tải dịch vụ bắp nước.");
+        }
+      } finally {
+        if (isActive) setIsLoadingConcessions(false);
+      }
+    }
+
+    loadConcessions();
+    return () => {
+      isActive = false;
+    };
+  }, [movie?._id]);
 
   useEffect(() => {
     if (!movie?._id || !initialShowtimeId || !initialShowtime) {
@@ -324,10 +368,32 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     return selectedTypes.map((type) => SEAT_TYPES[type]?.label || "Ghế").join(", ");
   }, [selectedSeats]);
 
-  const totalPrice = useMemo(
+  const seatTotal = useMemo(
     () => calculateSelectedSeatTotal(selectedSeats, showtimeSeats),
     [selectedSeats, showtimeSeats],
   );
+
+  const selectedConcessionItems = useMemo(
+    () =>
+      concessions
+        .map((item) => ({
+          ...item,
+          quantity: Number(selectedConcessions[item._id] || 0),
+        }))
+        .filter((item) => item.quantity > 0),
+    [concessions, selectedConcessions],
+  );
+
+  const concessionTotal = useMemo(
+    () =>
+      selectedConcessionItems.reduce(
+        (total, item) => total + Number(item.price || 0) * item.quantity,
+        0,
+      ),
+    [selectedConcessionItems],
+  );
+
+  const totalPrice = seatTotal + concessionTotal;
 
   const seatPriceNotes = useMemo(() => {
     const priceByType = new Map();
@@ -401,6 +467,21 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     } finally {
       setIsLoadingSeats(false);
     }
+  };
+
+  const updateConcessionQuantity = (item, nextQuantity) => {
+    const stock = Number(item.stock ?? 0);
+    const quantity = Math.min(Math.max(Number(nextQuantity) || 0, 0), stock);
+
+    setSelectedConcessions((current) => {
+      const next = { ...current };
+      if (quantity <= 0) {
+        delete next[item._id];
+      } else {
+        next[item._id] = quantity;
+      }
+      return next;
+    });
   };
 
   const toggleSeat = async (seat) => {
@@ -481,6 +562,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const response = await createBooking({
         showtime_id: getShowtimeId(selectedShowtime),
         showtime_seat_ids: selectedSeats.map((seat) => seat._id),
+        combos: selectedConcessionItems.map((item) => ({
+          combo_id: item._id,
+          quantity: item.quantity,
+        })),
       });
       setBookingResult(response.data);
       setShowtimeSeats((current) => current.map((seat) =>
@@ -489,6 +574,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           : seat,
       ));
       setSelectedSeats([]);
+      setSelectedConcessions({});
     } catch (requestError) {
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
@@ -559,10 +645,102 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 </div>
               </div>}
             </div>
+
+            {step === "select-seat" && (
+              <div>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="text-lg font-black text-white">Chọn bắp nước</h3>
+                    <p className="mt-1 text-sm text-slate-400">Có thể bỏ qua nếu bạn chỉ muốn đặt vé.</p>
+                  </div>
+                  {concessionTotal > 0 && (
+                    <span className="rounded-full bg-[#ff6070]/15 px-4 py-2 text-sm font-extrabold text-[#ff9aa5]">
+                      {concessionTotal.toLocaleString("vi-VN")}đ
+                    </span>
+                  )}
+                </div>
+
+                {isLoadingConcessions && (
+                  <p className="mt-4 rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                    Đang tải dịch vụ bắp nước...
+                  </p>
+                )}
+
+                {!isLoadingConcessions && concessionError && (
+                  <p className="mt-4 rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                    {concessionError}
+                  </p>
+                )}
+
+                {!isLoadingConcessions && !concessionError && concessions.length === 0 && (
+                  <p className="mt-4 rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+                    Hiện chưa có dịch vụ bắp nước đang bán.
+                  </p>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {concessions.map((item) => {
+                    const quantity = Number(selectedConcessions[item._id] || 0);
+                    const stock = Number(item.stock ?? 0);
+                    const isSoldOut = stock <= 0;
+
+                    return (
+                      <div
+                        key={item._id}
+                        className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3"
+                      >
+                        <div className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-black/20 text-slate-500">
+                          {item.image ? (
+                            <img className="h-full w-full object-cover" src={resolveImageUrl(item.image)} alt={item.name} />
+                          ) : (
+                            "BN"
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <strong className="block truncate text-sm text-white">{item.name}</strong>
+                              <span className="mt-1 block text-xs text-slate-400">
+                                {Number(item.price || 0).toLocaleString("vi-VN")}đ
+                              </span>
+                            </div>
+                            <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${isSoldOut ? "bg-red-500/10 text-red-200" : "bg-emerald-400/10 text-emerald-200"}`}>
+                              {isSoldOut ? "Hết" : `Còn ${stock}`}
+                            </span>
+                          </div>
+                          {item.description && (
+                            <p className="mt-2 line-clamp-2 text-xs text-slate-500">{item.description}</p>
+                          )}
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-lg font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={quantity <= 0}
+                              onClick={() => updateConcessionQuantity(item, quantity - 1)}
+                            >
+                              -
+                            </button>
+                            <span className="min-w-8 text-center text-sm font-black text-white">{quantity}</span>
+                            <button
+                              type="button"
+                              className="grid h-8 w-8 place-items-center rounded-full bg-[#ff6070] text-lg font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={isSoldOut || quantity >= stock}
+                              onClick={() => updateConcessionQuantity(item, quantity + 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 className="text-lg font-black text-white">Thông tin vé</h3>{remainingSeconds > 0 && <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">Thời gian giữ ghế: <strong>{String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:{String(remainingSeconds % 60).padStart(2, "0")}</strong></div>}{bookingResult && <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><strong>Đặt vé thành công!</strong><br />Mã đơn: {bookingResult._id}</div>}<div className="mt-5 grid gap-4 text-sm text-slate-300">
-            <p><span className="text-slate-500">Ngày:</span> {selectedDate.label} · {selectedDate.displayDate}</p><p><span className="text-slate-500">Suất:</span> {selectedShowtime?.startTime || "Chưa chọn"}</p><p><span className="text-slate-500">Phòng:</span> {selectedShowtime?.roomName || "Chưa chọn"}</p><p><span className="text-slate-500">Loại:</span> {selectedTypeSummary}</p><p><span className="text-slate-500">Ghế:</span> {selectedSeats.length ? selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`).join(", ") : "Chưa chọn"}</p><p><span className="text-slate-500">Tổng:</span> <strong className="text-[#ff9aa5]">{totalPrice.toLocaleString("vi-VN")}đ</strong></p>
+            <p><span className="text-slate-500">Ngày:</span> {selectedDate.label} · {selectedDate.displayDate}</p><p><span className="text-slate-500">Suất:</span> {selectedShowtime?.startTime || "Chưa chọn"}</p><p><span className="text-slate-500">Phòng:</span> {selectedShowtime?.roomName || "Chưa chọn"}</p><p><span className="text-slate-500">Loại:</span> {selectedTypeSummary}</p><p><span className="text-slate-500">Ghế:</span> {selectedSeats.length ? selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`).join(", ") : "Chưa chọn"}</p><p><span className="text-slate-500">Tiền vé:</span> <strong className="text-white">{seatTotal.toLocaleString("vi-VN")}đ</strong></p><p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{concessionTotal.toLocaleString("vi-VN")}đ</strong></p>{selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {(Number(item.price || 0) * item.quantity).toLocaleString("vi-VN")}đ</p>)}</div>}<p><span className="text-slate-500">Tổng:</span> <strong className="text-[#ff9aa5]">{totalPrice.toLocaleString("vi-VN")}đ</strong></p>
           </div><div className="mt-6 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-4 text-sm"><p className="font-bold text-white">Thông tin người đặt</p>{isAuthenticated ? <><p className="text-slate-300">{user?.full_name}</p><p className="text-slate-400">{user?.email}</p><p className="text-slate-400">{user?.phone || "Chưa cập nhật số điện thoại"}</p></> : <p className="text-amber-200">Bạn cần đăng nhập trước khi đặt vé.</p>}</div><button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || !isAuthenticated || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button></aside>
         </div>
       </div>

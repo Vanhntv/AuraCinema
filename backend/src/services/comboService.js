@@ -10,7 +10,7 @@ import {
 const isMissing = (value) => value === undefined || value === null || value === "";
 
 const buildComboFilter = (query = {}) => {
-  const { q, search, name, status } = query;
+  const { q, search, name, status, type } = query;
   const filter = {
     deleted_at: null,
   };
@@ -21,6 +21,13 @@ const buildComboFilter = (query = {}) => {
       filter.status = true;
     } else if (["false", "0", "inactive", "disabled"].includes(normalizedStatus)) {
       filter.status = false;
+    }
+  }
+
+  if (!isMissing(type)) {
+    const normalizedType = String(type).trim().toLowerCase();
+    if (["combo", "popcorn", "drink", "snack"].includes(normalizedType)) {
+      filter.type = normalizedType === "combo" ? { $in: ["combo", null] } : normalizedType;
     }
   }
 
@@ -54,6 +61,7 @@ const prepareCreatePayload = (payload) => {
   const normalizedPayload = normalizeComboPayload(payload, {
     image: null,
     description: "",
+    type: "combo",
     stock: 0,
     status: true,
   });
@@ -65,6 +73,9 @@ const prepareCreatePayload = (payload) => {
     description: isMissing(normalizedPayload.description)
       ? ""
       : String(normalizedPayload.description).trim(),
+    type: isMissing(normalizedPayload.type)
+      ? "combo"
+      : String(normalizedPayload.type).trim().toLowerCase(),
     price: Number(normalizedPayload.price),
     stock: Number(normalizedPayload.stock ?? 0),
     status: parseComboStatus(normalizedPayload.status, true),
@@ -86,6 +97,12 @@ const prepareUpdatePayload = (payload) => {
     updatePayload.description = isMissing(payload.description)
       ? ""
       : String(payload.description).trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "type")) {
+    updatePayload.type = isMissing(payload.type)
+      ? payload.type
+      : String(payload.type).trim().toLowerCase();
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "price")) {
@@ -214,7 +231,7 @@ export const updateComboService = async (id, payload) => {
     ...normalizedPayload,
   };
 
-  if (Number.isNaN(Number(nextComboState.price)) || Number(nextComboState.price) < 0) {
+  if (Number.isNaN(Number(nextComboState.price)) || Number(nextComboState.price) <= 0) {
     const error = new Error("price khong hop le");
     error.statusCode = 400;
     throw error;
