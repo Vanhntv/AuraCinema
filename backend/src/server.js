@@ -20,6 +20,7 @@ import bookingsRoute from "./router/bookingsRouters.js";
 import usersRoute from "./router/usersRouters.js";
 import settingsRoute from "./router/settingsRouters.js";
 import combosRoute from "./router/combosRouters.js";
+import giftsRoute from "./router/giftsRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -47,6 +48,7 @@ app.use("/api/bookings", bookingsRoute);
 app.use("/api/users", usersRoute);
 app.use("/api/settings", settingsRoute);
 app.use("/api/combos", combosRoute);
+app.use("/api/gifts", giftsRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;
