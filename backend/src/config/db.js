@@ -2,14 +2,14 @@ import mongoose from "mongoose";
 
 export const connectDB = async () => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error("Thiếu biến môi trường MONGODB_URI");
-    }
+     await mongoose.connect(
+      "mongodb+srv://taovohoang2k6_db_user:sb0euxYwl8c6jbEY@cluster0.hdnuiwm.mongodb.net/?appName=Cluster0"
+    );
 
-    await mongoose.connect(process.env.MONGODB_URI);
+    // mongoose.connect("mongodb://localhost:27017/nodejs");
     console.log("Liên kết csdl thành công");
   } catch (error) {
-    console.error("Lỗi kết nối CSDL", error);
+    console.error("lỗi kết lỗi csdl", error);
     process.exit(1);
   }
 };
