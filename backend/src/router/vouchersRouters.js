@@ -11,13 +11,14 @@ import {
   toggleVoucherStatus,
   updateVoucher,
 } from "../controllers/voucherControllers.js";
-import { authMiddleware, authorizeRoles, optionalAuthMiddleware } from "../middleware/authMiddleware.js";
+import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
+const customerOnly = [authMiddleware, authorizeRoles("user")];
 
-router.post("/verify", optionalAuthMiddleware, verifyVoucher);
-router.get("/verify", optionalAuthMiddleware, verifyVoucher);
+router.post("/verify", customerOnly, verifyVoucher);
+router.get("/verify", customerOnly, verifyVoucher);
 router.get("/", adminOnly, getAllVouchers);
 router.get("/stats", adminOnly, getVoucherStats);
 router.get("/:id/usages", adminOnly, getVoucherUsageHistory);
