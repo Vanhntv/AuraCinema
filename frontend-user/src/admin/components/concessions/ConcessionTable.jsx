@@ -1,4 +1,4 @@
-import { HiOutlinePhotograph } from "react-icons/hi";
+import { HiOutlinePencil, HiOutlinePhotograph } from "react-icons/hi";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", {
@@ -37,7 +37,7 @@ const resolveImageUrl = (image) => {
   return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
 };
 
-const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
+const ConcessionTable = ({ items, rowStart = 0, onToggleStatus, onEditPrice }) => {
   return (
     <div className="table-wrapper concession-table-wrapper">
       <table className="data-table concession-table">
@@ -51,12 +51,13 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
             <th style={{ width: "110px" }}>Tồn kho</th>
             <th style={{ width: "150px" }}>Trạng thái</th>
             <th style={{ width: "160px" }}>Cập nhật</th>
+            <th style={{ width: "110px", textAlign: "center" }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan="8">
+              <td colSpan="9">
                 <div className="table-empty">
                   <div className="table-empty-icon">BN</div>
                   <div className="table-empty-text">Chưa có dịch vụ phù hợp</div>
@@ -107,6 +108,18 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
                 </td>
                 <td className="table-cell-date">
                   {formatDate(item.updated_at || item.created_at)}
+                </td>
+                <td>
+                  <div className="table-actions" style={{ justifyContent: "center" }}>
+                    <button
+                      className="btn btn-icon btn-ghost"
+                      style={{ color: "var(--color-info)" }}
+                      onClick={() => onEditPrice(item)}
+                      title="Cập nhật giá bán"
+                    >
+                      <HiOutlinePencil />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))

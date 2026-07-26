@@ -9,10 +9,12 @@ import {
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
 import ConcessionModal from "../components/concessions/ConcessionModal";
+import ConcessionPriceModal from "../components/concessions/ConcessionPriceModal";
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
   createConcession,
   getConcessions,
+  updateConcessionPrice,
   updateConcessionStatus,
 } from "../services/concessionService";
 
@@ -30,6 +32,7 @@ const ConcessionsPage = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [priceTarget, setPriceTarget] = useState(null);
 
   const activeCount = useMemo(
     () => items.filter((item) => item.status).length,
@@ -136,6 +139,23 @@ const ConcessionsPage = () => {
         "error",
         error.response?.data?.message || "Không thể cập nhật trạng thái dịch vụ",
       );
+    }
+  };
+
+  const handleUpdatePrice = async (item, price) => {
+    try {
+      setSubmitting(true);
+      await updateConcessionPrice(item._id, price);
+      addToast("success", `Đã cập nhật giá bán cho "${item.name}"`);
+      setPriceTarget(null);
+      fetchConcessions(currentPage);
+    } catch (error) {
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể cập nhật giá bán",
+      );
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -248,6 +268,7 @@ const ConcessionsPage = () => {
               items={items}
               rowStart={(currentPage - 1) * PAGE_SIZE}
               onToggleStatus={handleToggleStatus}
+              onEditPrice={setPriceTarget}
             />
 
             <div className="pagination">
@@ -277,6 +298,13 @@ const ConcessionsPage = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleCreate}
+        isLoading={submitting}
+      />
+
+      <ConcessionPriceModal
+        item={priceTarget}
+        onClose={() => setPriceTarget(null)}
+        onSubmit={handleUpdatePrice}
         isLoading={submitting}
       />
 

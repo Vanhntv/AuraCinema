@@ -20,3 +20,8 @@ export const updateConcessionStatus = async (id, status) => {
   const res = await axiosClient.put(`${API_URL}/${id}`, { status });
   return res.data;
 };
+
+export const updateConcessionPrice = async (id, price) => {
+  const res = await axiosClient.put(`${API_URL}/${id}`, { price });
+  return res.data;
+};
