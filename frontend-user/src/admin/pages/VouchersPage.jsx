@@ -11,7 +11,7 @@ import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, getVoucherById, getVouchers } from "../services/voucherService";
+import { createVoucher, getVoucherById, getVouchers, updateVoucher } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -32,6 +32,7 @@ const VouchersPage = () => {
   const [detailVoucher, setDetailVoucher] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editVoucher, setEditVoucher] = useState(null);
 
   const activeInPage = useMemo(
     () => vouchers.filter((voucher) => voucher.status).length,
@@ -116,6 +117,18 @@ const VouchersPage = () => {
     }
   };
 
+  const handleEditVoucher = async (voucher) => {
+    try {
+      setDetailLoading(true);
+      const response = await getVoucherById(voucher._id);
+      setEditVoucher(response.data);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tải mã giảm giá để chỉnh sửa");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const handleCreateVoucher = async (payload) => {
     try {
       setSubmitting(true);
@@ -125,6 +138,22 @@ const VouchersPage = () => {
       fetchVouchers(1);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể tạo mã giảm giá");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateVoucher = async (payload) => {
+    if (!editVoucher?._id) return;
+
+    try {
+      setSubmitting(true);
+      await updateVoucher(editVoucher._id, payload);
+      addToast("success", `Đã cập nhật mã giảm giá "${editVoucher.code}"`);
+      setEditVoucher(null);
+      fetchVouchers(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể cập nhật mã giảm giá");
     } finally {
       setSubmitting(false);
     }
@@ -241,6 +270,7 @@ const VouchersPage = () => {
               vouchers={vouchers}
               rowStart={(currentPage - 1) * PAGE_SIZE}
               onView={handleViewDetail}
+              onEdit={handleEditVoucher}
             />
             <div className="pagination">
               <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
@@ -268,6 +298,14 @@ const VouchersPage = () => {
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateVoucher}
         isLoading={submitting}
+      />
+
+      <VoucherModal
+        isOpen={Boolean(editVoucher)}
+        onClose={() => setEditVoucher(null)}
+        onSubmit={handleUpdateVoucher}
+        isLoading={submitting}
+        initialData={editVoucher}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />

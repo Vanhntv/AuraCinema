@@ -54,7 +54,7 @@ const formatDiscountValue = (voucher) => {
   return formatCurrency(voucher.discount_value);
 };
 
-const VoucherTable = ({ vouchers, rowStart = 0, onView }) => (
+const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit }) => (
   <div className="table-wrapper vouchers-table-wrapper">
     <table className="data-table vouchers-table">
       <thead>
@@ -126,7 +126,11 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView }) => (
                     >
                       <HiOutlineEye />
                     </button>
-                    <button className="btn btn-icon btn-ghost" title="Chỉnh sửa" disabled>
+                    <button
+                      className="btn btn-icon btn-ghost"
+                      title="Chỉnh sửa"
+                      onClick={() => onEdit(voucher)}
+                    >
                       <HiOutlinePencil />
                     </button>
                   </div>

@@ -19,6 +19,14 @@ const normalizeVoucherCode = (value) => {
   return String(value).trim().toUpperCase();
 };
 
+const USED_VOUCHER_EDITABLE_FIELDS = new Set([
+  "name",
+  "description",
+  "end_date",
+  "usage_limit",
+  "status",
+]);
+
 const parseVoucherAmount = (value) => {
   if (isMissing(value)) {
     return null;
@@ -410,6 +418,21 @@ export const updateVoucherService = async (id, payload, user = null) => {
     throw error;
   }
 
+  const existingUsageCount = Number(existingVoucher.usage_count || 0);
+  if (existingUsageCount > 0) {
+    const blockedFields = Object.keys(payload).filter(
+      (field) => !USED_VOUCHER_EDITABLE_FIELDS.has(field)
+    );
+
+    if (blockedFields.length > 0) {
+      const error = new Error(
+        `Voucher da duoc su dung, khong the cap nhat cac truong: ${blockedFields.join(", ")}`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   const normalizedPayload = prepareUpdatePayload(payload);
   if (user?.id) {
     normalizedPayload.updated_by = user.id;
@@ -429,6 +452,20 @@ export const updateVoucherService = async (id, payload, user = null) => {
     ...existingVoucher.toObject(),
     ...normalizedPayload,
   };
+
+  if (Object.prototype.hasOwnProperty.call(normalizedPayload, "usage_limit")) {
+    const nextUsageLimit = Number(normalizedPayload.usage_limit);
+    const nextUsageCount = Number(nextVoucherState.usage_count || 0);
+
+    if (nextUsageLimit < nextUsageCount) {
+      const error = new Error("usage_limit khong duoc nho hon so luot da su dung");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    normalizedPayload.quantity = Math.max(nextUsageLimit - nextUsageCount, 0);
+    nextVoucherState.quantity = normalizedPayload.quantity;
+  }
 
   if (
     nextVoucherState.start_date &&
