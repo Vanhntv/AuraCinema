@@ -91,8 +91,13 @@ const validateVoucherCode = (code, prefix) => {
     return `${prefix}code phai co it nhat 3 ky tu`;
   }
 
-  if (!/^[A-Za-z0-9_-]+$/.test(code.trim())) {
-    return `${prefix}code chi duoc chua chu cai, so, dau gach ngang va gach duoi`;
+  const normalizedCode = code.trim();
+  if (/\s/.test(normalizedCode)) {
+    return `${prefix}code khong duoc chua khoang trang`;
+  }
+
+  if (!/^[A-Za-z0-9-]+$/.test(normalizedCode)) {
+    return `${prefix}code chi duoc chua chu cai khong dau, so va dau gach ngang`;
   }
 
   return null;
@@ -177,8 +182,31 @@ const validateVoucherQuantity = (quantity, prefix, required = true) => {
   if (!Number.isInteger(value)) {
     return `${prefix}quantity phai la so nguyen`;
   }
-  if (value < 0) {
-    return `${prefix}quantity khong duoc am`;
+  if (value <= 0) {
+    return `${prefix}quantity phai lon hon 0`;
+  }
+
+  return null;
+};
+
+const validatePositiveInteger = (value, field, prefix, required = false) => {
+  if (!required && isEmptyValue(value)) {
+    return null;
+  }
+
+  if (isEmptyValue(value)) {
+    return `${prefix}${field} la bat buoc`;
+  }
+
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) {
+    return `${prefix}${field} khong hop le`;
+  }
+  if (!Number.isInteger(numberValue)) {
+    return `${prefix}${field} phai la so nguyen`;
+  }
+  if (numberValue <= 0) {
+    return `${prefix}${field} phai lon hon 0`;
   }
 
   return null;
@@ -210,8 +238,8 @@ const validateVoucherDates = (startDateInput, endDateInput, prefix, required = t
     return `${prefix}end_date khong hop le`;
   }
 
-  if (startDate && endDate && endDate < startDate) {
-    return `${prefix}end_date phai lon hon hoac bang start_date`;
+  if (startDate && endDate && endDate <= startDate) {
+    return `${prefix}end_date phai sau start_date`;
   }
 
   return null;
@@ -241,6 +269,21 @@ export const validateVoucherPayload = (voucher, index = null) => {
 
   const quantityError = validateVoucherQuantity(voucher.quantity, prefix, true);
   if (quantityError) return quantityError;
+
+  const usageLimitError = validatePositiveInteger(voucher.usage_limit, "usage_limit", prefix, true);
+  if (usageLimitError) return usageLimitError;
+
+  const usageLimitPerUserError = validatePositiveInteger(
+    voucher.usage_limit_per_user,
+    "usage_limit_per_user",
+    prefix,
+    true
+  );
+  if (usageLimitPerUserError) return usageLimitPerUserError;
+
+  if (Number(voucher.usage_limit_per_user) > Number(voucher.usage_limit)) {
+    return `${prefix}usage_limit_per_user khong duoc lon hon usage_limit`;
+  }
 
   const dateError = validateVoucherDates(voucher.start_date, voucher.end_date, prefix, true);
   if (dateError) return dateError;
@@ -287,6 +330,29 @@ export const validateVoucherUpdatePayload = (voucher, index = null) => {
   if ("quantity" in voucher) {
     const quantityError = validateVoucherQuantity(voucher.quantity, prefix, false);
     if (quantityError) return quantityError;
+  }
+
+  if ("usage_limit" in voucher) {
+    const usageLimitError = validatePositiveInteger(voucher.usage_limit, "usage_limit", prefix, false);
+    if (usageLimitError) return usageLimitError;
+  }
+
+  if ("usage_limit_per_user" in voucher) {
+    const usageLimitPerUserError = validatePositiveInteger(
+      voucher.usage_limit_per_user,
+      "usage_limit_per_user",
+      prefix,
+      false
+    );
+    if (usageLimitPerUserError) return usageLimitPerUserError;
+  }
+
+  if (
+    "usage_limit" in voucher &&
+    "usage_limit_per_user" in voucher &&
+    Number(voucher.usage_limit_per_user) > Number(voucher.usage_limit)
+  ) {
+    return `${prefix}usage_limit_per_user khong duoc lon hon usage_limit`;
   }
 
   if ("start_date" in voucher || "end_date" in voucher) {

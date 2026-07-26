@@ -45,14 +45,15 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
     const nextErrors = {};
     const discountValue = Number(formData.discount_value);
     const minOrder = Number(formData.min_order || 0);
+    const maxDiscount = formData.max_discount_amount === "" ? null : Number(formData.max_discount_amount);
     const usageLimit = Number(formData.usage_limit);
     const usagePerUser = Number(formData.usage_limit_per_user);
     const startDate = formData.start_date ? new Date(formData.start_date) : null;
     const endDate = formData.end_date ? new Date(formData.end_date) : null;
 
     if (!formData.name.trim()) nextErrors.name = "Tên chương trình là bắt buộc";
-    if (!/^[A-Za-z0-9_-]{3,}$/.test(formData.code.trim())) {
-      nextErrors.code = "Mã cần ít nhất 3 ký tự, chỉ gồm chữ, số, gạch ngang hoặc gạch dưới";
+    if (!/^[A-Za-z0-9-]{3,}$/.test(formData.code.trim())) {
+      nextErrors.code = "Mã cần ít nhất 3 ký tự, không dấu, không khoảng trắng, chỉ gồm chữ, số và dấu -";
     }
     if (!Number.isFinite(discountValue) || discountValue <= 0) {
       nextErrors.discount_value = "Giá trị giảm phải lớn hơn 0";
@@ -63,9 +64,12 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
     if (!Number.isFinite(minOrder) || minOrder < 0) {
       nextErrors.min_order = "Đơn hàng tối thiểu không hợp lệ";
     }
+    if (maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
+      nextErrors.max_discount_amount = "Giảm tối đa không được nhỏ hơn 0";
+    }
     if (!formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
     if (!formData.end_date) nextErrors.end_date = "Ngày kết thúc là bắt buộc";
-    if (startDate && endDate && endDate < startDate) {
+    if (startDate && endDate && endDate <= startDate) {
       nextErrors.end_date = "Ngày kết thúc phải sau ngày bắt đầu";
     }
     if (!Number.isInteger(usageLimit) || usageLimit <= 0) {
@@ -73,6 +77,9 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
     }
     if (!Number.isInteger(usagePerUser) || usagePerUser <= 0) {
       nextErrors.usage_limit_per_user = "Lượt mỗi khách phải là số nguyên lớn hơn 0";
+    }
+    if (Number.isInteger(usageLimit) && Number.isInteger(usagePerUser) && usagePerUser > usageLimit) {
+      nextErrors.usage_limit_per_user = "Lượt mỗi khách không được lớn hơn tổng lượt sử dụng";
     }
 
     setErrors(nextErrors);
@@ -173,7 +180,8 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Giảm tối đa</label>
-                  <input className="form-input" type="number" min="0" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} />
+                  <input className={`form-input ${errors.max_discount_amount ? "error" : ""}`} type="number" min="0" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} />
+                  {errors.max_discount_amount && <p className="form-error">{errors.max_discount_amount}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Đơn hàng tối thiểu</label>

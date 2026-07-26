@@ -433,9 +433,23 @@ export const updateVoucherService = async (id, payload, user = null) => {
   if (
     nextVoucherState.start_date &&
     nextVoucherState.end_date &&
-    nextVoucherState.end_date < nextVoucherState.start_date
+    nextVoucherState.end_date <= nextVoucherState.start_date
   ) {
-    const error = new Error("end_date phai lon hon hoac bang start_date");
+    const error = new Error("end_date phai sau start_date");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const effectiveUsageLimit = Number(
+    nextVoucherState.usage_limit ?? nextVoucherState.quantity
+  );
+  const effectiveUsagePerUser = Number(nextVoucherState.usage_limit_per_user);
+  if (
+    Number.isFinite(effectiveUsageLimit) &&
+    Number.isFinite(effectiveUsagePerUser) &&
+    effectiveUsagePerUser > effectiveUsageLimit
+  ) {
+    const error = new Error("usage_limit_per_user khong duoc lon hon usage_limit");
     error.statusCode = 400;
     throw error;
   }
