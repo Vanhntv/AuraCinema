@@ -4,6 +4,12 @@ import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
+import VoucherUsage from "../models/VoucherUsage.js";
+import {
+  refundVoucherUsageForBooking,
+  reserveVoucherUsageForPayment,
+  verifyVoucherService,
+} from "../services/voucherService.js";
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -160,6 +166,7 @@ export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
   try {
     const { showtime_id, showtime_seat_ids } = req.body;
+    const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
     const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
@@ -202,7 +209,62 @@ export const createBooking = async (req, res) => {
 
       const seatTotalPrice = calculateBookingTotalPrice(seats);
       const comboTotalPrice = reservedCombos.reduce((total, item) => total + Number(item.subtotal || 0), 0);
-      const totalPrice = seatTotalPrice + comboTotalPrice;
+      const subtotalPrice = seatTotalPrice + comboTotalPrice;
+      let discountAmount = 0;
+      let voucherSnapshot = undefined;
+      let voucherUsagePayload = null;
+
+      if (voucherCode) {
+        const voucherResult = await verifyVoucherService({
+          code: voucherCode,
+          order_amount: subtotalPrice,
+          ticket_amount: seatTotalPrice,
+          concession_amount: comboTotalPrice,
+          movie_id: showtime.movie_id,
+          user_id: user._id,
+          session,
+        });
+
+        if (!voucherResult.valid) {
+          throw Object.assign(new Error(voucherResult.message), { statusCode: 400 });
+        }
+
+        discountAmount = Number(voucherResult.discount_amount || 0);
+        await reserveVoucherUsageForPayment({
+          voucherId: voucherResult.voucher.id,
+          userId: user._id,
+          usageLimitPerUser: voucherResult.voucher.usage_limit_per_user,
+          quantity: 1,
+          session,
+        });
+
+        voucherSnapshot = {
+          voucher_id: voucherResult.voucher.id,
+          code: voucherResult.voucher.code,
+          discount_type: voucherResult.voucher.discount_type,
+          discount_value: Number(voucherResult.voucher.discount_value || 0),
+          discount_amount: discountAmount,
+          apply_scope: voucherResult.voucher.apply_scope,
+        };
+
+        voucherUsagePayload = {
+          voucher_id: voucherResult.voucher.id,
+          user_id: user._id,
+          code: voucherResult.voucher.code,
+          discount_type: voucherResult.voucher.discount_type,
+          discount_value: Number(voucherResult.voucher.discount_value || 0),
+          apply_scope: voucherResult.voucher.apply_scope,
+          subtotal_price: subtotalPrice,
+          eligible_amount: Number(voucherResult.eligible_amount || 0),
+          discount_amount: discountAmount,
+          final_price: Math.max(subtotalPrice - discountAmount, 0),
+          status: "used",
+          payment_status: "paid",
+          used_at: new Date(),
+        };
+      }
+
+      const totalPrice = Math.max(subtotalPrice - discountAmount, 0);
       [createdBooking] = await Booking.create([{
         user_id: user._id,
         showtime_id,
@@ -211,11 +273,95 @@ export const createBooking = async (req, res) => {
         customer_email: user.email,
         customer_phone: user.phone,
         combos: reservedCombos,
+        voucher: voucherSnapshot,
+        subtotal_price: subtotalPrice,
+        discount_amount: discountAmount,
         total_price: totalPrice,
       }], { session });
+
+      if (voucherUsagePayload) {
+        await VoucherUsage.create([{
+          ...voucherUsagePayload,
+          booking_id: createdBooking._id,
+        }], { session });
+      }
     });
 
     return res.status(201).json({ success: true, message: "Đặt vé thành công", data: createdBooking });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  } finally {
+    await session.endSession();
+  }
+};
+
+export const cancelBooking = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    const { id } = req.params;
+    const cancelledBy = ["cinema", "customer", "system"].includes(req.body?.cancelled_by)
+      ? req.body.cancelled_by
+      : req.user.role === "admin"
+        ? "cinema"
+        : "customer";
+    const refundVoucher = cancelledBy === "cinema" || req.body?.refund_voucher === true;
+
+    let cancelledBooking;
+    await session.withTransaction(async () => {
+      const booking = await Booking.findOne({
+        _id: id,
+        ...(req.user.role === "admin" ? {} : { user_id: req.user.id }),
+      }).session(session);
+
+      if (!booking) {
+        throw Object.assign(new Error("Khong tim thay booking"), { statusCode: 404 });
+      }
+
+      if (booking.status === "cancelled") {
+        throw Object.assign(new Error("Booking da duoc huy truoc do"), { statusCode: 409 });
+      }
+
+      booking.status = "cancelled";
+      booking.cancelled_by = cancelledBy;
+      booking.cancellation_reason = String(req.body?.reason || "").trim();
+      booking.cancelled_at = new Date();
+      if (refundVoucher && booking.payment_status === "paid") {
+        booking.payment_status = "refunded";
+      }
+      await booking.save({ session });
+
+      if (booking.payment_status === "refunded") {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: true,
+          finalStatus: "refunded",
+          session,
+        });
+      } else {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: false,
+          finalStatus: "cancelled",
+          session,
+        });
+      }
+
+      await ShowtimeSeat.updateMany(
+        { _id: { $in: booking.showtime_seat_ids }, status: "booked" },
+        { $set: { status: "available", held_by: null, hold_expires_at: null } },
+        { session },
+      );
+
+      cancelledBooking = booking;
+    });
+
+    return res.json({
+      success: true,
+      message: refundVoucher
+        ? "Da huy booking va hoan luot ma giam gia"
+        : "Da huy booking theo chinh sach khong hoan luot ma",
+      data: cancelledBooking,
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   } finally {
@@ -247,6 +393,7 @@ export const getMyBookings = async (req, res) => {
         },
       })
       .populate({ path: "combos.combo_id", select: "name image type" })
+      .populate({ path: "voucher.voucher_id", select: "code name apply_scope" })
       .sort({ created_at: -1 });
     return res.json({ success: true, data: bookings });
   } catch (error) {

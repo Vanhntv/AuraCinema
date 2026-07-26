@@ -1,7 +1,11 @@
 import mongoose from "mongoose";
 import Voucher from "../models/Voucher.js";
+import VoucherUsage from "../models/VoucherUsage.js";
+import VoucherUsageCounter from "../models/VoucherUsageCounter.js";
+import User from "../models/User.js";
 import {
   normalizeVoucherPayload,
+  parseVoucherApplyScope,
   parseVoucherDiscountType,
   parseVoucherStatus,
   validateVoucherPayload,
@@ -16,6 +20,38 @@ const normalizeVoucherCode = (value) => {
   }
 
   return String(value).trim().toUpperCase();
+};
+
+const USED_VOUCHER_EDITABLE_FIELDS = new Set([
+  "name",
+  "description",
+  "end_date",
+  "usage_limit",
+  "status",
+]);
+
+export const VOUCHER_MESSAGES = {
+  CREATED: "Tạo mã giảm giá thành công.",
+  UPDATED: "Cập nhật mã giảm giá thành công.",
+  EXISTS: "Mã giảm giá đã tồn tại.",
+  NOT_FOUND: "Mã giảm giá không tồn tại.",
+  INVALID: "Mã giảm giá không hợp lệ.",
+  VALID: "Mã giảm giá hợp lệ.",
+  INACTIVE: "Mã giảm giá đang tạm dừng.",
+  NOT_STARTED: "Mã giảm giá chưa đến thời gian sử dụng.",
+  EXPIRED: "Mã giảm giá đã hết hạn.",
+  OUT_OF_USAGE: "Mã giảm giá đã hết lượt sử dụng.",
+  MIN_ORDER: "Đơn hàng chưa đạt giá trị tối thiểu.",
+  CUSTOMER_LIMIT: "Bạn đã sử dụng hết số lượt cho phép.",
+  WRONG_MOVIE: "Mã không áp dụng cho phim này.",
+  WRONG_MEMBER_TIER: "Hạng thành viên của bạn không đủ điều kiện áp dụng mã.",
+  TICKET_SCOPE: "Mã này chỉ áp dụng cho vé xem phim.",
+  CONCESSION_SCOPE: "Mã này chỉ áp dụng cho bắp nước.",
+  PAUSED: "Tạm dừng mã giảm giá thành công.",
+  ACTIVATED: "Kích hoạt mã giảm giá thành công.",
+  DELETE_BLOCKED: "Không thể xóa mã đã phát sinh giao dịch. Mã đã được chuyển sang trạng thái Đã hủy.",
+  DELETED: "Xóa mã giảm giá thành công.",
+  RECHECK_REQUIRED: "Mã giảm giá không còn hợp lệ. Vui lòng kiểm tra lại trước khi thanh toán.",
 };
 
 const parseVoucherAmount = (value) => {
@@ -33,45 +69,434 @@ const parseVoucherAmount = (value) => {
   return amount;
 };
 
-const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
+export const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
   if (orderAmount === null) {
     return {
+      eligible_amount: null,
+      raw_discount_amount: null,
       discount_amount: null,
       final_amount: null,
     };
   }
 
+  const eligibleAmount = Math.max(Number(orderAmount || 0), 0);
   const discountType = voucher.discount_type;
-  const discountValue = Number(voucher.discount_value ?? 0);
+  const discountValue = Math.max(Number(voucher.discount_value ?? 0), 0);
+  const maxDiscountAmount = Math.max(Number(voucher.max_discount_amount ?? 0), 0);
 
+  let rawDiscountAmount = 0;
   let discountAmount = 0;
 
   if (discountType === "percent") {
-    discountAmount = (orderAmount * discountValue) / 100;
+    rawDiscountAmount = (eligibleAmount * discountValue) / 100;
+    discountAmount = maxDiscountAmount > 0
+      ? Math.min(rawDiscountAmount, maxDiscountAmount)
+      : rawDiscountAmount;
   } else {
+    rawDiscountAmount = discountValue;
     discountAmount = discountValue;
   }
 
-  discountAmount = Math.min(Math.max(discountAmount, 0), orderAmount);
+  discountAmount = Math.min(Math.max(discountAmount, 0), eligibleAmount);
 
   return {
+    eligible_amount: eligibleAmount,
+    raw_discount_amount: rawDiscountAmount,
     discount_amount: discountAmount,
-    final_amount: Math.max(orderAmount - discountAmount, 0),
+    final_amount: Math.max(eligibleAmount - discountAmount, 0),
+  };
+};
+
+const normalizeVoucherContext = (payload = {}) => ({
+  orderAmount: parseVoucherAmount(
+    payload.order_amount ?? payload.amount ?? payload.subtotal ?? payload.total_amount
+  ),
+  ticketAmount: parseVoucherAmount(payload.ticket_amount ?? payload.seat_total ?? payload.ticket_total),
+  concessionAmount: parseVoucherAmount(payload.concession_amount ?? payload.combo_total ?? payload.concession_total),
+  movieId: String(payload.movie_id ?? "").trim(),
+  userId: payload.user_id ? String(payload.user_id).trim() : "",
+});
+
+const getEligibleAmount = (voucher, context) => {
+  if (voucher.apply_scope === "ticket" || voucher.apply_scope === "movie") {
+    return context.ticketAmount ?? 0;
+  }
+
+  if (voucher.apply_scope === "concession") {
+    return context.concessionAmount ?? 0;
+  }
+
+  return context.orderAmount;
+};
+
+const checkVoucherScope = (voucher, context, user) => {
+  if (voucher.apply_scope === "ticket" && Number(context.ticketAmount || 0) <= 0) {
+    return VOUCHER_MESSAGES.TICKET_SCOPE;
+  }
+
+  if (voucher.apply_scope === "concession" && Number(context.concessionAmount || 0) <= 0) {
+    return VOUCHER_MESSAGES.CONCESSION_SCOPE;
+  }
+
+  if (voucher.apply_scope === "movie") {
+    if (Number(context.ticketAmount || 0) <= 0) return VOUCHER_MESSAGES.TICKET_SCOPE;
+    const movieIds = (voucher.applicable_movie_ids || []).map((id) => String(id));
+    if (movieIds.length > 0 && !movieIds.includes(String(context.movieId))) {
+      return VOUCHER_MESSAGES.WRONG_MOVIE;
+    }
+  }
+
+  if (voucher.apply_scope === "member") {
+    const tiers = (voucher.applicable_member_tiers || []).map((tier) => String(tier).toLowerCase());
+    const memberTier = String(user?.member_tier || "").toLowerCase();
+    if (tiers.length > 0 && !tiers.includes(memberTier)) {
+      return VOUCHER_MESSAGES.WRONG_MEMBER_TIER;
+    }
+  }
+
+  return null;
+};
+
+const countVoucherUsageByUser = async ({ voucherId, userId, session = null }) => {
+  if (!voucherId || !userId) return 0;
+
+  const counter = await VoucherUsageCounter.findOne({
+    user_id: userId,
+    voucher_id: voucherId,
+  }).session(session);
+
+  if (counter) {
+    return Number(counter.used_count || 0);
+  }
+
+  return VoucherUsage.countDocuments({
+    user_id: userId,
+    voucher_id: voucherId,
+    status: "used",
+    payment_status: "paid",
+  }).session(session);
+};
+
+const reserveVoucherUsageForCustomer = async ({
+  voucherId,
+  userId,
+  usageLimitPerUser,
+  quantity = 1,
+  session = null,
+} = {}) => {
+  if (!userId) return true;
+
+  const limit = Number(usageLimitPerUser || 1);
+  const reserveQuantity = Number(quantity);
+  if (!Number.isFinite(limit) || limit <= 0) return true;
+
+  const existingCounter = await VoucherUsageCounter.findOne({
+    voucher_id: voucherId,
+    user_id: userId,
+  }).session(session);
+
+  if (!existingCounter) {
+    const historicalUsageCount = await VoucherUsage.countDocuments({
+      user_id: userId,
+      voucher_id: voucherId,
+      status: "used",
+      payment_status: "paid",
+    }).session(session);
+
+    if (historicalUsageCount >= limit) {
+      const limitError = new Error(VOUCHER_MESSAGES.CUSTOMER_LIMIT);
+      limitError.statusCode = 409;
+      throw limitError;
+    }
+
+    try {
+      await VoucherUsageCounter.updateOne(
+        {
+          voucher_id: voucherId,
+          user_id: userId,
+        },
+        {
+          $setOnInsert: {
+            voucher_id: voucherId,
+            user_id: userId,
+            used_count: historicalUsageCount,
+          },
+        },
+        { upsert: true, session },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) {
+        throw error;
+      }
+    }
+  }
+
+  try {
+    const result = await VoucherUsageCounter.updateOne(
+      {
+        voucher_id: voucherId,
+        user_id: userId,
+        used_count: { $lte: limit - reserveQuantity },
+      },
+      {
+        $inc: { used_count: reserveQuantity },
+        $setOnInsert: {
+          voucher_id: voucherId,
+          user_id: userId,
+        },
+      },
+      { upsert: true, session },
+    );
+
+    if (result.modifiedCount === 1 || result.upsertedCount === 1) {
+      return true;
+    }
+  } catch (error) {
+    if (error?.code !== 11000) {
+      throw error;
+    }
+  }
+
+  const limitError = new Error(VOUCHER_MESSAGES.CUSTOMER_LIMIT);
+  limitError.statusCode = 409;
+  throw limitError;
+};
+
+export const refundVoucherUsageForBooking = async ({
+  bookingId,
+  refundUsage = true,
+  finalStatus = "refunded",
+  session = null,
+} = {}) => {
+  if (!bookingId) return null;
+
+  const usage = await VoucherUsage.findOne({
+    booking_id: bookingId,
+    status: { $in: ["reserved", "used"] },
+  }).session(session);
+
+  if (!usage) return null;
+
+  if (refundUsage && ["reserved", "used"].includes(usage.status)) {
+    await Voucher.updateOne(
+      {
+        _id: usage.voucher_id,
+        usage_count: { $gt: 0 },
+      },
+      {
+        $inc: {
+          quantity: 1,
+          usage_count: -1,
+        },
+      },
+      { session },
+    );
+
+    await VoucherUsageCounter.updateOne(
+      {
+        voucher_id: usage.voucher_id,
+        user_id: usage.user_id,
+        used_count: { $gt: 0 },
+      },
+      { $inc: { used_count: -1 } },
+      { session },
+    );
+  }
+
+  usage.status = finalStatus;
+  usage.payment_status = refundUsage ? "refunded" : usage.payment_status;
+  if (refundUsage) usage.refunded_at = new Date();
+  if (finalStatus === "cancelled") usage.cancelled_at = new Date();
+  await usage.save({ session });
+
+  return usage;
+};
+
+export const reserveVoucherUsageForPayment = async ({
+  voucherId,
+  userId = null,
+  usageLimitPerUser = null,
+  quantity = 1,
+  session = null,
+} = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(voucherId)) {
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const reserveQuantity = Number(quantity);
+  if (!Number.isInteger(reserveQuantity) || reserveQuantity <= 0) {
+    const error = new Error("quantity voucher khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const now = new Date();
+  if (userId) {
+    const voucherForCustomerLimit = usageLimitPerUser
+      ? null
+      : await Voucher.findOne({ _id: voucherId, deleted_at: null })
+        .select("usage_limit_per_user")
+        .session(session);
+
+    await reserveVoucherUsageForCustomer({
+      voucherId,
+      userId,
+      usageLimitPerUser: usageLimitPerUser ?? voucherForCustomerLimit?.usage_limit_per_user,
+      quantity: reserveQuantity,
+      session,
+    });
+  }
+
+  const updateResult = await Voucher.updateOne(
+    {
+      _id: voucherId,
+      deleted_at: null,
+      status: true,
+      quantity: { $gte: reserveQuantity },
+      start_date: { $lte: now },
+      end_date: { $gte: now },
+    },
+    {
+      $inc: {
+        quantity: -reserveQuantity,
+        usage_count: reserveQuantity,
+      },
+    },
+    { session },
+  );
+
+  if (updateResult.modifiedCount === 1) {
+    return true;
+  }
+
+  const voucher = await Voucher.findOne({ _id: voucherId, deleted_at: null }).session(session);
+  if (!voucher) {
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  let message = VOUCHER_MESSAGES.RECHECK_REQUIRED;
+  if (Number(voucher.quantity || 0) < reserveQuantity) {
+    message = VOUCHER_MESSAGES.OUT_OF_USAGE;
+  } else if (!voucher.status) {
+    message = VOUCHER_MESSAGES.INACTIVE;
+  } else if (voucher.start_date && now < voucher.start_date) {
+    message = VOUCHER_MESSAGES.NOT_STARTED;
+  } else if (voucher.end_date && now > voucher.end_date) {
+    message = VOUCHER_MESSAGES.EXPIRED;
+  }
+
+  const error = new Error(message);
+  error.statusCode = 409;
+  throw error;
+};
+
+const deriveVoucherStatus = (data) => {
+  const now = new Date();
+  const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
+  const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
+
+  if (data.deleted_at) {
+    return { value: "cancelled", label: "Da huy" };
+  }
+
+  if (!data.status) {
+    return { value: "paused", label: "Tam dung" };
+  }
+
+  if (data.start_date && now < data.start_date) {
+    return { value: "upcoming", label: "Sap dien ra" };
+  }
+
+  if (Number(usageLimit || 0) > 0 && Number(usageCount || 0) >= Number(usageLimit || 0)) {
+    return { value: "out_of_usage", label: "Da het luot" };
+  }
+
+  if (data.end_date && now > data.end_date) {
+    return { value: "expired", label: "Het han" };
+  }
+
+  return { value: "active", label: "Dang hoat dong" };
+};
+
+const toVoucherListItem = (voucher) => {
+  const data = typeof voucher.toObject === "function" ? voucher.toObject() : { ...voucher };
+  const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
+  const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
+  const computedStatus = deriveVoucherStatus(data);
+
+  return {
+    ...data,
+    name: data.name || data.code,
+    apply_scope: data.apply_scope || "order",
+    usage_limit: usageLimit,
+    usage_count: usageCount,
+    computed_status: computedStatus.value,
+    computed_status_label: computedStatus.label,
+  };
+};
+
+export const normalizeVoucherForResponse = toVoucherListItem;
+
+const toVoucherUsageHistoryItem = (usage) => {
+  const data = typeof usage.toObject === "function" ? usage.toObject() : { ...usage };
+  const booking = data.booking_id;
+  const user = data.user_id;
+
+  return {
+    id: data._id,
+    order_id: booking?._id || data.booking_id,
+    customer: user
+      ? {
+          id: user._id,
+          full_name: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          member_tier: user.member_tier,
+        }
+      : null,
+    voucher_id: data.voucher_id,
+    code: data.code,
+    subtotal_price: data.subtotal_price,
+    discount_amount: data.discount_amount,
+    final_price: data.final_price,
+    used_at: data.used_at,
+    payment_status: booking?.payment_status || data.payment_status,
+    booking_status: booking?.status || "unknown",
+    usage_status: data.status,
   };
 };
 
 const buildVoucherFilter = (query = {}) => {
-  const { q, search, status, discount_type } = query;
+  const { q, search, status, discount_type, apply_scope } = query;
+  const normalizedStatus = isMissing(status) ? "" : String(status).trim().toLowerCase();
   const filter = {
-    deleted_at: null,
+    deleted_at: normalizedStatus === "cancelled" ? { $ne: null } : null,
   };
 
   if (!isMissing(status)) {
-    const normalizedStatus = String(status).trim().toLowerCase();
-    if (["true", "1", "active", "enabled"].includes(normalizedStatus)) {
+    if (["active"].includes(normalizedStatus)) {
       filter.status = true;
-    } else if (["false", "0", "inactive", "disabled"].includes(normalizedStatus)) {
+      filter.start_date = { $lte: new Date() };
+      filter.end_date = { $gte: new Date() };
+      filter.quantity = { $gt: 0 };
+    } else if (["true", "1", "enabled"].includes(normalizedStatus)) {
+      filter.status = true;
+    } else if (["false", "0", "inactive", "disabled", "paused"].includes(normalizedStatus)) {
       filter.status = false;
+    } else if (normalizedStatus === "upcoming") {
+      filter.status = true;
+      filter.start_date = { $gt: new Date() };
+    } else if (normalizedStatus === "expired") {
+      filter.status = true;
+      filter.end_date = { $lt: new Date() };
+      filter.quantity = { $gt: 0 };
+    } else if (normalizedStatus === "out_of_usage") {
+      filter.status = true;
+      filter.quantity = { $lte: 0 };
     }
   }
 
@@ -82,18 +507,36 @@ const buildVoucherFilter = (query = {}) => {
     }
   }
 
+  if (!isMissing(apply_scope)) {
+    const normalizedApplyScope = parseVoucherApplyScope(apply_scope, null);
+    if (normalizedApplyScope) {
+      filter.apply_scope = normalizedApplyScope;
+    }
+  }
+
   const keyword = (q ?? search ?? "").trim();
 
   if (!isMissing(keyword)) {
     filter.$or = [
       { code: { $regex: keyword, $options: "i" } },
-      { discount_type: { $regex: keyword, $options: "i" } },
+      { name: { $regex: keyword, $options: "i" } },
     ];
   }
 
   return {
     filter,
   };
+};
+
+const buildVoucherSort = (query = {}) => {
+  const sortBy = String(query.sort_by ?? query.sort ?? "created_at").trim().toLowerCase();
+  const direction = String(query.sort_order ?? query.order ?? "desc").trim().toLowerCase() === "asc" ? 1 : -1;
+
+  if (["end_date", "usage_count", "created_at"].includes(sortBy)) {
+    return { [sortBy]: direction };
+  }
+
+  return { created_at: -1 };
 };
 
 const ensureVoucherCodeIsUnique = async (code, excludeId = null) => {
@@ -108,7 +551,7 @@ const ensureVoucherCodeIsUnique = async (code, excludeId = null) => {
 
   const existingVoucher = await Voucher.findOne(filter);
   if (existingVoucher) {
-    const error = new Error("Voucher da ton tai");
+    const error = new Error(VOUCHER_MESSAGES.EXISTS);
     error.statusCode = 409;
     throw error;
   }
@@ -122,19 +565,51 @@ const buildPagination = ({ page, limit }) => {
   return { currentPage, pageSize, skip };
 };
 
+const normalizeArrayValue = (value) => {
+  if (Array.isArray(value)) return value.filter((item) => !isMissing(item));
+  if (isMissing(value)) return [];
+  return [value];
+};
+
 const prepareCreatePayload = (payload) => {
   const normalizedPayload = normalizeVoucherPayload(payload, {
+    name: "",
+    description: "",
+    image_url: "",
     min_order: 0,
+    max_discount_amount: null,
+    usage_count: 0,
+    usage_limit_per_user: 1,
+    apply_scope: "order",
+    applicable_movie_ids: [],
+    applicable_member_tiers: [],
+    terms_and_conditions: "",
     status: true,
   });
+  const quantity = Number(normalizedPayload.quantity);
 
   return {
     ...normalizedPayload,
     code: normalizeVoucherCode(normalizedPayload.code),
+    name: isMissing(normalizedPayload.name) ? "" : String(normalizedPayload.name).trim(),
+    description: isMissing(normalizedPayload.description) ? "" : String(normalizedPayload.description).trim(),
+    image_url: isMissing(normalizedPayload.image_url) ? "" : String(normalizedPayload.image_url).trim(),
     discount_type: parseVoucherDiscountType(normalizedPayload.discount_type, "percent"),
     discount_value: Number(normalizedPayload.discount_value),
+    max_discount_amount: isMissing(normalizedPayload.max_discount_amount)
+      ? null
+      : Number(normalizedPayload.max_discount_amount),
     min_order: Number(normalizedPayload.min_order ?? 0),
-    quantity: Number(normalizedPayload.quantity),
+    quantity,
+    usage_limit: Number(normalizedPayload.usage_limit ?? quantity),
+    usage_count: Number(normalizedPayload.usage_count ?? 0),
+    usage_limit_per_user: Number(normalizedPayload.usage_limit_per_user ?? 1),
+    apply_scope: parseVoucherApplyScope(normalizedPayload.apply_scope, "order"),
+    applicable_movie_ids: normalizeArrayValue(normalizedPayload.applicable_movie_ids),
+    applicable_member_tiers: normalizeArrayValue(normalizedPayload.applicable_member_tiers).map((item) => String(item).trim()).filter(Boolean),
+    terms_and_conditions: isMissing(normalizedPayload.terms_and_conditions)
+      ? ""
+      : String(normalizedPayload.terms_and_conditions).trim(),
     start_date: new Date(normalizedPayload.start_date),
     end_date: new Date(normalizedPayload.end_date),
     status: parseVoucherStatus(normalizedPayload.status, true),
@@ -146,6 +621,18 @@ const prepareUpdatePayload = (payload) => {
 
   if (Object.prototype.hasOwnProperty.call(payload, "code")) {
     updatePayload.code = normalizeVoucherCode(payload.code);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "name")) {
+    updatePayload.name = isMissing(payload.name) ? "" : String(payload.name).trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "description")) {
+    updatePayload.description = isMissing(payload.description) ? "" : String(payload.description).trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "image_url")) {
+    updatePayload.image_url = isMissing(payload.image_url) ? "" : String(payload.image_url).trim();
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "discount_type")) {
@@ -167,6 +654,42 @@ const prepareUpdatePayload = (payload) => {
     updatePayload.quantity = Number(payload.quantity);
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, "max_discount_amount")) {
+    updatePayload.max_discount_amount = isMissing(payload.max_discount_amount)
+      ? null
+      : Number(payload.max_discount_amount);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_limit")) {
+    updatePayload.usage_limit = Number(payload.usage_limit);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_count")) {
+    updatePayload.usage_count = Number(payload.usage_count);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_limit_per_user")) {
+    updatePayload.usage_limit_per_user = Number(payload.usage_limit_per_user);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "apply_scope")) {
+    updatePayload.apply_scope = parseVoucherApplyScope(payload.apply_scope, "order");
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "applicable_movie_ids")) {
+    updatePayload.applicable_movie_ids = normalizeArrayValue(payload.applicable_movie_ids);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "applicable_member_tiers")) {
+    updatePayload.applicable_member_tiers = normalizeArrayValue(payload.applicable_member_tiers).map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "terms_and_conditions")) {
+    updatePayload.terms_and_conditions = isMissing(payload.terms_and_conditions)
+      ? ""
+      : String(payload.terms_and_conditions).trim();
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, "start_date")) {
     updatePayload.start_date = new Date(payload.start_date);
   }
@@ -182,48 +705,60 @@ const prepareUpdatePayload = (payload) => {
   return updatePayload;
 };
 
-const buildVoucherVerificationResponse = (voucher, orderAmount = null) => {
-  const { discount_amount, final_amount } = calculateVoucherDiscount({
+const buildVoucherVerificationResponse = (voucher, context = {}) => {
+  const eligibleAmount = getEligibleAmount(voucher, context);
+  const discountResult = calculateVoucherDiscount({
     voucher,
-    orderAmount,
+    orderAmount: eligibleAmount,
   });
+  const orderAmount = context.orderAmount ?? null;
+  const discountAmount = Number(discountResult.discount_amount || 0);
 
   return {
     valid: true,
-    message: "Voucher hop le",
+    message: VOUCHER_MESSAGES.VALID,
     voucher: {
       id: voucher._id,
       code: voucher.code,
       discount_type: voucher.discount_type,
       discount_value: voucher.discount_value,
+      max_discount_amount: voucher.max_discount_amount,
       min_order: voucher.min_order,
       quantity: voucher.quantity,
+      usage_limit_per_user: voucher.usage_limit_per_user,
+      apply_scope: voucher.apply_scope,
       start_date: voucher.start_date,
       end_date: voucher.end_date,
       status: voucher.status,
     },
     order_amount: orderAmount,
-    discount_amount,
-    final_amount,
+    eligible_amount: discountResult.eligible_amount,
+    raw_discount_amount: discountResult.raw_discount_amount,
+    discount_amount: discountAmount,
+    final_amount: orderAmount === null
+      ? discountResult.final_amount
+      : Math.max(orderAmount - discountAmount, 0),
   };
 };
 
 export const listVouchers = async (query = {}) => {
   const { filter } = buildVoucherFilter(query);
+  const sort = buildVoucherSort(query);
   const shouldPaginate = query.page !== undefined || query.limit !== undefined;
 
   if (!shouldPaginate) {
-    return Voucher.find(filter).sort({ created_at: -1 });
+    const vouchers = await Voucher.find(filter).sort(sort);
+    return vouchers.map(toVoucherListItem);
   }
 
   const { currentPage, pageSize, skip } = buildPagination(query);
   const [vouchers, totalItems] = await Promise.all([
-    Voucher.find(filter).sort({ created_at: -1 }).skip(skip).limit(pageSize),
+    Voucher.find(filter).sort(sort).skip(skip).limit(pageSize),
     Voucher.countDocuments(filter),
   ]);
 
   return {
-    data: vouchers,
+    data: vouchers.map(toVoucherListItem),
     pagination: {
       page: currentPage,
       limit: pageSize,
@@ -237,15 +772,191 @@ export const listVouchers = async (query = {}) => {
 
 export const getVoucherByIdService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
-  return Voucher.findOne({ _id: id, deleted_at: null });
+  const voucher = await Voucher.findOne({ _id: id, deleted_at: null })
+    .populate("created_by", "full_name email")
+    .populate("updated_by", "full_name email");
+  return voucher ? normalizeVoucherForResponse(voucher) : null;
 };
 
-export const createVoucherService = async (payload) => {
+export const listVoucherUsageHistoryService = async (id, query = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const page = Math.max(Number.parseInt(query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(Number.parseInt(query.limit, 10) || 10, 1), 50);
+  const skip = (page - 1) * limit;
+  const filter = { voucher_id: id };
+
+  if (!isMissing(query.status)) {
+    filter.status = String(query.status).trim();
+  }
+
+  const [items, totalItems] = await Promise.all([
+    VoucherUsage.find(filter)
+      .populate("user_id", "full_name email phone member_tier")
+      .populate("booking_id", "status payment_status total_price subtotal_price discount_amount created_at")
+      .sort({ used_at: -1, created_at: -1 })
+      .skip(skip)
+      .limit(limit),
+    VoucherUsage.countDocuments(filter),
+  ]);
+
+  return {
+    data: items.map(toVoucherUsageHistoryItem),
+    pagination: {
+      page,
+      limit,
+      totalItems,
+      totalPages: Math.max(Math.ceil(totalItems / limit), 1),
+      hasNextPage: page * limit < totalItems,
+      hasPrevPage: page > 1,
+    },
+  };
+};
+
+export const getVoucherStatsService = async () => {
+  const now = new Date();
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const [activeCount, usageSummary, revenueByVoucher, expiringSoon, lowRemaining] = await Promise.all([
+    Voucher.countDocuments({
+      deleted_at: null,
+      status: true,
+      start_date: { $lte: now },
+      end_date: { $gte: now },
+      quantity: { $gt: 0 },
+    }),
+    VoucherUsage.aggregate([
+      { $match: { status: "used", payment_status: "paid" } },
+      {
+        $group: {
+          _id: null,
+          total_usage: { $sum: 1 },
+          total_discount_amount: { $sum: "$discount_amount" },
+          total_revenue: { $sum: "$final_price" },
+        },
+      },
+    ]),
+    VoucherUsage.aggregate([
+      { $match: { status: "used", payment_status: "paid" } },
+      {
+        $group: {
+          _id: "$voucher_id",
+          code: { $first: "$code" },
+          usage_count: { $sum: 1 },
+          total_discount_amount: { $sum: "$discount_amount" },
+          total_revenue: { $sum: "$final_price" },
+        },
+      },
+      { $sort: { usage_count: -1, total_revenue: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: "vouchers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "voucher",
+        },
+      },
+      { $unwind: { path: "$voucher", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          voucher_id: "$_id",
+          code: 1,
+          name: "$voucher.name",
+          usage_count: 1,
+          total_discount_amount: 1,
+          total_revenue: 1,
+        },
+      },
+    ]),
+    Voucher.find({
+      deleted_at: null,
+      status: true,
+      quantity: { $gt: 0 },
+      end_date: { $gte: now, $lte: sevenDaysLater },
+    })
+      .sort({ end_date: 1 })
+      .limit(5)
+      .select("code name end_date quantity usage_limit usage_count"),
+    Voucher.find({
+      deleted_at: null,
+      status: true,
+      quantity: { $gt: 0 },
+    })
+      .sort({ quantity: 1, end_date: 1 })
+      .limit(50)
+      .select("code name end_date quantity usage_limit usage_count"),
+  ]);
+
+  const vouchersForRate = await Voucher.find({ deleted_at: null }).select("usage_limit quantity usage_count");
+  const totalUsageLimit = vouchersForRate.reduce(
+    (total, voucher) => total + Number(voucher.usage_limit || 0),
+    0,
+  );
+  const totalVoucherUsage = vouchersForRate.reduce(
+    (total, voucher) => total + Number(voucher.usage_count || 0),
+    0,
+  );
+  const summary = usageSummary[0] || {
+    total_usage: 0,
+    total_discount_amount: 0,
+    total_revenue: 0,
+  };
+
+  const topVoucher = revenueByVoucher[0] || null;
+  const lowRemainingList = lowRemaining
+    .map((voucher) => {
+      const usageLimit = Number(voucher.usage_limit || 0);
+      const usageCount = Number(voucher.usage_count || 0);
+      const remaining = Number(voucher.quantity || 0);
+      const usageRate = usageLimit > 0 ? usageCount / usageLimit : 0;
+
+      return {
+        id: voucher._id,
+        code: voucher.code,
+        name: voucher.name || voucher.code,
+        end_date: voucher.end_date,
+        remaining_quantity: remaining,
+        usage_limit: usageLimit,
+        usage_count: usageCount,
+        usage_rate: usageRate,
+      };
+    })
+    .filter((voucher) => voucher.remaining_quantity <= 5 || voucher.usage_rate >= 0.8)
+    .slice(0, 5);
+
+  return {
+    active_voucher_count: activeCount,
+    total_usage: summary.total_usage,
+    total_discount_amount: summary.total_discount_amount,
+    revenue_from_voucher_orders: summary.total_revenue,
+    usage_rate: totalUsageLimit > 0 ? totalVoucherUsage / totalUsageLimit : 0,
+    most_used_voucher: topVoucher,
+    expiring_soon: expiringSoon.map((voucher) => ({
+      id: voucher._id,
+      code: voucher.code,
+      name: voucher.name || voucher.code,
+      end_date: voucher.end_date,
+      remaining_quantity: voucher.quantity,
+      usage_limit: voucher.usage_limit,
+      usage_count: voucher.usage_count,
+    })),
+    low_remaining: lowRemainingList,
+    revenue_by_voucher: revenueByVoucher,
+  };
+};
+
+export const createVoucherService = async (payload, user = null) => {
   const normalizedPayload = prepareCreatePayload(payload);
   const validationError = validateVoucherPayload(normalizedPayload);
 
@@ -257,25 +968,48 @@ export const createVoucherService = async (payload) => {
 
   await ensureVoucherCodeIsUnique(normalizedPayload.code);
 
+  if (user?.id) {
+    normalizedPayload.created_by = user.id;
+    normalizedPayload.updated_by = user.id;
+  }
+
   const createdVoucher = await Voucher.create(normalizedPayload);
   return Voucher.findOne({ _id: createdVoucher._id, deleted_at: null });
 };
 
-export const updateVoucherService = async (id, payload) => {
+export const updateVoucherService = async (id, payload, user = null) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
   const existingVoucher = await Voucher.findOne({ _id: id, deleted_at: null });
   if (!existingVoucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
 
+  const existingUsageCount = Number(existingVoucher.usage_count || 0);
+  if (existingUsageCount > 0) {
+    const blockedFields = Object.keys(payload).filter(
+      (field) => !USED_VOUCHER_EDITABLE_FIELDS.has(field)
+    );
+
+    if (blockedFields.length > 0) {
+      const error = new Error(
+        `Mã giảm giá đã được sử dụng, không thể cập nhật các trường: ${blockedFields.join(", ")}`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
   const normalizedPayload = prepareUpdatePayload(payload);
+  if (user?.id) {
+    normalizedPayload.updated_by = user.id;
+  }
   const validationError = validateVoucherUpdatePayload(normalizedPayload);
   if (validationError) {
     const error = new Error(validationError);
@@ -292,12 +1026,40 @@ export const updateVoucherService = async (id, payload) => {
     ...normalizedPayload,
   };
 
+  if (Object.prototype.hasOwnProperty.call(normalizedPayload, "usage_limit")) {
+    const nextUsageLimit = Number(normalizedPayload.usage_limit);
+    const nextUsageCount = Number(nextVoucherState.usage_count || 0);
+
+    if (nextUsageLimit < nextUsageCount) {
+      const error = new Error("usage_limit khong duoc nho hon so luot da su dung");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    normalizedPayload.quantity = Math.max(nextUsageLimit - nextUsageCount, 0);
+    nextVoucherState.quantity = normalizedPayload.quantity;
+  }
+
   if (
     nextVoucherState.start_date &&
     nextVoucherState.end_date &&
-    nextVoucherState.end_date < nextVoucherState.start_date
+    nextVoucherState.end_date <= nextVoucherState.start_date
   ) {
-    const error = new Error("end_date phai lon hon hoac bang start_date");
+    const error = new Error("end_date phai sau start_date");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const effectiveUsageLimit = Number(
+    nextVoucherState.usage_limit ?? nextVoucherState.quantity
+  );
+  const effectiveUsagePerUser = Number(nextVoucherState.usage_limit_per_user);
+  if (
+    Number.isFinite(effectiveUsageLimit) &&
+    Number.isFinite(effectiveUsagePerUser) &&
+    effectiveUsagePerUser > effectiveUsageLimit
+  ) {
+    const error = new Error("usage_limit_per_user khong duoc lon hon usage_limit");
     error.statusCode = 400;
     throw error;
   }
@@ -323,36 +1085,49 @@ export const updateVoucherService = async (id, payload) => {
 
 export const deleteVoucherService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const deletedVoucher = await Voucher.findOneAndUpdate(
-    { _id: id, deleted_at: null },
-    { deleted_at: new Date() },
-    { new: true }
-  );
-
-  if (!deletedVoucher) {
-    const error = new Error("Khong tim thay voucher");
-    error.statusCode = 404;
-    throw error;
-  }
-
-  return deletedVoucher;
-};
-
-export const toggleVoucherStatusService = async (id) => {
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
   const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
   if (!voucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (Number(voucher.usage_count || 0) > 0) {
+    voucher.deleted_at = new Date();
+    voucher.status = false;
+    await voucher.save();
+
+    return {
+      voucher,
+      deletion_type: "soft",
+      message: VOUCHER_MESSAGES.DELETE_BLOCKED,
+    };
+  }
+
+  await Voucher.deleteOne({ _id: id });
+
+  return {
+    voucher,
+    deletion_type: "hard",
+    message: VOUCHER_MESSAGES.DELETED,
+  };
+};
+
+export const toggleVoucherStatusService = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
+  if (!voucher) {
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
@@ -378,6 +1153,7 @@ export const consumeVoucherQuantityService = async ({
 
   const filter = {
     deleted_at: null,
+    status: true,
     quantity: { $gte: consumeQuantity },
   };
 
@@ -402,6 +1178,7 @@ export const consumeVoucherQuantityService = async ({
     {
       $inc: {
         quantity: -consumeQuantity,
+        usage_count: consumeQuantity,
       },
     },
     { new: true, runValidators: true }
@@ -416,12 +1193,18 @@ export const consumeVoucherQuantityService = async ({
         });
 
     if (!existingVoucher) {
-      const error = new Error("Khong tim thay voucher");
+      const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
       error.statusCode = 404;
       throw error;
     }
 
-    const error = new Error("Voucher khong con du so luong");
+    if (!existingVoucher.status) {
+      const error = new Error(VOUCHER_MESSAGES.INACTIVE);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const error = new Error(VOUCHER_MESSAGES.OUT_OF_USAGE);
     error.statusCode = 409;
     throw error;
   }
@@ -434,9 +1217,8 @@ export const consumeVoucherQuantityService = async ({
 
 export const verifyVoucherService = async (payload = {}) => {
   const code = normalizeVoucherCode(payload.code ?? payload.voucher_code);
-  const orderAmount = parseVoucherAmount(
-    payload.order_amount ?? payload.amount ?? payload.subtotal ?? payload.total_amount
-  );
+  const context = normalizeVoucherContext(payload);
+  const session = payload.session ?? null;
 
   if (isMissing(code)) {
     const error = new Error("code la bat buoc");
@@ -444,26 +1226,26 @@ export const verifyVoucherService = async (payload = {}) => {
     throw error;
   }
 
-  const voucher = await Voucher.findOne({ code, deleted_at: null });
+  const voucher = await Voucher.findOne({ code, deleted_at: null }).session(session);
 
   if (!voucher) {
     return {
       valid: false,
-      message: "Khong tim thay voucher",
+      message: VOUCHER_MESSAGES.NOT_FOUND,
     };
   }
 
   if (!voucher.status) {
     return {
       valid: false,
-      message: "Voucher dang bi vo hieu hoa",
+      message: VOUCHER_MESSAGES.INACTIVE,
     };
   }
 
   if (voucher.quantity <= 0) {
     return {
       valid: false,
-      message: "Voucher da het luot su dung",
+      message: VOUCHER_MESSAGES.OUT_OF_USAGE,
     };
   }
 
@@ -471,24 +1253,52 @@ export const verifyVoucherService = async (payload = {}) => {
   if (voucher.start_date && now < voucher.start_date) {
     return {
       valid: false,
-      message: "Voucher chua den thoi gian ap dung",
+      message: VOUCHER_MESSAGES.NOT_STARTED,
     };
   }
 
   if (voucher.end_date && now > voucher.end_date) {
     return {
       valid: false,
-      message: "Voucher da het han",
+      message: VOUCHER_MESSAGES.EXPIRED,
     };
   }
 
-  if (orderAmount !== null && orderAmount < Number(voucher.min_order ?? 0)) {
+  const user = context.userId
+    ? await User.findOne({ _id: context.userId, deleted_at: null, status: true }).session(session)
+    : null;
+
+  const scopeError = checkVoucherScope(voucher, context, user);
+  if (scopeError) {
     return {
       valid: false,
-      message: `Don hang toi thieu phai dat ${voucher.min_order}`,
+      message: scopeError,
+    };
+  }
+
+  if (context.userId) {
+    const usedByCustomer = await countVoucherUsageByUser({
+      voucherId: voucher._id,
+      userId: context.userId,
+      session,
+    });
+
+    if (usedByCustomer >= Number(voucher.usage_limit_per_user || 1)) {
+      return {
+        valid: false,
+        message: VOUCHER_MESSAGES.CUSTOMER_LIMIT,
+        used_by_customer: usedByCustomer,
+      };
+    }
+  }
+
+  if (context.orderAmount !== null && context.orderAmount < Number(voucher.min_order ?? 0)) {
+    return {
+      valid: false,
+      message: `${VOUCHER_MESSAGES.MIN_ORDER} Cần tối thiểu ${voucher.min_order}.`,
       min_order: voucher.min_order,
     };
   }
 
-  return buildVoucherVerificationResponse(voucher, orderAmount);
+  return buildVoucherVerificationResponse(voucher, context);
 };

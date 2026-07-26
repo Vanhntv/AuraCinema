@@ -28,6 +28,7 @@ const menuItems = [
       { path: "/admin/rooms", icon: <HiOutlineViewGrid />, label: "Phòng chiếu" },
       { path: "/admin/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
       { path: "/admin/concessions", icon: <HiOutlineShoppingBag />, label: "Bắp Nước" },
+      { path: "/admin/vouchers", icon: <HiOutlineTag />, label: "Mã giảm giá" },
     ],
   },
   {

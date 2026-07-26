@@ -5,6 +5,8 @@ import {
   deleteVoucher,
   getAllVouchers,
   getVoucherById,
+  getVoucherStats,
+  getVoucherUsageHistory,
   verifyVoucher,
   toggleVoucherStatus,
   updateVoucher,
@@ -13,10 +15,13 @@ import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js"
 
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
+const customerOnly = [authMiddleware, authorizeRoles("user")];
 
-router.post("/verify", verifyVoucher);
-router.get("/verify", verifyVoucher);
+router.post("/verify", customerOnly, verifyVoucher);
+router.get("/verify", customerOnly, verifyVoucher);
 router.get("/", adminOnly, getAllVouchers);
+router.get("/stats", adminOnly, getVoucherStats);
+router.get("/:id/usages", adminOnly, getVoucherUsageHistory);
 router.get("/:id", adminOnly, getVoucherById);
 router.post("/", adminOnly, createVoucher);
 router.post("/:id/consume", adminOnly, consumeVoucherQuantity);

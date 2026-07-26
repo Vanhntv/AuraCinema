@@ -1,13 +1,89 @@
+import AuditLog from "../models/AuditLog.js";
 import {
   createVoucherService,
   consumeVoucherQuantityService,
   deleteVoucherService,
   getVoucherByIdService,
+  getVoucherStatsService,
+  listVoucherUsageHistoryService,
   listVouchers,
   toggleVoucherStatusService,
+  VOUCHER_MESSAGES,
   verifyVoucherService,
   updateVoucherService,
 } from "../services/voucherService.js";
+
+const toAuditSnapshot = (voucher) => {
+  if (!voucher) return null;
+  const data = typeof voucher.toObject === "function" ? voucher.toObject() : { ...voucher };
+
+  return {
+    _id: data._id,
+    code: data.code,
+    name: data.name,
+    description: data.description,
+    image_url: data.image_url,
+    discount_type: data.discount_type,
+    discount_value: data.discount_value,
+    max_discount_amount: data.max_discount_amount,
+    min_order: data.min_order,
+    quantity: data.quantity,
+    usage_limit: data.usage_limit,
+    usage_count: data.usage_count,
+    usage_limit_per_user: data.usage_limit_per_user,
+    apply_scope: data.apply_scope,
+    applicable_movie_ids: data.applicable_movie_ids,
+    applicable_member_tiers: data.applicable_member_tiers,
+    start_date: data.start_date,
+    end_date: data.end_date,
+    status: data.status,
+    deleted_at: data.deleted_at,
+  };
+};
+
+const normalizeAuditValue = (value) => {
+  if (value instanceof Date) return value.toISOString();
+  if (value && typeof value === "object" && value._id) return String(value._id);
+  if (Array.isArray(value)) return value.map(normalizeAuditValue);
+  return value ?? null;
+};
+
+const buildAuditChanges = (before = null, after = null) => {
+  if (!before || !after) return null;
+
+  const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const changes = {};
+
+  for (const field of fields) {
+    const beforeValue = normalizeAuditValue(before[field]);
+    const afterValue = normalizeAuditValue(after[field]);
+
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes[field] = {
+        before: beforeValue,
+        after: afterValue,
+      };
+    }
+  }
+
+  return Object.keys(changes).length ? changes : null;
+};
+
+const writeVoucherAuditLog = async ({ req, action, before = null, after = null, voucherId = null, reason = null }) => {
+  const adminId = req.user?._id || req.user?.id;
+  if (!adminId) return;
+
+  await AuditLog.create({
+    admin_id: adminId,
+    target_type: "Voucher",
+    target_id: voucherId || after?._id || before?._id || null,
+    action,
+    before,
+    after,
+    changes: buildAuditChanges(before, after),
+    reason: String(reason || "").trim() || null,
+  });
+};
 
 const sendError = (res, error) => {
   const statusCode = error.statusCode || 500;
@@ -39,6 +115,34 @@ export const getAllVouchers = async (req, res) => {
   }
 };
 
+export const getVoucherStats = async (req, res) => {
+  try {
+    const stats = await getVoucherStatsService();
+
+    res.status(200).json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const getVoucherUsageHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await listVoucherUsageHistoryService(id, req.query);
+
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      pagination: result.pagination,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
 export const getVoucherById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -47,7 +151,7 @@ export const getVoucherById = async (req, res) => {
     if (!voucher) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay voucher",
+        message: VOUCHER_MESSAGES.NOT_FOUND,
       });
     }
 
@@ -62,11 +166,21 @@ export const getVoucherById = async (req, res) => {
 
 export const createVoucher = async (req, res) => {
   try {
-    const voucher = await createVoucherService(req.body);
+    const voucher = await createVoucherService(req.body, req.user);
+    const afterSnapshot = toAuditSnapshot(voucher);
+
+    await writeVoucherAuditLog({
+      req,
+      action: "voucher.create",
+      before: null,
+      after: afterSnapshot,
+      voucherId: voucher?._id,
+      reason: req.body?.reason,
+    });
 
     res.status(201).json({
       success: true,
-      message: "Them voucher thanh cong",
+      message: VOUCHER_MESSAGES.CREATED,
       data: voucher,
     });
   } catch (error) {
@@ -77,11 +191,22 @@ export const createVoucher = async (req, res) => {
 export const updateVoucher = async (req, res) => {
   try {
     const { id } = req.params;
-    const voucher = await updateVoucherService(id, req.body);
+    const before = await getVoucherByIdService(id);
+    const voucher = await updateVoucherService(id, req.body, req.user);
+    const after = toAuditSnapshot(voucher);
+
+    await writeVoucherAuditLog({
+      req,
+      action: "voucher.update",
+      before: toAuditSnapshot(before),
+      after,
+      voucherId: id,
+      reason: req.body?.reason,
+    });
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat voucher thanh cong",
+      message: VOUCHER_MESSAGES.UPDATED,
       data: voucher,
     });
   } catch (error) {
@@ -92,11 +217,25 @@ export const updateVoucher = async (req, res) => {
 export const deleteVoucher = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteVoucherService(id);
+    const before = await getVoucherByIdService(id);
+    const result = await deleteVoucherService(id);
+    const after = result.deletion_type === "soft"
+      ? toAuditSnapshot(result.voucher)
+      : null;
+
+    await writeVoucherAuditLog({
+      req,
+      action: result.deletion_type === "soft" ? "voucher.cancel" : "voucher.delete",
+      before: toAuditSnapshot(before),
+      after,
+      voucherId: id,
+      reason: req.body?.reason,
+    });
 
     res.status(200).json({
       success: true,
-      message: "Xoa voucher thanh cong",
+      message: result.message || VOUCHER_MESSAGES.DELETED,
+      data: result,
     });
   } catch (error) {
     sendError(res, error);
@@ -106,11 +245,22 @@ export const deleteVoucher = async (req, res) => {
 export const toggleVoucherStatus = async (req, res) => {
   try {
     const { id } = req.params;
+    const before = await getVoucherByIdService(id);
     const voucher = await toggleVoucherStatusService(id);
+    const after = toAuditSnapshot(voucher);
+
+    await writeVoucherAuditLog({
+      req,
+      action: voucher.status ? "voucher.activate" : "voucher.pause",
+      before: toAuditSnapshot(before),
+      after,
+      voucherId: id,
+      reason: req.body?.reason,
+    });
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat trang thai voucher thanh cong",
+      message: voucher.status ? VOUCHER_MESSAGES.ACTIVATED : VOUCHER_MESSAGES.PAUSED,
       data: voucher,
     });
   } catch (error) {
@@ -129,7 +279,7 @@ export const consumeVoucherQuantity = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat voucher quantity thanh cong",
+      message: "Cập nhật số lượt mã giảm giá thành công.",
       data: result,
     });
   } catch (error) {
@@ -142,6 +292,7 @@ export const verifyVoucher = async (req, res) => {
     const payload = {
       ...req.query,
       ...req.body,
+      user_id: req.user?.id,
     };
 
     const result = await verifyVoucherService(payload);

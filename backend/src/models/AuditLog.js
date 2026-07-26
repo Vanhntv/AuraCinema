@@ -34,6 +34,10 @@ const auditLogSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    changes: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     reason: {
       type: String,
       default: null,
