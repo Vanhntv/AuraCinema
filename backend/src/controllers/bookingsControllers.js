@@ -232,6 +232,8 @@ export const createBooking = async (req, res) => {
         discountAmount = Number(voucherResult.discount_amount || 0);
         await reserveVoucherUsageForPayment({
           voucherId: voucherResult.voucher.id,
+          userId: user._id,
+          usageLimitPerUser: voucherResult.voucher.usage_limit_per_user,
           quantity: 1,
           session,
         });

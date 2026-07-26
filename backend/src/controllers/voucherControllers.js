@@ -8,6 +8,7 @@ import {
   listVoucherUsageHistoryService,
   listVouchers,
   toggleVoucherStatusService,
+  VOUCHER_MESSAGES,
   verifyVoucherService,
   updateVoucherService,
 } from "../services/voucherService.js";
@@ -40,6 +41,34 @@ const toAuditSnapshot = (voucher) => {
   };
 };
 
+const normalizeAuditValue = (value) => {
+  if (value instanceof Date) return value.toISOString();
+  if (value && typeof value === "object" && value._id) return String(value._id);
+  if (Array.isArray(value)) return value.map(normalizeAuditValue);
+  return value ?? null;
+};
+
+const buildAuditChanges = (before = null, after = null) => {
+  if (!before || !after) return null;
+
+  const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+  const changes = {};
+
+  for (const field of fields) {
+    const beforeValue = normalizeAuditValue(before[field]);
+    const afterValue = normalizeAuditValue(after[field]);
+
+    if (JSON.stringify(beforeValue) !== JSON.stringify(afterValue)) {
+      changes[field] = {
+        before: beforeValue,
+        after: afterValue,
+      };
+    }
+  }
+
+  return Object.keys(changes).length ? changes : null;
+};
+
 const writeVoucherAuditLog = async ({ req, action, before = null, after = null, voucherId = null, reason = null }) => {
   const adminId = req.user?._id || req.user?.id;
   if (!adminId) return;
@@ -51,6 +80,7 @@ const writeVoucherAuditLog = async ({ req, action, before = null, after = null, 
     action,
     before,
     after,
+    changes: buildAuditChanges(before, after),
     reason: String(reason || "").trim() || null,
   });
 };
@@ -121,7 +151,7 @@ export const getVoucherById = async (req, res) => {
     if (!voucher) {
       return res.status(404).json({
         success: false,
-        message: "Khong tim thay voucher",
+        message: VOUCHER_MESSAGES.NOT_FOUND,
       });
     }
 
@@ -150,7 +180,7 @@ export const createVoucher = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "Them voucher thanh cong",
+      message: VOUCHER_MESSAGES.CREATED,
       data: voucher,
     });
   } catch (error) {
@@ -176,7 +206,7 @@ export const updateVoucher = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat voucher thanh cong",
+      message: VOUCHER_MESSAGES.UPDATED,
       data: voucher,
     });
   } catch (error) {
@@ -204,7 +234,7 @@ export const deleteVoucher = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: result.message || "Xoa voucher thanh cong",
+      message: result.message || VOUCHER_MESSAGES.DELETED,
       data: result,
     });
   } catch (error) {
@@ -230,7 +260,7 @@ export const toggleVoucherStatus = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat trang thai voucher thanh cong",
+      message: voucher.status ? VOUCHER_MESSAGES.ACTIVATED : VOUCHER_MESSAGES.PAUSED,
       data: voucher,
     });
   } catch (error) {
@@ -249,7 +279,7 @@ export const consumeVoucherQuantity = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Cap nhat voucher quantity thanh cong",
+      message: "Cập nhật số lượt mã giảm giá thành công.",
       data: result,
     });
   } catch (error) {

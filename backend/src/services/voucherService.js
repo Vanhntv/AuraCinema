@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Voucher from "../models/Voucher.js";
 import VoucherUsage from "../models/VoucherUsage.js";
+import VoucherUsageCounter from "../models/VoucherUsageCounter.js";
 import User from "../models/User.js";
 import {
   normalizeVoucherPayload,
@@ -68,7 +69,7 @@ const parseVoucherAmount = (value) => {
   return amount;
 };
 
-const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
+export const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
   if (orderAmount === null) {
     return {
       eligible_amount: null,
@@ -159,12 +160,106 @@ const checkVoucherScope = (voucher, context, user) => {
 const countVoucherUsageByUser = async ({ voucherId, userId, session = null }) => {
   if (!voucherId || !userId) return 0;
 
+  const counter = await VoucherUsageCounter.findOne({
+    user_id: userId,
+    voucher_id: voucherId,
+  }).session(session);
+
+  if (counter) {
+    return Number(counter.used_count || 0);
+  }
+
   return VoucherUsage.countDocuments({
     user_id: userId,
     voucher_id: voucherId,
     status: "used",
     payment_status: "paid",
   }).session(session);
+};
+
+const reserveVoucherUsageForCustomer = async ({
+  voucherId,
+  userId,
+  usageLimitPerUser,
+  quantity = 1,
+  session = null,
+} = {}) => {
+  if (!userId) return true;
+
+  const limit = Number(usageLimitPerUser || 1);
+  const reserveQuantity = Number(quantity);
+  if (!Number.isFinite(limit) || limit <= 0) return true;
+
+  const existingCounter = await VoucherUsageCounter.findOne({
+    voucher_id: voucherId,
+    user_id: userId,
+  }).session(session);
+
+  if (!existingCounter) {
+    const historicalUsageCount = await VoucherUsage.countDocuments({
+      user_id: userId,
+      voucher_id: voucherId,
+      status: "used",
+      payment_status: "paid",
+    }).session(session);
+
+    if (historicalUsageCount >= limit) {
+      const limitError = new Error(VOUCHER_MESSAGES.CUSTOMER_LIMIT);
+      limitError.statusCode = 409;
+      throw limitError;
+    }
+
+    try {
+      await VoucherUsageCounter.updateOne(
+        {
+          voucher_id: voucherId,
+          user_id: userId,
+        },
+        {
+          $setOnInsert: {
+            voucher_id: voucherId,
+            user_id: userId,
+            used_count: historicalUsageCount,
+          },
+        },
+        { upsert: true, session },
+      );
+    } catch (error) {
+      if (error?.code !== 11000) {
+        throw error;
+      }
+    }
+  }
+
+  try {
+    const result = await VoucherUsageCounter.updateOne(
+      {
+        voucher_id: voucherId,
+        user_id: userId,
+        used_count: { $lte: limit - reserveQuantity },
+      },
+      {
+        $inc: { used_count: reserveQuantity },
+        $setOnInsert: {
+          voucher_id: voucherId,
+          user_id: userId,
+        },
+      },
+      { upsert: true, session },
+    );
+
+    if (result.modifiedCount === 1 || result.upsertedCount === 1) {
+      return true;
+    }
+  } catch (error) {
+    if (error?.code !== 11000) {
+      throw error;
+    }
+  }
+
+  const limitError = new Error(VOUCHER_MESSAGES.CUSTOMER_LIMIT);
+  limitError.statusCode = 409;
+  throw limitError;
 };
 
 export const refundVoucherUsageForBooking = async ({
@@ -182,7 +277,7 @@ export const refundVoucherUsageForBooking = async ({
 
   if (!usage) return null;
 
-  if (refundUsage && usage.status === "used") {
+  if (refundUsage && ["reserved", "used"].includes(usage.status)) {
     await Voucher.updateOne(
       {
         _id: usage.voucher_id,
@@ -194,6 +289,16 @@ export const refundVoucherUsageForBooking = async ({
           usage_count: -1,
         },
       },
+      { session },
+    );
+
+    await VoucherUsageCounter.updateOne(
+      {
+        voucher_id: usage.voucher_id,
+        user_id: usage.user_id,
+        used_count: { $gt: 0 },
+      },
+      { $inc: { used_count: -1 } },
       { session },
     );
   }
@@ -209,11 +314,13 @@ export const refundVoucherUsageForBooking = async ({
 
 export const reserveVoucherUsageForPayment = async ({
   voucherId,
+  userId = null,
+  usageLimitPerUser = null,
   quantity = 1,
   session = null,
 } = {}) => {
   if (!mongoose.Types.ObjectId.isValid(voucherId)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
@@ -226,6 +333,22 @@ export const reserveVoucherUsageForPayment = async ({
   }
 
   const now = new Date();
+  if (userId) {
+    const voucherForCustomerLimit = usageLimitPerUser
+      ? null
+      : await Voucher.findOne({ _id: voucherId, deleted_at: null })
+        .select("usage_limit_per_user")
+        .session(session);
+
+    await reserveVoucherUsageForCustomer({
+      voucherId,
+      userId,
+      usageLimitPerUser: usageLimitPerUser ?? voucherForCustomerLimit?.usage_limit_per_user,
+      quantity: reserveQuantity,
+      session,
+    });
+  }
+
   const updateResult = await Voucher.updateOne(
     {
       _id: voucherId,
@@ -250,20 +373,20 @@ export const reserveVoucherUsageForPayment = async ({
 
   const voucher = await Voucher.findOne({ _id: voucherId, deleted_at: null }).session(session);
   if (!voucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
 
-  let message = "Ma giam gia khong con hop le. Vui long kiem tra lai truoc khi thanh toan.";
+  let message = VOUCHER_MESSAGES.RECHECK_REQUIRED;
   if (Number(voucher.quantity || 0) < reserveQuantity) {
-    message = "Voucher da het luot su dung";
+    message = VOUCHER_MESSAGES.OUT_OF_USAGE;
   } else if (!voucher.status) {
-    message = "Voucher dang bi vo hieu hoa";
+    message = VOUCHER_MESSAGES.INACTIVE;
   } else if (voucher.start_date && now < voucher.start_date) {
-    message = "Voucher chua den thoi gian ap dung";
+    message = VOUCHER_MESSAGES.NOT_STARTED;
   } else if (voucher.end_date && now > voucher.end_date) {
-    message = "Voucher da het han";
+    message = VOUCHER_MESSAGES.EXPIRED;
   }
 
   const error = new Error(message);
@@ -428,7 +551,7 @@ const ensureVoucherCodeIsUnique = async (code, excludeId = null) => {
 
   const existingVoucher = await Voucher.findOne(filter);
   if (existingVoucher) {
-    const error = new Error("Voucher da ton tai");
+    const error = new Error(VOUCHER_MESSAGES.EXISTS);
     error.statusCode = 409;
     throw error;
   }
@@ -593,7 +716,7 @@ const buildVoucherVerificationResponse = (voucher, context = {}) => {
 
   return {
     valid: true,
-    message: "Voucher hop le",
+    message: VOUCHER_MESSAGES.VALID,
     voucher: {
       id: voucher._id,
       code: voucher.code,
@@ -602,6 +725,7 @@ const buildVoucherVerificationResponse = (voucher, context = {}) => {
       max_discount_amount: voucher.max_discount_amount,
       min_order: voucher.min_order,
       quantity: voucher.quantity,
+      usage_limit_per_user: voucher.usage_limit_per_user,
       apply_scope: voucher.apply_scope,
       start_date: voucher.start_date,
       end_date: voucher.end_date,
@@ -648,18 +772,20 @@ export const listVouchers = async (query = {}) => {
 
 export const getVoucherByIdService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
-  const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
+  const voucher = await Voucher.findOne({ _id: id, deleted_at: null })
+    .populate("created_by", "full_name email")
+    .populate("updated_by", "full_name email");
   return voucher ? normalizeVoucherForResponse(voucher) : null;
 };
 
 export const listVoucherUsageHistoryService = async (id, query = {}) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
@@ -853,14 +979,14 @@ export const createVoucherService = async (payload, user = null) => {
 
 export const updateVoucherService = async (id, payload, user = null) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
   const existingVoucher = await Voucher.findOne({ _id: id, deleted_at: null });
   if (!existingVoucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
@@ -873,7 +999,7 @@ export const updateVoucherService = async (id, payload, user = null) => {
 
     if (blockedFields.length > 0) {
       const error = new Error(
-        `Voucher da duoc su dung, khong the cap nhat cac truong: ${blockedFields.join(", ")}`
+        `Mã giảm giá đã được sử dụng, không thể cập nhật các trường: ${blockedFields.join(", ")}`
       );
       error.statusCode = 400;
       throw error;
@@ -959,14 +1085,14 @@ export const updateVoucherService = async (id, payload, user = null) => {
 
 export const deleteVoucherService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
   const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
   if (!voucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
@@ -979,7 +1105,7 @@ export const deleteVoucherService = async (id) => {
     return {
       voucher,
       deletion_type: "soft",
-      message: "Voucher da phat sinh giao dich nen da duoc chuyen sang Da huy",
+      message: VOUCHER_MESSAGES.DELETE_BLOCKED,
     };
   }
 
@@ -988,20 +1114,20 @@ export const deleteVoucherService = async (id) => {
   return {
     voucher,
     deletion_type: "hard",
-    message: "Voucher chua phat sinh giao dich nen da duoc xoa",
+    message: VOUCHER_MESSAGES.DELETED,
   };
 };
 
 export const toggleVoucherStatusService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
-    const error = new Error("Voucher khong hop le");
+    const error = new Error(VOUCHER_MESSAGES.INVALID);
     error.statusCode = 400;
     throw error;
   }
 
   const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
   if (!voucher) {
-    const error = new Error("Khong tim thay voucher");
+    const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
     error.statusCode = 404;
     throw error;
   }
@@ -1067,18 +1193,18 @@ export const consumeVoucherQuantityService = async ({
         });
 
     if (!existingVoucher) {
-      const error = new Error("Khong tim thay voucher");
+      const error = new Error(VOUCHER_MESSAGES.NOT_FOUND);
       error.statusCode = 404;
       throw error;
     }
 
     if (!existingVoucher.status) {
-      const error = new Error("Voucher dang bi vo hieu hoa");
+      const error = new Error(VOUCHER_MESSAGES.INACTIVE);
       error.statusCode = 409;
       throw error;
     }
 
-    const error = new Error("Voucher khong con du so luong");
+    const error = new Error(VOUCHER_MESSAGES.OUT_OF_USAGE);
     error.statusCode = 409;
     throw error;
   }
@@ -1105,21 +1231,21 @@ export const verifyVoucherService = async (payload = {}) => {
   if (!voucher) {
     return {
       valid: false,
-      message: "Khong tim thay voucher",
+      message: VOUCHER_MESSAGES.NOT_FOUND,
     };
   }
 
   if (!voucher.status) {
     return {
       valid: false,
-      message: "Voucher dang bi vo hieu hoa",
+      message: VOUCHER_MESSAGES.INACTIVE,
     };
   }
 
   if (voucher.quantity <= 0) {
     return {
       valid: false,
-      message: "Voucher da het luot su dung",
+      message: VOUCHER_MESSAGES.OUT_OF_USAGE,
     };
   }
 
@@ -1127,14 +1253,14 @@ export const verifyVoucherService = async (payload = {}) => {
   if (voucher.start_date && now < voucher.start_date) {
     return {
       valid: false,
-      message: "Voucher chua den thoi gian ap dung",
+      message: VOUCHER_MESSAGES.NOT_STARTED,
     };
   }
 
   if (voucher.end_date && now > voucher.end_date) {
     return {
       valid: false,
-      message: "Voucher da het han",
+      message: VOUCHER_MESSAGES.EXPIRED,
     };
   }
 
@@ -1160,7 +1286,7 @@ export const verifyVoucherService = async (payload = {}) => {
     if (usedByCustomer >= Number(voucher.usage_limit_per_user || 1)) {
       return {
         valid: false,
-        message: "Khach hang da dung het so lan cho ma nay",
+        message: VOUCHER_MESSAGES.CUSTOMER_LIMIT,
         used_by_customer: usedByCustomer,
       };
     }
@@ -1169,7 +1295,7 @@ export const verifyVoucherService = async (payload = {}) => {
   if (context.orderAmount !== null && context.orderAmount < Number(voucher.min_order ?? 0)) {
     return {
       valid: false,
-      message: `Don hang toi thieu phai dat ${voucher.min_order}`,
+      message: `${VOUCHER_MESSAGES.MIN_ORDER} Cần tối thiểu ${voucher.min_order}.`,
       min_order: voucher.min_order,
     };
   }

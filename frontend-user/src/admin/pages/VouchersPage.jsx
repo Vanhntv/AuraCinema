@@ -180,8 +180,8 @@ const VouchersPage = () => {
   const handleCreateVoucher = async (payload) => {
     try {
       setSubmitting(true);
-      await createVoucher(payload);
-      addToast("success", `Đã tạo mã giảm giá "${payload.code}"`);
+      const response = await createVoucher(payload);
+      addToast("success", response.message || `Đã tạo mã giảm giá "${payload.code}"`);
       setIsCreateModalOpen(false);
       fetchVouchers(1);
       fetchStats();
@@ -197,8 +197,8 @@ const VouchersPage = () => {
 
     try {
       setSubmitting(true);
-      await updateVoucher(editVoucher._id, payload);
-      addToast("success", `Đã cập nhật mã giảm giá "${editVoucher.code}"`);
+      const response = await updateVoucher(editVoucher._id, payload);
+      addToast("success", response.message || `Đã cập nhật mã giảm giá "${editVoucher.code}"`);
       setEditVoucher(null);
       fetchVouchers(currentPage);
       fetchStats();
@@ -214,10 +214,10 @@ const VouchersPage = () => {
 
     try {
       setSubmitting(true);
-      await toggleVoucherStatus(statusTarget._id);
+      const response = await toggleVoucherStatus(statusTarget._id);
       addToast(
         "success",
-        `Đã ${statusTarget.status ? "tạm dừng" : "kích hoạt"} mã "${statusTarget.code}"`
+        response.message || `Đã ${statusTarget.status ? "tạm dừng" : "kích hoạt"} mã "${statusTarget.code}"`
       );
       setStatusTarget(null);
       fetchVouchers(currentPage);
