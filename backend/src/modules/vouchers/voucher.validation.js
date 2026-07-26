@@ -5,13 +5,20 @@ export const normalizeVoucherPayload = (payload, defaults = {}) => {
   return {
     code: payload.code ?? defaults.code,
     name: payload.name ?? defaults.name,
+    description: payload.description ?? defaults.description,
+    image_url: payload.image_url ?? defaults.image_url,
     discount_type: payload.discount_type ?? defaults.discount_type,
     discount_value: payload.discount_value ?? defaults.discount_value,
+    max_discount_amount: payload.max_discount_amount ?? defaults.max_discount_amount,
     min_order: payload.min_order ?? defaults.min_order,
     quantity: payload.quantity ?? defaults.quantity,
     usage_limit: payload.usage_limit ?? defaults.usage_limit,
     usage_count: payload.usage_count ?? defaults.usage_count,
+    usage_limit_per_user: payload.usage_limit_per_user ?? defaults.usage_limit_per_user,
     apply_scope: payload.apply_scope ?? defaults.apply_scope,
+    applicable_movie_ids: payload.applicable_movie_ids ?? defaults.applicable_movie_ids,
+    applicable_member_tiers: payload.applicable_member_tiers ?? defaults.applicable_member_tiers,
+    terms_and_conditions: payload.terms_and_conditions ?? defaults.terms_and_conditions,
     start_date: payload.start_date ?? defaults.start_date,
     end_date: payload.end_date ?? defaults.end_date,
     status: payload.status ?? defaults.status,
@@ -138,6 +145,22 @@ const validateVoucherMinOrder = (minOrder, prefix) => {
   return null;
 };
 
+const validateOptionalAmount = (amount, field, prefix) => {
+  if (isEmptyValue(amount)) {
+    return null;
+  }
+
+  const value = Number(amount);
+  if (Number.isNaN(value)) {
+    return `${prefix}${field} khong hop le`;
+  }
+  if (value < 0) {
+    return `${prefix}${field} khong duoc am`;
+  }
+
+  return null;
+};
+
 const validateVoucherQuantity = (quantity, prefix, required = true) => {
   if (!required && isEmptyValue(quantity)) {
     return null;
@@ -213,6 +236,9 @@ export const validateVoucherPayload = (voucher, index = null) => {
   const minOrderError = validateVoucherMinOrder(voucher.min_order, prefix);
   if (minOrderError) return minOrderError;
 
+  const maxDiscountError = validateOptionalAmount(voucher.max_discount_amount, "max_discount_amount", prefix);
+  if (maxDiscountError) return maxDiscountError;
+
   const quantityError = validateVoucherQuantity(voucher.quantity, prefix, true);
   if (quantityError) return quantityError;
 
@@ -251,6 +277,11 @@ export const validateVoucherUpdatePayload = (voucher, index = null) => {
   if ("min_order" in voucher) {
     const minOrderError = validateVoucherMinOrder(voucher.min_order, prefix);
     if (minOrderError) return minOrderError;
+  }
+
+  if ("max_discount_amount" in voucher) {
+    const maxDiscountError = validateOptionalAmount(voucher.max_discount_amount, "max_discount_amount", prefix);
+    if (maxDiscountError) return maxDiscountError;
   }
 
   if ("quantity" in voucher) {

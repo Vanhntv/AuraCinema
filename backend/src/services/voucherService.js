@@ -169,12 +169,25 @@ const buildPagination = ({ page, limit }) => {
   return { currentPage, pageSize, skip };
 };
 
+const normalizeArrayValue = (value) => {
+  if (Array.isArray(value)) return value.filter((item) => !isMissing(item));
+  if (isMissing(value)) return [];
+  return [value];
+};
+
 const prepareCreatePayload = (payload) => {
   const normalizedPayload = normalizeVoucherPayload(payload, {
     name: "",
+    description: "",
+    image_url: "",
     min_order: 0,
+    max_discount_amount: null,
     usage_count: 0,
+    usage_limit_per_user: 1,
     apply_scope: "order",
+    applicable_movie_ids: [],
+    applicable_member_tiers: [],
+    terms_and_conditions: "",
     status: true,
   });
   const quantity = Number(normalizedPayload.quantity);
@@ -183,13 +196,24 @@ const prepareCreatePayload = (payload) => {
     ...normalizedPayload,
     code: normalizeVoucherCode(normalizedPayload.code),
     name: isMissing(normalizedPayload.name) ? "" : String(normalizedPayload.name).trim(),
+    description: isMissing(normalizedPayload.description) ? "" : String(normalizedPayload.description).trim(),
+    image_url: isMissing(normalizedPayload.image_url) ? "" : String(normalizedPayload.image_url).trim(),
     discount_type: parseVoucherDiscountType(normalizedPayload.discount_type, "percent"),
     discount_value: Number(normalizedPayload.discount_value),
+    max_discount_amount: isMissing(normalizedPayload.max_discount_amount)
+      ? null
+      : Number(normalizedPayload.max_discount_amount),
     min_order: Number(normalizedPayload.min_order ?? 0),
     quantity,
     usage_limit: Number(normalizedPayload.usage_limit ?? quantity),
     usage_count: Number(normalizedPayload.usage_count ?? 0),
+    usage_limit_per_user: Number(normalizedPayload.usage_limit_per_user ?? 1),
     apply_scope: parseVoucherApplyScope(normalizedPayload.apply_scope, "order"),
+    applicable_movie_ids: normalizeArrayValue(normalizedPayload.applicable_movie_ids),
+    applicable_member_tiers: normalizeArrayValue(normalizedPayload.applicable_member_tiers).map((item) => String(item).trim()).filter(Boolean),
+    terms_and_conditions: isMissing(normalizedPayload.terms_and_conditions)
+      ? ""
+      : String(normalizedPayload.terms_and_conditions).trim(),
     start_date: new Date(normalizedPayload.start_date),
     end_date: new Date(normalizedPayload.end_date),
     status: parseVoucherStatus(normalizedPayload.status, true),
@@ -205,6 +229,14 @@ const prepareUpdatePayload = (payload) => {
 
   if (Object.prototype.hasOwnProperty.call(payload, "name")) {
     updatePayload.name = isMissing(payload.name) ? "" : String(payload.name).trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "description")) {
+    updatePayload.description = isMissing(payload.description) ? "" : String(payload.description).trim();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "image_url")) {
+    updatePayload.image_url = isMissing(payload.image_url) ? "" : String(payload.image_url).trim();
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "discount_type")) {
@@ -226,6 +258,12 @@ const prepareUpdatePayload = (payload) => {
     updatePayload.quantity = Number(payload.quantity);
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, "max_discount_amount")) {
+    updatePayload.max_discount_amount = isMissing(payload.max_discount_amount)
+      ? null
+      : Number(payload.max_discount_amount);
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, "usage_limit")) {
     updatePayload.usage_limit = Number(payload.usage_limit);
   }
@@ -234,8 +272,26 @@ const prepareUpdatePayload = (payload) => {
     updatePayload.usage_count = Number(payload.usage_count);
   }
 
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_limit_per_user")) {
+    updatePayload.usage_limit_per_user = Number(payload.usage_limit_per_user);
+  }
+
   if (Object.prototype.hasOwnProperty.call(payload, "apply_scope")) {
     updatePayload.apply_scope = parseVoucherApplyScope(payload.apply_scope, "order");
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "applicable_movie_ids")) {
+    updatePayload.applicable_movie_ids = normalizeArrayValue(payload.applicable_movie_ids);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "applicable_member_tiers")) {
+    updatePayload.applicable_member_tiers = normalizeArrayValue(payload.applicable_member_tiers).map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "terms_and_conditions")) {
+    updatePayload.terms_and_conditions = isMissing(payload.terms_and_conditions)
+      ? ""
+      : String(payload.terms_and_conditions).trim();
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "start_date")) {
@@ -319,7 +375,7 @@ export const getVoucherByIdService = async (id) => {
   return voucher ? normalizeVoucherForResponse(voucher) : null;
 };
 
-export const createVoucherService = async (payload) => {
+export const createVoucherService = async (payload, user = null) => {
   const normalizedPayload = prepareCreatePayload(payload);
   const validationError = validateVoucherPayload(normalizedPayload);
 
@@ -331,11 +387,16 @@ export const createVoucherService = async (payload) => {
 
   await ensureVoucherCodeIsUnique(normalizedPayload.code);
 
+  if (user?.id) {
+    normalizedPayload.created_by = user.id;
+    normalizedPayload.updated_by = user.id;
+  }
+
   const createdVoucher = await Voucher.create(normalizedPayload);
   return Voucher.findOne({ _id: createdVoucher._id, deleted_at: null });
 };
 
-export const updateVoucherService = async (id, payload) => {
+export const updateVoucherService = async (id, payload, user = null) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     const error = new Error("Voucher khong hop le");
     error.statusCode = 400;
@@ -350,6 +411,9 @@ export const updateVoucherService = async (id, payload) => {
   }
 
   const normalizedPayload = prepareUpdatePayload(payload);
+  if (user?.id) {
+    normalizedPayload.updated_by = user.id;
+  }
   const validationError = validateVoucherUpdatePayload(normalizedPayload);
   if (validationError) {
     const error = new Error(validationError);

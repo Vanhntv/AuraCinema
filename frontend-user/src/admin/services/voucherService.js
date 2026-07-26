@@ -11,3 +11,8 @@ export const getVoucherById = async (id) => {
   const response = await axiosClient.get(`${API_URL}/${id}`);
   return response.data;
 };
+
+export const createVoucher = async (data) => {
+  const response = await axiosClient.post(API_URL, data);
+  return response.data;
+};

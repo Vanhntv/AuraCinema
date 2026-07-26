@@ -14,6 +14,16 @@ const voucherSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    description: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    image_url: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     discount_type: {
       type: String,
       required: true,
@@ -28,6 +38,11 @@ const voucherSchema = new mongoose.Schema(
     min_order: {
       type: Number,
       default: 0,
+      min: 0,
+    },
+    max_discount_amount: {
+      type: Number,
+      default: null,
       min: 0,
     },
     quantity: {
@@ -49,6 +64,18 @@ const voucherSchema = new mongoose.Schema(
       type: String,
       enum: ["order", "ticket", "concession", "movie", "member"],
       default: "order",
+      trim: true,
+    },
+    usage_limit_per_user: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    applicable_movie_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: "Movie" }],
+    applicable_member_tiers: [{ type: String, trim: true }],
+    terms_and_conditions: {
+      type: String,
+      default: "",
       trim: true,
     },
     start_date: {
@@ -73,6 +100,8 @@ const voucherSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    updated_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
   {
     timestamps: {

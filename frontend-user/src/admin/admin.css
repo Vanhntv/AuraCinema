@@ -3785,6 +3785,50 @@
   font-size: 14px;
 }
 
+.voucher-form {
+  display: grid;
+  gap: 18px;
+}
+
+.voucher-form-section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.voucher-form-section h3 {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.segmented-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.segmented-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.segmented-options input {
+  accent-color: var(--color-accent);
+}
+
 @media (max-width: 768px) {
   .voucher-detail-grid {
     grid-template-columns: 1fr;

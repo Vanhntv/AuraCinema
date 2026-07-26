@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineTag,
@@ -8,14 +9,16 @@ import {
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
+import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { getVoucherById, getVouchers } from "../services/voucherService";
+import { createVoucher, getVoucherById, getVouchers } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
 const VouchersPage = () => {
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [discountTypeFilter, setDiscountTypeFilter] = useState("");
@@ -28,6 +31,7 @@ const VouchersPage = () => {
   const [toasts, setToasts] = useState([]);
   const [detailVoucher, setDetailVoucher] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const activeInPage = useMemo(
     () => vouchers.filter((voucher) => voucher.status).length,
@@ -112,6 +116,20 @@ const VouchersPage = () => {
     }
   };
 
+  const handleCreateVoucher = async (payload) => {
+    try {
+      setSubmitting(true);
+      await createVoucher(payload);
+      addToast("success", `Đã tạo mã giảm giá "${payload.code}"`);
+      setIsCreateModalOpen(false);
+      fetchVouchers(1);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tạo mã giảm giá");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -120,6 +138,10 @@ const VouchersPage = () => {
           <p>Theo dõi danh sách chương trình ưu đãi, trạng thái và lượt sử dụng.</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+            <HiOutlinePlus />
+            Thêm mã
+          </button>
           <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage)}>
             <HiOutlineRefresh />
             Làm mới
@@ -239,6 +261,13 @@ const VouchersPage = () => {
         voucher={detailVoucher}
         loading={detailLoading}
         onClose={() => setDetailVoucher(null)}
+      />
+
+      <VoucherModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateVoucher}
+        isLoading={submitting}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />

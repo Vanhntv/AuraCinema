@@ -62,7 +62,7 @@ export const getVoucherById = async (req, res) => {
 
 export const createVoucher = async (req, res) => {
   try {
-    const voucher = await createVoucherService(req.body);
+    const voucher = await createVoucherService(req.body, req.user);
 
     res.status(201).json({
       success: true,
@@ -77,7 +77,7 @@ export const createVoucher = async (req, res) => {
 export const updateVoucher = async (req, res) => {
   try {
     const { id } = req.params;
-    const voucher = await updateVoucherService(id, req.body);
+    const voucher = await updateVoucherService(id, req.body, req.user);
 
     res.status(200).json({
       success: true,
