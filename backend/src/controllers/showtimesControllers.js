@@ -12,9 +12,10 @@ const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
 const VIP_SEAT_SURCHARGE = 20000;
 const COUPLE_SEAT_SURCHARGE = 20000;
 const STANDARD_TICKET_PRICES = {
-  "2D": { weekday: 50000, weekend: 55000 },
-  "3D": { weekday: 65000, weekend: 70000 },
+  "2D": { weekday: 50000, weekend: 70000, holiday: 80000 },
+  "3D": { weekday: 50000, weekend: 70000, holiday: 80000 },
 };
+const FIXED_HOLIDAYS = new Set(["01-01", "04-30", "05-01", "09-02"]);
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -66,12 +67,26 @@ const isWeekendShowtime = (dateValue) => {
   return weekday === "Sat" || weekday === "Sun";
 };
 
+const isHolidayShowtime = (dateValue) => {
+  const monthDay = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(new Date(dateValue))
+    .replace("/", "-");
+
+  return FIXED_HOLIDAYS.has(monthDay);
+};
+
 const resolveStandardPricing = ({ room, startTime }) => {
   const roomType = String(room?.room_type || "2D").toUpperCase();
   const priceTable = STANDARD_TICKET_PRICES[roomType] || STANDARD_TICKET_PRICES["2D"];
-  const basePrice = isWeekendShowtime(startTime)
-    ? priceTable.weekend
-    : priceTable.weekday;
+  const basePrice = isHolidayShowtime(startTime)
+    ? priceTable.holiday
+    : isWeekendShowtime(startTime)
+      ? priceTable.weekend
+      : priceTable.weekday;
 
   return {
     base_price: basePrice,

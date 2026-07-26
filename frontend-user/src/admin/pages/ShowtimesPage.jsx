@@ -255,9 +255,6 @@ const formatTimeInputValue = (date) =>
   `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
-const VIP_SEAT_SURCHARGE = 20000;
-const COUPLE_SEAT_SURCHARGE = 20000;
-
 const parseTicketPrice = (value) => {
   const price = Number(String(value || "").replace(/[^\d]/g, ""));
   return Number.isFinite(price) ? price : null;
@@ -270,32 +267,51 @@ const isWeekendDate = (dateValue) => {
   return date.getDay() === 0 || date.getDay() === 6;
 };
 
-const getStandardBasePrice = ({ roomType, startDate }) => {
-  const normalizedRoomType = String(roomType || "2D").toUpperCase();
-  const tableName = normalizedRoomType === "3D" ? "3D" : "2D";
-  const table = ticketPriceData.pricingTables.find(
-    (item) => item.name === tableName,
-  );
-  const adultRow = table?.rows.find((row) =>
-    normalizeText(row.label).includes("nguoi lon"),
-  );
+const FIXED_HOLIDAYS = new Set(["01-01", "04-30", "05-01", "09-02"]);
 
-  if (!adultRow) return null;
-
-  return parseTicketPrice(isWeekendDate(startDate) ? adultRow.weekend : adultRow.weekday);
+const isHolidayDate = (dateValue) => {
+  if (!dateValue) return false;
+  const date = new Date(`${dateValue}T00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  const monthDay = `${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+  return FIXED_HOLIDAYS.has(monthDay);
 };
 
-const buildStandardSeatPrices = (basePrice) => {
-  const numericBasePrice = Number(basePrice);
-  if (!Number.isFinite(numericBasePrice) || numericBasePrice <= 0) {
+const findTicketPriceRow = (type) => {
+  const table = ticketPriceData.pricingTables[0];
+  const keywords = {
+    normal: ["ghe thuong", "thuong"],
+    vip: ["vip"],
+    couple: ["ghe doi", "couple", "doi"],
+  }[type];
+
+  return table?.rows.find((row) => {
+    const label = normalizeText(row.label);
+    return keywords.some((keyword) => label.includes(keyword));
+  });
+};
+
+const getStandardSeatPrices = ({ startDate }) => {
+  const priceKey = isHolidayDate(startDate)
+    ? "holiday"
+    : isWeekendDate(startDate)
+      ? "weekend"
+      : "weekday";
+  const normalPrice = parseTicketPrice(findTicketPriceRow("normal")?.[priceKey]);
+  const vipPrice = parseTicketPrice(findTicketPriceRow("vip")?.[priceKey]);
+  const couplePrice = parseTicketPrice(findTicketPriceRow("couple")?.[priceKey]);
+
+  if (!normalPrice || !vipPrice || !couplePrice) {
     return null;
   }
 
   return {
-    base_price: numericBasePrice,
-    normal_price: numericBasePrice,
-    vip_price: numericBasePrice + VIP_SEAT_SURCHARGE,
-    couple_price: numericBasePrice * 2 + COUPLE_SEAT_SURCHARGE,
+    base_price: normalPrice,
+    normal_price: normalPrice,
+    vip_price: vipPrice,
+    couple_price: couplePrice,
   };
 };
 
@@ -414,17 +430,18 @@ const ShowtimesPage = () => {
 
   const standardPricing = useMemo(() => {
     if (!selectedRoom || !formData.start_date) return null;
-    const basePrice = getStandardBasePrice({
-      roomType: selectedRoom.room_type,
-      startDate: formData.start_date,
-    });
+    const seatPrices = getStandardSeatPrices({ startDate: formData.start_date });
 
-    if (!basePrice) return null;
+    if (!seatPrices) return null;
 
     return {
-      ...buildStandardSeatPrices(basePrice),
+      ...seatPrices,
       roomType: String(selectedRoom.room_type || "2D").toUpperCase(),
-      dayType: isWeekendDate(formData.start_date) ? "Cuối tuần / lễ" : "Ngày thường",
+      dayType: isHolidayDate(formData.start_date)
+        ? "Ng�y l?"
+        : isWeekendDate(formData.start_date)
+          ? "Cu?i tu?n"
+          : "Ng�y th�?ng",
     };
   }, [formData.start_date, selectedRoom]);
 
