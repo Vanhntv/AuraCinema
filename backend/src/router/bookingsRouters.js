@@ -1,9 +1,10 @@
 import express from "express";
-import { createBooking, getMyBookings } from "../controllers/bookingsControllers.js";
+import { cancelBooking, createBooking, getMyBookings } from "../controllers/bookingsControllers.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 router.use(authMiddleware);
 router.get("/my", getMyBookings);
 router.post("/", createBooking);
+router.patch("/:id/cancel", cancelBooking);
 export default router;

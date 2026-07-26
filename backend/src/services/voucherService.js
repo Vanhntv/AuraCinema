@@ -138,8 +138,49 @@ const countVoucherUsageByUser = async ({ voucherId, userId, session = null }) =>
   return VoucherUsage.countDocuments({
     user_id: userId,
     voucher_id: voucherId,
+    status: "used",
     payment_status: "paid",
   }).session(session);
+};
+
+export const refundVoucherUsageForBooking = async ({
+  bookingId,
+  refundUsage = true,
+  finalStatus = "refunded",
+  session = null,
+} = {}) => {
+  if (!bookingId) return null;
+
+  const usage = await VoucherUsage.findOne({
+    booking_id: bookingId,
+    status: { $in: ["reserved", "used"] },
+  }).session(session);
+
+  if (!usage) return null;
+
+  if (refundUsage && usage.status === "used") {
+    await Voucher.updateOne(
+      {
+        _id: usage.voucher_id,
+        usage_count: { $gt: 0 },
+      },
+      {
+        $inc: {
+          quantity: 1,
+          usage_count: -1,
+        },
+      },
+      { session },
+    );
+  }
+
+  usage.status = finalStatus;
+  usage.payment_status = refundUsage ? "refunded" : usage.payment_status;
+  if (refundUsage) usage.refunded_at = new Date();
+  if (finalStatus === "cancelled") usage.cancelled_at = new Date();
+  await usage.save({ session });
+
+  return usage;
 };
 
 const deriveVoucherStatus = (data) => {

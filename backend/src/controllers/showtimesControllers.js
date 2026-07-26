@@ -6,6 +6,7 @@ import AuditLog from "../models/AuditLog.js";
 import {
   generateShowtimeSeatsForShowtimeService,
 } from "../services/showtimeSeatService.js";
+import { refundVoucherUsageForBooking } from "../services/voucherService.js";
 
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
@@ -1044,6 +1045,26 @@ export const deleteShowtime = async (req, res) => {
     showtime.status = "cancelled";
     showtime.cancelled_at = new Date();
     await showtime.save();
+
+    const affectedBookings = await Booking.find({
+      showtime_id: showtime._id,
+      status: "confirmed",
+      payment_status: "paid",
+    });
+
+    for (const booking of affectedBookings) {
+      booking.status = "cancelled";
+      booking.payment_status = "refunded";
+      booking.cancelled_by = "cinema";
+      booking.cancellation_reason = "Rap huy suat chieu";
+      booking.cancelled_at = new Date();
+      await booking.save();
+      await refundVoucherUsageForBooking({
+        bookingId: booking._id,
+        refundUsage: true,
+        finalStatus: "refunded",
+      });
+    }
 
     await writeShowtimeAuditLog({
       req,

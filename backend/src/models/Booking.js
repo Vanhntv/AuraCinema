@@ -29,6 +29,13 @@ const bookingSchema = new mongoose.Schema(
     discount_amount: { type: Number, default: 0, min: 0 },
     total_price: { type: Number, required: true, min: 0 },
     status: { type: String, enum: ["confirmed", "cancelled"], default: "confirmed" },
+    cancelled_by: {
+      type: String,
+      enum: ["cinema", "customer", "system", null],
+      default: null,
+    },
+    cancellation_reason: { type: String, default: "", trim: true },
+    cancelled_at: { type: Date, default: null },
     payment_status: {
       type: String,
       enum: ["pending", "paid", "failed", "refunded"],

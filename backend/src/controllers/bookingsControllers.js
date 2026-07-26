@@ -6,7 +6,7 @@ import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
 import Voucher from "../models/Voucher.js";
 import VoucherUsage from "../models/VoucherUsage.js";
-import { verifyVoucherService } from "../services/voucherService.js";
+import { refundVoucherUsageForBooking, verifyVoucherService } from "../services/voucherService.js";
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -270,6 +270,7 @@ export const createBooking = async (req, res) => {
           eligible_amount: Number(voucherResult.eligible_amount || 0),
           discount_amount: discountAmount,
           final_price: Math.max(subtotalPrice - discountAmount, 0),
+          status: "used",
           payment_status: "paid",
           used_at: new Date(),
         };
@@ -299,6 +300,80 @@ export const createBooking = async (req, res) => {
     });
 
     return res.status(201).json({ success: true, message: "Đặt vé thành công", data: createdBooking });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  } finally {
+    await session.endSession();
+  }
+};
+
+export const cancelBooking = async (req, res) => {
+  const session = await mongoose.startSession();
+  try {
+    const { id } = req.params;
+    const cancelledBy = ["cinema", "customer", "system"].includes(req.body?.cancelled_by)
+      ? req.body.cancelled_by
+      : req.user.role === "admin"
+        ? "cinema"
+        : "customer";
+    const refundVoucher = cancelledBy === "cinema" || req.body?.refund_voucher === true;
+
+    let cancelledBooking;
+    await session.withTransaction(async () => {
+      const booking = await Booking.findOne({
+        _id: id,
+        ...(req.user.role === "admin" ? {} : { user_id: req.user.id }),
+      }).session(session);
+
+      if (!booking) {
+        throw Object.assign(new Error("Khong tim thay booking"), { statusCode: 404 });
+      }
+
+      if (booking.status === "cancelled") {
+        throw Object.assign(new Error("Booking da duoc huy truoc do"), { statusCode: 409 });
+      }
+
+      booking.status = "cancelled";
+      booking.cancelled_by = cancelledBy;
+      booking.cancellation_reason = String(req.body?.reason || "").trim();
+      booking.cancelled_at = new Date();
+      if (refundVoucher && booking.payment_status === "paid") {
+        booking.payment_status = "refunded";
+      }
+      await booking.save({ session });
+
+      if (booking.payment_status === "refunded") {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: true,
+          finalStatus: "refunded",
+          session,
+        });
+      } else {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: false,
+          finalStatus: "cancelled",
+          session,
+        });
+      }
+
+      await ShowtimeSeat.updateMany(
+        { _id: { $in: booking.showtime_seat_ids }, status: "booked" },
+        { $set: { status: "available", held_by: null, hold_expires_at: null } },
+        { session },
+      );
+
+      cancelledBooking = booking;
+    });
+
+    return res.json({
+      success: true,
+      message: refundVoucher
+        ? "Da huy booking va hoan luot ma giam gia"
+        : "Da huy booking theo chinh sach khong hoan luot ma",
+      data: cancelledBooking,
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   } finally {

@@ -13,11 +13,18 @@ const voucherUsageSchema = new mongoose.Schema(
     eligible_amount: { type: Number, required: true, min: 0 },
     discount_amount: { type: Number, required: true, min: 0 },
     final_price: { type: Number, required: true, min: 0 },
+    status: {
+      type: String,
+      enum: ["reserved", "used", "refunded", "cancelled"],
+      default: "used",
+    },
     payment_status: {
       type: String,
-      enum: ["paid", "refunded"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "paid",
     },
+    refunded_at: { type: Date, default: null },
+    cancelled_at: { type: Date, default: null },
     used_at: { type: Date, default: Date.now },
   },
   {
@@ -29,7 +36,7 @@ const voucherUsageSchema = new mongoose.Schema(
   },
 );
 
-voucherUsageSchema.index({ voucher_id: 1, user_id: 1, used_at: -1 });
+voucherUsageSchema.index({ voucher_id: 1, user_id: 1, status: 1, used_at: -1 });
 voucherUsageSchema.index({ booking_id: 1 }, { unique: true });
 
 const VoucherUsage = mongoose.model("VoucherUsage", voucherUsageSchema);
