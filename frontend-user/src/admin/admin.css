@@ -840,6 +840,15 @@
   color: var(--color-text-primary);
 }
 
+.btn-danger-text {
+  color: var(--color-danger);
+}
+
+.btn-danger-text:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
 .btn-sm {
   padding: 6px 14px;
   font-size: 13px;

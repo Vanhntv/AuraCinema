@@ -1,4 +1,4 @@
-import { HiOutlineEye, HiOutlinePause, HiOutlinePencil, HiOutlinePlay } from "react-icons/hi";
+import { HiOutlineEye, HiOutlinePause, HiOutlinePencil, HiOutlinePlay, HiOutlineTrash } from "react-icons/hi";
 
 const discountTypeLabels = {
   percent: "Phần trăm",
@@ -68,7 +68,7 @@ const formatDiscountValue = (voucher) => {
   return formatCurrency(voucher.discount_value);
 };
 
-const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }) => (
+const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus, onDelete }) => (
   <div className="table-wrapper vouchers-table-wrapper">
     <table className="data-table vouchers-table">
       <thead>
@@ -82,7 +82,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }
           <th style={{ width: "140px" }}>Lượt dùng</th>
           <th style={{ width: "130px" }}>Phạm vi</th>
           <th style={{ width: "150px" }}>Trạng thái</th>
-          <th style={{ width: "150px", textAlign: "center" }}>Thao tác</th>
+          <th style={{ width: "190px", textAlign: "center" }}>Thao tác</th>
         </tr>
       </thead>
       <tbody>
@@ -103,6 +103,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }
             const usageCount = Number(
               voucher.usage_count ?? Math.max(usageLimit - Number(voucher.quantity || 0), 0),
             );
+            const isCancelled = voucher.computed_status === "cancelled" || Boolean(voucher.deleted_at);
 
             return (
               <tr key={voucher._id}>
@@ -137,6 +138,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }
                       className="btn btn-icon btn-ghost"
                       title="Xem chi tiết"
                       onClick={() => onView(voucher)}
+                      disabled={isCancelled}
                     >
                       <HiOutlineEye />
                     </button>
@@ -144,6 +146,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }
                       className="btn btn-icon btn-ghost"
                       title="Chỉnh sửa"
                       onClick={() => onEdit(voucher)}
+                      disabled={isCancelled}
                     >
                       <HiOutlinePencil />
                     </button>
@@ -151,8 +154,17 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus }
                       className="btn btn-icon btn-ghost"
                       title={voucher.status ? "Tạm dừng mã" : "Kích hoạt mã"}
                       onClick={() => onToggleStatus(voucher)}
+                      disabled={isCancelled}
                     >
                       {voucher.status ? <HiOutlinePause /> : <HiOutlinePlay />}
+                    </button>
+                    <button
+                      className="btn btn-icon btn-ghost btn-danger-text"
+                      title={usageCount > 0 ? "Hủy mã và giữ lịch sử" : "Xóa mã"}
+                      onClick={() => onDelete(voucher)}
+                      disabled={isCancelled}
+                    >
+                      <HiOutlineTrash />
                     </button>
                   </div>
                 </td>

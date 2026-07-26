@@ -551,19 +551,32 @@ export const deleteVoucherService = async (id) => {
     throw error;
   }
 
-  const deletedVoucher = await Voucher.findOneAndUpdate(
-    { _id: id, deleted_at: null },
-    { deleted_at: new Date() },
-    { new: true }
-  );
-
-  if (!deletedVoucher) {
+  const voucher = await Voucher.findOne({ _id: id, deleted_at: null });
+  if (!voucher) {
     const error = new Error("Khong tim thay voucher");
     error.statusCode = 404;
     throw error;
   }
 
-  return deletedVoucher;
+  if (Number(voucher.usage_count || 0) > 0) {
+    voucher.deleted_at = new Date();
+    voucher.status = false;
+    await voucher.save();
+
+    return {
+      voucher,
+      deletion_type: "soft",
+      message: "Voucher da phat sinh giao dich nen da duoc chuyen sang Da huy",
+    };
+  }
+
+  await Voucher.deleteOne({ _id: id });
+
+  return {
+    voucher,
+    deletion_type: "hard",
+    message: "Voucher chua phat sinh giao dich nen da duoc xoa",
+  };
 };
 
 export const toggleVoucherStatusService = async (id) => {

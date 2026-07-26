@@ -92,11 +92,12 @@ export const updateVoucher = async (req, res) => {
 export const deleteVoucher = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteVoucherService(id);
+    const result = await deleteVoucherService(id);
 
     res.status(200).json({
       success: true,
-      message: "Xoa voucher thanh cong",
+      message: result.message || "Xoa voucher thanh cong",
+      data: result,
     });
   } catch (error) {
     sendError(res, error);

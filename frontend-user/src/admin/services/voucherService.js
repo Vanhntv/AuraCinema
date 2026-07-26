@@ -26,3 +26,8 @@ export const toggleVoucherStatus = async (id) => {
   const response = await axiosClient.patch(`${API_URL}/${id}/status`);
   return response.data;
 };
+
+export const deleteVoucher = async (id) => {
+  const response = await axiosClient.delete(`${API_URL}/${id}`);
+  return response.data;
+};

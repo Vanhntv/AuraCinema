@@ -12,7 +12,7 @@ import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, getVoucherById, getVouchers, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
+import { createVoucher, deleteVoucher, getVoucherById, getVouchers, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -35,6 +35,7 @@ const VouchersPage = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editVoucher, setEditVoucher] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const activeInPage = useMemo(
     () => vouchers.filter((voucher) => voucher.computed_status === "active").length,
@@ -180,6 +181,22 @@ const VouchersPage = () => {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?._id) return;
+
+    try {
+      setSubmitting(true);
+      const response = await deleteVoucher(deleteTarget._id);
+      addToast("success", response.message || `Đã xóa mã "${deleteTarget.code}"`);
+      setDeleteTarget(null);
+      fetchVouchers(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể xóa mã giảm giá");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -294,6 +311,7 @@ const VouchersPage = () => {
               onView={handleViewDetail}
               onEdit={handleEditVoucher}
               onToggleStatus={setStatusTarget}
+              onDelete={setDeleteTarget}
             />
             <div className="pagination">
               <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
@@ -343,6 +361,26 @@ const VouchersPage = () => {
         confirmClassName={statusTarget?.status ? "btn-danger" : "btn-primary"}
         onConfirm={handleConfirmToggleStatus}
         onCancel={() => setStatusTarget(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        title={
+          Number(deleteTarget?.usage_count || 0) > 0
+            ? "Hủy mã giảm giá"
+            : "Xóa mã giảm giá"
+        }
+        message={
+          Number(deleteTarget?.usage_count || 0) > 0
+            ? `Mã "${deleteTarget?.code}" đã phát sinh giao dịch nên hệ thống sẽ chuyển sang trạng thái Đã hủy để giữ lịch sử đơn hàng và báo cáo. Bạn có chắc chắn muốn tiếp tục?`
+            : `Mã "${deleteTarget?.code}" chưa phát sinh giao dịch. Bạn có chắc chắn muốn xóa mã này khỏi hệ thống?`
+        }
+        confirmLabel={
+          Number(deleteTarget?.usage_count || 0) > 0 ? "Chuyển Đã hủy" : "Xóa mã"
+        }
+        confirmClassName="btn-danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />
