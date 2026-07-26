@@ -10,7 +10,7 @@ import {
 const isMissing = (value) => value === undefined || value === null || value === "";
 
 const buildComboFilter = (query = {}) => {
-  const { q, search, status } = query;
+  const { q, search, name, status } = query;
   const filter = {
     deleted_at: null,
   };
@@ -24,15 +24,22 @@ const buildComboFilter = (query = {}) => {
     }
   }
 
-  const keyword = (q ?? search ?? "").trim();
+  const keyword = String(q ?? search ?? name ?? "").trim();
   if (keyword) {
-    filter.$or = [
-      { name: { $regex: keyword, $options: "i" } },
-      { description: { $regex: keyword, $options: "i" } },
-    ];
+    filter.name = { $regex: keyword, $options: "i" };
   }
 
   return { filter };
+};
+
+const buildComboSort = (query = {}) => {
+  const sort = String(query.sort ?? "newest").trim().toLowerCase();
+
+  if (sort === "oldest") {
+    return { created_at: 1 };
+  }
+
+  return { created_at: -1 };
 };
 
 const buildPagination = ({ page, limit }) => {
@@ -116,15 +123,16 @@ const ensureComboNameIsUnique = async (name, excludeId = null) => {
 
 export const getAllCombosService = async (query = {}) => {
   const { filter } = buildComboFilter(query);
+  const sort = buildComboSort(query);
   const shouldPaginate = query.page !== undefined || query.limit !== undefined;
 
   if (!shouldPaginate) {
-    return Combo.find(filter).sort({ created_at: -1 });
+    return Combo.find(filter).sort(sort);
   }
 
   const { currentPage, pageSize, skip } = buildPagination(query);
   const [combos, totalItems] = await Promise.all([
-    Combo.find(filter).sort({ created_at: -1 }).skip(skip).limit(pageSize),
+    Combo.find(filter).sort(sort).skip(skip).limit(pageSize),
     Combo.countDocuments(filter),
   ]);
 

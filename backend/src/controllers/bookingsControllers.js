@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
+import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
@@ -46,10 +47,110 @@ const calculateBookingTotalPrice = (seats = []) => {
   }, 0);
 };
 
+const normalizeComboItems = (items = []) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const normalizedMap = new Map();
+
+  for (const item of items) {
+    const comboId = String(item?.combo_id ?? item?._id ?? "").trim();
+    const quantity = Number(item?.quantity ?? 0);
+
+    if (!comboId) {
+      const error = new Error("combo_id la bat buoc");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(comboId)) {
+      const error = new Error("combo_id khong hop le");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      const error = new Error("quantity combo khong hop le");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    normalizedMap.set(comboId, (normalizedMap.get(comboId) ?? 0) + quantity);
+  }
+
+  return Array.from(normalizedMap.entries()).map(([combo_id, quantity]) => ({
+    combo_id,
+    quantity,
+  }));
+};
+
+const reserveComboStock = async ({ combos, session }) => {
+  if (!combos.length) {
+    return [];
+  }
+
+  const comboIds = combos.map((item) => item.combo_id);
+  const comboDocs = await Combo.find({
+    _id: { $in: comboIds },
+    deleted_at: null,
+    status: true,
+  }).session(session);
+
+  if (comboDocs.length !== comboIds.length) {
+    const error = new Error("Khong tim thay combo");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const comboById = new Map(comboDocs.map((combo) => [String(combo._id), combo]));
+
+  for (const item of combos) {
+    const combo = comboById.get(String(item.combo_id));
+
+    if (!combo) {
+      const error = new Error("Khong tim thay combo");
+      error.statusCode = 404;
+      throw error;
+    }
+
+    if (Number(combo.stock ?? 0) < item.quantity) {
+      const error = new Error(`Combo ${combo.name} khong du so luong`);
+      error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  const updateResults = await Promise.all(
+    combos.map((item) =>
+      Combo.updateOne(
+        {
+          _id: item.combo_id,
+          deleted_at: null,
+          status: true,
+          stock: { $gte: item.quantity },
+        },
+        { $inc: { stock: -item.quantity } },
+        { session },
+      ),
+    ),
+  );
+
+  const failedIndex = updateResults.findIndex((result) => result.modifiedCount !== 1);
+  if (failedIndex !== -1) {
+    const error = new Error("Khong the cap nhat ton kho combo");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  return comboDocs;
+};
+
 export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
   try {
     const { showtime_id, showtime_seat_ids } = req.body;
+    const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
     }
@@ -77,6 +178,8 @@ export const createBooking = async (req, res) => {
 
       const types = new Set(seats.map(seatTypeName));
       if (types.size > 1) throw Object.assign(new Error("Không thể đặt nhiều loại ghế cùng lúc"), { statusCode: 400 });
+
+      await reserveComboStock({ combos, session });
 
       const updateResult = await ShowtimeSeat.updateMany(
         { _id: { $in: seats.map((seat) => seat._id) }, status: "held", held_by: req.user.id },
