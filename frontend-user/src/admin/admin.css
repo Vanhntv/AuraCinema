@@ -3703,6 +3703,46 @@
   min-width: 1180px;
 }
 
+.voucher-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.voucher-mini-list {
+  display: grid;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+
+.voucher-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.voucher-mini-row:last-child {
+  border-bottom: 0;
+}
+
+.voucher-mini-row strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.voucher-mini-empty {
+  padding: 22px 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
 .voucher-code {
   display: inline-flex;
   max-width: 120px;
@@ -3840,6 +3880,10 @@
 
 @media (max-width: 768px) {
   .voucher-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .voucher-analytics-grid {
     grid-template-columns: 1fr;
   }
 }

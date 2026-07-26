@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   HiOutlinePlus,
   HiOutlineRefresh,
@@ -12,9 +12,41 @@ import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, deleteVoucher, getVoucherById, getVouchers, getVoucherUsageHistory, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
+import { createVoucher, deleteVoucher, getVoucherById, getVouchers, getVoucherStats, getVoucherUsageHistory, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
 
 const PAGE_SIZE = 10;
+
+const emptyStats = {
+  active_voucher_count: 0,
+  total_usage: 0,
+  total_discount_amount: 0,
+  revenue_from_voucher_orders: 0,
+  usage_rate: 0,
+  most_used_voucher: null,
+  expiring_soon: [],
+  low_remaining: [],
+  revenue_by_voucher: [],
+};
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+const formatPercent = (value) => `${Math.round(Number(value || 0) * 100)}%`;
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
 
 const VouchersPage = () => {
   const [vouchers, setVouchers] = useState([]);
@@ -37,15 +69,8 @@ const VouchersPage = () => {
   const [editVoucher, setEditVoucher] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-
-  const activeInPage = useMemo(
-    () => vouchers.filter((voucher) => voucher.computed_status === "active").length,
-    [vouchers],
-  );
-  const usedInPage = useMemo(
-    () => vouchers.reduce((total, voucher) => total + Number(voucher.usage_count || 0), 0),
-    [vouchers],
-  );
+  const [stats, setStats] = useState(emptyStats);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   const addToast = useCallback((type, message) => {
     const id = Date.now() + Math.random();
@@ -84,9 +109,22 @@ const VouchersPage = () => {
     [addToast, discountTypeFilter, scopeFilter, searchQuery, sortBy, sortOrder, statusFilter],
   );
 
+  const fetchStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      const response = await getVoucherStats();
+      setStats(response.data || emptyStats);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tải thống kê mã giảm giá");
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [addToast]);
+
   useEffect(() => {
     fetchVouchers(1);
-  }, [fetchVouchers]);
+    fetchStats();
+  }, [fetchStats, fetchVouchers]);
 
   const handleSearch = (event) => {
     const value = event.target.value;
@@ -146,6 +184,7 @@ const VouchersPage = () => {
       addToast("success", `Đã tạo mã giảm giá "${payload.code}"`);
       setIsCreateModalOpen(false);
       fetchVouchers(1);
+      fetchStats();
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể tạo mã giảm giá");
     } finally {
@@ -162,6 +201,7 @@ const VouchersPage = () => {
       addToast("success", `Đã cập nhật mã giảm giá "${editVoucher.code}"`);
       setEditVoucher(null);
       fetchVouchers(currentPage);
+      fetchStats();
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật mã giảm giá");
     } finally {
@@ -181,6 +221,7 @@ const VouchersPage = () => {
       );
       setStatusTarget(null);
       fetchVouchers(currentPage);
+      fetchStats();
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái mã giảm giá");
     } finally {
@@ -197,6 +238,7 @@ const VouchersPage = () => {
       addToast("success", response.message || `Đã xóa mã "${deleteTarget.code}"`);
       setDeleteTarget(null);
       fetchVouchers(currentPage);
+      fetchStats();
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể xóa mã giảm giá");
     } finally {
@@ -216,7 +258,10 @@ const VouchersPage = () => {
             <HiOutlinePlus />
             Thêm mã
           </button>
-          <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage)}>
+          <button className="btn btn-secondary" onClick={() => {
+            fetchVouchers(currentPage);
+            fetchStats();
+          }}>
             <HiOutlineRefresh />
             Làm mới
           </button>
@@ -238,8 +283,8 @@ const VouchersPage = () => {
             <HiOutlineTicket />
           </div>
           <div>
-            <div className="stat-card-value">{activeInPage}</div>
-            <div className="stat-card-label">Đang hoạt động trong trang</div>
+            <div className="stat-card-value">{statsLoading ? "..." : stats.active_voucher_count}</div>
+            <div className="stat-card-label">Mã đang hoạt động</div>
           </div>
         </div>
         <div className="stat-card">
@@ -247,9 +292,141 @@ const VouchersPage = () => {
             <HiOutlineTrendingUp />
           </div>
           <div>
-            <div className="stat-card-value">{usedInPage}</div>
-            <div className="stat-card-label">Lượt dùng trong trang</div>
+            <div className="stat-card-value">{statsLoading ? "..." : Number(stats.total_usage || 0).toLocaleString("vi-VN")}</div>
+            <div className="stat-card-label">Tổng lượt sử dụng</div>
           </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon blue">
+            <HiOutlineTag />
+          </div>
+          <div>
+            <div className="stat-card-value">{statsLoading ? "..." : formatCurrency(stats.total_discount_amount)}</div>
+            <div className="stat-card-label">Tổng tiền đã giảm</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon green">
+            <HiOutlineTrendingUp />
+          </div>
+          <div>
+            <div className="stat-card-value">{statsLoading ? "..." : formatCurrency(stats.revenue_from_voucher_orders)}</div>
+            <div className="stat-card-label">Doanh thu đơn có mã</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon purple">
+            <HiOutlineTicket />
+          </div>
+          <div>
+            <div className="stat-card-value">{statsLoading ? "..." : stats.most_used_voucher?.code || "-"}</div>
+            <div className="stat-card-label">Mã dùng nhiều nhất</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon orange">
+            <HiOutlineRefresh />
+          </div>
+          <div>
+            <div className="stat-card-value">{statsLoading ? "..." : Number(stats.low_remaining?.length || 0)}</div>
+            <div className="stat-card-label">Mã sắp hết lượt</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon blue">
+            <HiOutlineTrendingUp />
+          </div>
+          <div>
+            <div className="stat-card-value">{statsLoading ? "..." : formatPercent(stats.usage_rate)}</div>
+            <div className="stat-card-label">Tỷ lệ sử dụng mã</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="voucher-analytics-grid">
+        <div className="table-container">
+          <div className="table-toolbar">
+            <div className="table-toolbar-left">
+              <span className="table-toolbar-title">Mã sắp hết hạn</span>
+              <span className="table-toolbar-count">7 ngày tới</span>
+            </div>
+          </div>
+          <div className="voucher-mini-list">
+            {(stats.expiring_soon || []).length === 0 ? (
+              <div className="voucher-mini-empty">Không có mã sắp hết hạn</div>
+            ) : (
+              stats.expiring_soon.map((item) => (
+                <div className="voucher-mini-row" key={item.id}>
+                  <span className="voucher-code">{item.code}</span>
+                  <strong>{formatDate(item.end_date)}</strong>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="table-container">
+          <div className="table-toolbar">
+            <div className="table-toolbar-left">
+              <span className="table-toolbar-title">Mã sắp hết lượt</span>
+              <span className="table-toolbar-count">Còn ít lượt</span>
+            </div>
+          </div>
+          <div className="voucher-mini-list">
+            {(stats.low_remaining || []).length === 0 ? (
+              <div className="voucher-mini-empty">Không có mã sắp hết lượt</div>
+            ) : (
+              stats.low_remaining.map((item) => (
+                <div className="voucher-mini-row" key={item.id}>
+                  <span className="voucher-code">{item.code}</span>
+                  <strong>{Number(item.remaining_quantity || 0)} lượt</strong>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="table-container">
+        <div className="table-toolbar">
+          <div className="table-toolbar-left">
+            <span className="table-toolbar-title">Doanh thu theo từng mã</span>
+            <span className="table-toolbar-count">{Number(stats.revenue_by_voucher?.length || 0)} mã có sử dụng</span>
+          </div>
+        </div>
+        <div className="table-wrapper vouchers-table-wrapper">
+          <table className="data-table vouchers-table">
+            <thead>
+              <tr>
+                <th>Mã giảm giá</th>
+                <th>Tên chương trình</th>
+                <th>Lượt dùng</th>
+                <th>Tổng tiền đã giảm</th>
+                <th>Doanh thu sau giảm</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(stats.revenue_by_voucher || []).length === 0 ? (
+                <tr>
+                  <td colSpan="5">
+                    <div className="table-empty">
+                      <div className="table-empty-text">Chưa có doanh thu từ mã giảm giá</div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                stats.revenue_by_voucher.map((item) => (
+                  <tr key={item.voucher_id || item.code}>
+                    <td><span className="voucher-code">{item.code}</span></td>
+                    <td>{item.name || item.code}</td>
+                    <td>{Number(item.usage_count || 0).toLocaleString("vi-VN")}</td>
+                    <td className="voucher-discount-value">-{formatCurrency(item.total_discount_amount)}</td>
+                    <td>{formatCurrency(item.total_revenue)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

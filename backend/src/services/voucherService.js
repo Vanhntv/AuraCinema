@@ -608,6 +608,140 @@ export const listVoucherUsageHistoryService = async (id, query = {}) => {
   };
 };
 
+export const getVoucherStatsService = async () => {
+  const now = new Date();
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const [activeCount, usageSummary, revenueByVoucher, expiringSoon, lowRemaining] = await Promise.all([
+    Voucher.countDocuments({
+      deleted_at: null,
+      status: true,
+      start_date: { $lte: now },
+      end_date: { $gte: now },
+      quantity: { $gt: 0 },
+    }),
+    VoucherUsage.aggregate([
+      { $match: { status: "used", payment_status: "paid" } },
+      {
+        $group: {
+          _id: null,
+          total_usage: { $sum: 1 },
+          total_discount_amount: { $sum: "$discount_amount" },
+          total_revenue: { $sum: "$final_price" },
+        },
+      },
+    ]),
+    VoucherUsage.aggregate([
+      { $match: { status: "used", payment_status: "paid" } },
+      {
+        $group: {
+          _id: "$voucher_id",
+          code: { $first: "$code" },
+          usage_count: { $sum: 1 },
+          total_discount_amount: { $sum: "$discount_amount" },
+          total_revenue: { $sum: "$final_price" },
+        },
+      },
+      { $sort: { usage_count: -1, total_revenue: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: "vouchers",
+          localField: "_id",
+          foreignField: "_id",
+          as: "voucher",
+        },
+      },
+      { $unwind: { path: "$voucher", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          voucher_id: "$_id",
+          code: 1,
+          name: "$voucher.name",
+          usage_count: 1,
+          total_discount_amount: 1,
+          total_revenue: 1,
+        },
+      },
+    ]),
+    Voucher.find({
+      deleted_at: null,
+      status: true,
+      quantity: { $gt: 0 },
+      end_date: { $gte: now, $lte: sevenDaysLater },
+    })
+      .sort({ end_date: 1 })
+      .limit(5)
+      .select("code name end_date quantity usage_limit usage_count"),
+    Voucher.find({
+      deleted_at: null,
+      status: true,
+      quantity: { $gt: 0 },
+    })
+      .sort({ quantity: 1, end_date: 1 })
+      .limit(50)
+      .select("code name end_date quantity usage_limit usage_count"),
+  ]);
+
+  const vouchersForRate = await Voucher.find({ deleted_at: null }).select("usage_limit quantity usage_count");
+  const totalUsageLimit = vouchersForRate.reduce(
+    (total, voucher) => total + Number(voucher.usage_limit || 0),
+    0,
+  );
+  const totalVoucherUsage = vouchersForRate.reduce(
+    (total, voucher) => total + Number(voucher.usage_count || 0),
+    0,
+  );
+  const summary = usageSummary[0] || {
+    total_usage: 0,
+    total_discount_amount: 0,
+    total_revenue: 0,
+  };
+
+  const topVoucher = revenueByVoucher[0] || null;
+  const lowRemainingList = lowRemaining
+    .map((voucher) => {
+      const usageLimit = Number(voucher.usage_limit || 0);
+      const usageCount = Number(voucher.usage_count || 0);
+      const remaining = Number(voucher.quantity || 0);
+      const usageRate = usageLimit > 0 ? usageCount / usageLimit : 0;
+
+      return {
+        id: voucher._id,
+        code: voucher.code,
+        name: voucher.name || voucher.code,
+        end_date: voucher.end_date,
+        remaining_quantity: remaining,
+        usage_limit: usageLimit,
+        usage_count: usageCount,
+        usage_rate: usageRate,
+      };
+    })
+    .filter((voucher) => voucher.remaining_quantity <= 5 || voucher.usage_rate >= 0.8)
+    .slice(0, 5);
+
+  return {
+    active_voucher_count: activeCount,
+    total_usage: summary.total_usage,
+    total_discount_amount: summary.total_discount_amount,
+    revenue_from_voucher_orders: summary.total_revenue,
+    usage_rate: totalUsageLimit > 0 ? totalVoucherUsage / totalUsageLimit : 0,
+    most_used_voucher: topVoucher,
+    expiring_soon: expiringSoon.map((voucher) => ({
+      id: voucher._id,
+      code: voucher.code,
+      name: voucher.name || voucher.code,
+      end_date: voucher.end_date,
+      remaining_quantity: voucher.quantity,
+      usage_limit: voucher.usage_limit,
+      usage_count: voucher.usage_count,
+    })),
+    low_remaining: lowRemainingList,
+    revenue_by_voucher: revenueByVoucher,
+  };
+};
+
 export const createVoucherService = async (payload, user = null) => {
   const normalizedPayload = prepareCreatePayload(payload);
   const validationError = validateVoucherPayload(normalizedPayload);
