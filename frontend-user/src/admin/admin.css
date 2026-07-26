@@ -3905,12 +3905,45 @@
   vertical-align: middle;
 }
 
+.gift-detail-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.gift-detail-image {
+  align-items: center;
+  aspect-ratio: 4 / 3;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+.gift-detail-image img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.gift-detail-image svg {
+  font-size: 42px;
+}
+
 @media (max-width: 768px) {
   .voucher-detail-grid {
     grid-template-columns: 1fr;
   }
 
   .voucher-analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gift-detail-layout {
     grid-template-columns: 1fr;
   }
 }

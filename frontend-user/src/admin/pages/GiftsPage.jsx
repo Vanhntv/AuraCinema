@@ -8,9 +8,10 @@ import {
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineTrash,
+  HiOutlineX,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
-import { getGifts } from "../services/giftService";
+import { getGiftById, getGifts } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -50,6 +51,19 @@ const formatDate = (value) => {
   });
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "Chưa cấu hình";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Chưa cấu hình";
+  return date.toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+};
+
 const formatGiftValue = (gift) => {
   if (gift.type === "point") {
     return `${Number(gift.value || 0).toLocaleString("vi-VN")} điểm`;
@@ -67,6 +81,126 @@ const getGiftImage = (gift) => {
   return "";
 };
 
+const formatCondition = (condition) => {
+  if (!condition || (typeof condition === "object" && Object.keys(condition).length === 0)) {
+    return "Chưa cấu hình";
+  }
+
+  if (typeof condition === "string") {
+    return condition;
+  }
+
+  const labels = {
+    min_order: "Đơn tối thiểu",
+    member_tier: "Hạng thành viên",
+    birthday: "Sinh nhật",
+    campaign: "Chương trình",
+    combo_required: "Yêu cầu combo",
+    first_order: "Đơn đầu tiên",
+    point_required: "Điểm yêu cầu",
+  };
+
+  return Object.entries(condition)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${labels[key] || key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+    .join(" | ") || "Chưa cấu hình";
+};
+
+const DetailField = ({ label, value }) => (
+  <div className="voucher-detail-field">
+    <span>{label}</span>
+    <strong>{value || "Chưa cấu hình"}</strong>
+  </div>
+);
+
+const GiftDetailModal = ({ gift, loading, onClose }) => {
+  if (!gift && !loading) return null;
+
+  const imageUrl = gift ? getGiftImage(gift) : "";
+  const statusClass = statusClasses[gift?.computed_status] || "status-coming-soon";
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Chi tiết quà tặng</h2>
+          <button type="button" className="modal-close" onClick={onClose}>
+            <HiOutlineX />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {loading ? (
+            <div className="loading-spinner">
+              <div className="spinner"></div>
+            </div>
+          ) : (
+            <>
+              <section className="voucher-detail-section">
+                <div className="voucher-detail-heading">
+                  <span>Thông tin cơ bản</span>
+                  <span className={`status-badge ${statusClass}`}>{gift.computed_status_label}</span>
+                </div>
+                <div className="gift-detail-layout">
+                  <div className="gift-detail-image">
+                    {imageUrl ? <img src={imageUrl} alt={gift.name} /> : <HiOutlineGift />}
+                  </div>
+                  <div className="voucher-detail-grid">
+                    <DetailField label="Tên quà" value={gift.name} />
+                    <DetailField label="Mã quà" value={gift.code} />
+                    <DetailField label="Mô tả" value={gift.description} />
+                    <DetailField label="Loại" value={gift.type_label || typeLabels[gift.type] || gift.type} />
+                    <DetailField label="Giá trị" value={formatGiftValue(gift)} />
+                    <DetailField label="Trạng thái" value={gift.computed_status_label} />
+                  </div>
+                </div>
+              </section>
+
+              <section className="voucher-detail-section">
+                <div className="voucher-detail-heading">
+                  <span>Điều kiện nhận</span>
+                </div>
+                <div className="voucher-detail-grid">
+                  <DetailField label="Điều kiện" value={formatCondition(gift.condition)} />
+                  <DetailField label="Thời gian áp dụng" value={`${formatDateTime(gift.start_date)} - ${formatDateTime(gift.end_date)}`} />
+                </div>
+              </section>
+
+              <section className="voucher-detail-section">
+                <div className="voucher-detail-heading">
+                  <span>Số lượng</span>
+                </div>
+                <div className="voucher-detail-grid">
+                  <DetailField label="Tổng số lượng" value={Number(gift.quantity || 0).toLocaleString("vi-VN")} />
+                  <DetailField label="Đã phát" value={Number(gift.issued_quantity || 0).toLocaleString("vi-VN")} />
+                  <DetailField label="Còn lại" value={Number(gift.remaining_quantity || 0).toLocaleString("vi-VN")} />
+                </div>
+              </section>
+
+              <section className="voucher-detail-section">
+                <div className="voucher-detail-heading">
+                  <span>Thông tin hệ thống</span>
+                </div>
+                <div className="voucher-detail-grid">
+                  <DetailField label="Người tạo" value={gift.created_by?.full_name || gift.created_by?.email || gift.created_by} />
+                  <DetailField label="Ngày tạo" value={formatDateTime(gift.created_at)} />
+                  <DetailField label="Ngày cập nhật" value={formatDateTime(gift.updated_at)} />
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const GiftsPage = () => {
   const [gifts, setGifts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -80,6 +214,8 @@ const GiftsPage = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [detailGift, setDetailGift] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const addToast = useCallback((type, message) => {
     const id = Date.now() + Math.random();
@@ -139,6 +275,20 @@ const GiftsPage = () => {
     setSortBy(nextSortBy);
     setSortOrder(nextSortOrder);
     fetchGifts(1, { sort_by: nextSortBy, sort_order: nextSortOrder });
+  };
+
+  const handleViewDetail = async (gift) => {
+    try {
+      setDetailGift(gift);
+      setDetailLoading(true);
+      const response = await getGiftById(gift._id);
+      setDetailGift(response.data);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tải chi tiết quà tặng");
+      setDetailGift(null);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   return (
@@ -277,7 +427,7 @@ const GiftsPage = () => {
                           </td>
                           <td>
                             <div className="table-actions" style={{ justifyContent: "center" }}>
-                              <button className="btn btn-icon btn-ghost" title="Xem chi tiết" disabled>
+                              <button className="btn btn-icon btn-ghost" title="Xem chi tiết" onClick={() => handleViewDetail(gift)}>
                                 <HiOutlineEye />
                               </button>
                               <button className="btn btn-icon btn-ghost" title="Chỉnh sửa" disabled>
@@ -324,6 +474,15 @@ const GiftsPage = () => {
           />
         ))}
       </div>
+
+      <GiftDetailModal
+        gift={detailGift}
+        loading={detailLoading}
+        onClose={() => {
+          setDetailGift(null);
+          setDetailLoading(false);
+        }}
+      />
     </>
   );
 };

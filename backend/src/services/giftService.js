@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Gift from "../models/Gift.js";
 
 const isMissing = (value) => value === undefined || value === null || value === "";
@@ -170,4 +171,18 @@ export const listGifts = async (query = {}) => {
       hasPrevPage: currentPage > 1,
     },
   };
+};
+
+export const getGiftByIdService = async (id) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error("Quà tặng không hợp lệ.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const gift = await Gift.findOne({ _id: id, deleted_at: null })
+    .populate("created_by", "full_name email")
+    .populate("updated_by", "full_name email");
+
+  return gift ? normalizeGiftForResponse(gift) : null;
 };
