@@ -1,7 +1,7 @@
 export const aboutContent = {
   page: {
-    eyebrow: 'Giới thiệu trung tâm',
-    title: 'Trung tâm Chiếu phim Quốc gia',
+    eyebrow: 'Giới thiệu rạp phim',
+    title: 'Rạp chiếu phim AuraCinema',
     description:
       'Khám phá AuraCinema, tìm hiểu về không gian rạp, dịch vụ nổi bật và hệ thống phòng chiếu hiện đại.',
   },
@@ -37,7 +37,7 @@ export const aboutContent = {
         subtitle: 'Cơ quan quản lý trực tiếp',
         children: [
           {
-            title: 'Trung tâm Chiếu phim Quốc gia',
+            title: 'Rạp chiếu phim AuraCinema',
             subtitle: 'Đơn vị vận hành NCC',
             children: [
               { title: 'Khối quản lý', subtitle: 'Kế hoạch, nhân sự, tài chính' },
