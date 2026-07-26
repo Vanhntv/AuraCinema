@@ -1,8 +1,8 @@
 {
   "page": {
     "eyebrow": "Bảng giá vé",
-    "title": "Giá vé 2D, 3D, ưu đãi và điều khoản sử dụng",
-    "description": "Thông tin dưới đây mang tính mẫu cho giao diện AuraCinema, được tổ chức theo dữ liệu để dễ cập nhật, bảo trì và tái sử dụng trên nhiều thiết bị."
+    "title": "Giá vé 2D, 3D, ưu đãi",
+    "description": "Bảng giá vé được áp dụng theo từng loại phim, định dạng chiếu và đối tượng khách hàng. Vui lòng tham khảo thông tin bên dưới để lựa chọn mức giá phù hợp."
   },
   "sections": {
     "surcharges": "Chính sách phụ thu",

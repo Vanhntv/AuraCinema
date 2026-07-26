@@ -1,20 +1,20 @@
-import Logo from './Logo'
+import { Link } from "react-router-dom";
+import Logo from "./Logo";
 
 const quickLinks = [
-  'Lịch chiếu',
-  'Tin tức',
-  'Khuyến mãi',
-  'Giá vé',
-  'Liên hoan phim',
-  'Giới thiệu',
-]
+  { label: "Lịch chiếu", to: "/lich-chieu" },
+  { label: "Tin tức", to: "/tin-tuc" },
+  { label: "Khuyến mãi", to: "/khuyen-mai" },
+  { label: "Giá vé", to: "/gia-ve" },
+  { label: "Giới thiệu", to: "/gioi-thieu" },
+];
 
 const supportLinks = [
-  'Điều khoản sử dụng',
-  'Chính sách bảo mật',
-  'Hướng dẫn đặt vé',
-  'Câu hỏi thường gặp',
-]
+  { label: "Điều khoản sử dụng", to: "/dieu-khoan-su-dung" },
+  { label: "Chính sách bảo mật", to: "/chinh-sach-bao-mat" },
+  { label: "Hướng dẫn đặt vé", to: "/huong-dan-dat-ve" },
+  { label: "Câu hỏi thường gặp", to: "/cau-hoi-thuong-gap" },
+];
 
 function Footer() {
   return (
@@ -28,18 +28,6 @@ function Footer() {
             trực tuyến và không gian xem phim dành cho mọi khán giả.
           </p>
 
-          <div className="mt-6 flex gap-3">
-            {['F', 'Y', 'T'].map((item) => (
-              <a
-                className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/[0.04] font-bold text-white transition-colors hover:border-[#ff6070] hover:text-[#ff6070]"
-                href="/"
-                key={item}
-                aria-label={`Mạng xã hội ${item}`}
-              >
-                {item}
-              </a>
-            ))}
-          </div>
         </div>
 
         <div>
@@ -48,13 +36,13 @@ function Footer() {
           </h2>
           <ul className="mt-5 grid gap-3">
             {quickLinks.map((item) => (
-              <li key={item}>
-                <a
+              <li key={item.to}>
+                <Link
                   className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
-                  href="/"
+                  to={item.to}
                 >
-                  {item}
-                </a>
+                  {item.label}
+                </Link>
               </li>
             ))}
           </ul>
@@ -66,13 +54,13 @@ function Footer() {
           </h2>
           <ul className="mt-5 grid gap-3">
             {supportLinks.map((item) => (
-              <li key={item}>
-                <a
+              <li key={item.to}>
+                <Link
                   className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
-                  href="/"
+                  to={item.to}
                 >
-                  {item}
-                </a>
+                  {item.label}
+                </Link>
               </li>
             ))}
           </ul>
@@ -98,7 +86,7 @@ function Footer() {
         </div>
       </div>
     </footer>
-  )
+  );
 }
 
-export default Footer
+export default Footer;

@@ -180,9 +180,6 @@ function TicketPricePage() {
                 </article>
               ))}
             </div>
-            <div className="mt-6 rounded-2xl border border-[#ff6070]/25 bg-[#ff6070]/10 px-4 py-3 text-sm font-bold uppercase tracking-[0.14em] text-[#ffd2d6]">
-              {sections.terms}
-            </div>
           </section>
         </div>
       </div>
