@@ -8,12 +8,14 @@ import {
   HiOutlineTrendingUp,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
+import ConcessionContentModal from "../components/concessions/ConcessionContentModal";
 import ConcessionModal from "../components/concessions/ConcessionModal";
 import ConcessionPriceModal from "../components/concessions/ConcessionPriceModal";
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
   createConcession,
   getConcessions,
+  updateConcessionContent,
   updateConcessionPrice,
   updateConcessionStatus,
 } from "../services/concessionService";
@@ -33,6 +35,7 @@ const ConcessionsPage = () => {
   const [toasts, setToasts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [priceTarget, setPriceTarget] = useState(null);
+  const [contentTarget, setContentTarget] = useState(null);
 
   const activeCount = useMemo(
     () => items.filter((item) => item.status).length,
@@ -159,6 +162,23 @@ const ConcessionsPage = () => {
     }
   };
 
+  const handleUpdateContent = async (item, formData) => {
+    try {
+      setSubmitting(true);
+      await updateConcessionContent(item._id, formData);
+      addToast("success", `Đã cập nhật hình ảnh và mô tả cho "${item.name}"`);
+      setContentTarget(null);
+      fetchConcessions(currentPage);
+    } catch (error) {
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể cập nhật hình ảnh và mô tả",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -269,6 +289,7 @@ const ConcessionsPage = () => {
               rowStart={(currentPage - 1) * PAGE_SIZE}
               onToggleStatus={handleToggleStatus}
               onEditPrice={setPriceTarget}
+              onEditContent={setContentTarget}
             />
 
             <div className="pagination">
@@ -305,6 +326,13 @@ const ConcessionsPage = () => {
         item={priceTarget}
         onClose={() => setPriceTarget(null)}
         onSubmit={handleUpdatePrice}
+        isLoading={submitting}
+      />
+
+      <ConcessionContentModal
+        item={contentTarget}
+        onClose={() => setContentTarget(null)}
+        onSubmit={handleUpdateContent}
         isLoading={submitting}
       />
 

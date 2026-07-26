@@ -25,3 +25,12 @@ export const updateConcessionPrice = async (id, price) => {
   const res = await axiosClient.put(`${API_URL}/${id}`, { price });
   return res.data;
 };
+
+export const updateConcessionContent = async (id, data) => {
+  const res = await axiosClient.put(`${API_URL}/${id}`, data, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+  return res.data;
+};

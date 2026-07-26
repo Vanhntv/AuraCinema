@@ -37,7 +37,13 @@ const resolveImageUrl = (image) => {
   return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
 };
 
-const ConcessionTable = ({ items, rowStart = 0, onToggleStatus, onEditPrice }) => {
+const ConcessionTable = ({
+  items,
+  rowStart = 0,
+  onToggleStatus,
+  onEditPrice,
+  onEditContent,
+}) => {
   return (
     <div className="table-wrapper concession-table-wrapper">
       <table className="data-table concession-table">
@@ -118,6 +124,14 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus, onEditPrice }) =
                       title="Cập nhật giá bán"
                     >
                       <HiOutlinePencil />
+                    </button>
+                    <button
+                      className="btn btn-icon btn-ghost"
+                      style={{ color: "var(--color-accent-light)" }}
+                      onClick={() => onEditContent(item)}
+                      title="Cập nhật hình ảnh và mô tả"
+                    >
+                      <HiOutlinePhotograph />
                     </button>
                   </div>
                 </td>

@@ -2613,6 +2613,44 @@
   font-size: 13px;
 }
 
+.content-update-heading {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 18px;
+}
+
+.content-update-heading span {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.content-update-heading strong {
+  color: var(--color-text-primary);
+  font-size: 16px;
+}
+
+.content-image-preview {
+  width: 220px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 34px;
+}
+
+.content-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .cinema-info-line {
   display: flex;
   align-items: center;
