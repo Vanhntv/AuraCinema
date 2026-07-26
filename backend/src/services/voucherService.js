@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
+import Booking from "../models/Booking.js";
 import Voucher from "../models/Voucher.js";
+import User from "../models/User.js";
 import {
   normalizeVoucherPayload,
   parseVoucherApplyScope,
@@ -61,12 +63,77 @@ const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
     discountAmount = discountValue;
   }
 
+  const maxDiscountAmount = Number(voucher.max_discount_amount ?? 0);
+  if (maxDiscountAmount > 0) {
+    discountAmount = Math.min(discountAmount, maxDiscountAmount);
+  }
+
   discountAmount = Math.min(Math.max(discountAmount, 0), orderAmount);
 
   return {
     discount_amount: discountAmount,
     final_amount: Math.max(orderAmount - discountAmount, 0),
   };
+};
+
+const normalizeVoucherContext = (payload = {}) => ({
+  orderAmount: parseVoucherAmount(
+    payload.order_amount ?? payload.amount ?? payload.subtotal ?? payload.total_amount
+  ),
+  ticketAmount: parseVoucherAmount(payload.ticket_amount ?? payload.seat_total ?? payload.ticket_total),
+  concessionAmount: parseVoucherAmount(payload.concession_amount ?? payload.combo_total ?? payload.concession_total),
+  movieId: String(payload.movie_id ?? "").trim(),
+  userId: payload.user_id ? String(payload.user_id).trim() : "",
+});
+
+const getEligibleAmount = (voucher, context) => {
+  if (voucher.apply_scope === "ticket" || voucher.apply_scope === "movie") {
+    return context.ticketAmount ?? 0;
+  }
+
+  if (voucher.apply_scope === "concession") {
+    return context.concessionAmount ?? 0;
+  }
+
+  return context.orderAmount;
+};
+
+const checkVoucherScope = (voucher, context, user) => {
+  if (voucher.apply_scope === "ticket" && Number(context.ticketAmount || 0) <= 0) {
+    return "Ma chi ap dung cho ve xem phim";
+  }
+
+  if (voucher.apply_scope === "concession" && Number(context.concessionAmount || 0) <= 0) {
+    return "Ma chi ap dung cho bap nuoc";
+  }
+
+  if (voucher.apply_scope === "movie") {
+    if (Number(context.ticketAmount || 0) <= 0) return "Ma chi ap dung cho ve xem phim";
+    const movieIds = (voucher.applicable_movie_ids || []).map((id) => String(id));
+    if (movieIds.length > 0 && !movieIds.includes(String(context.movieId))) {
+      return "Ma khong ap dung cho phim nay";
+    }
+  }
+
+  if (voucher.apply_scope === "member") {
+    const tiers = (voucher.applicable_member_tiers || []).map((tier) => String(tier).toLowerCase());
+    const memberTier = String(user?.member_tier || "").toLowerCase();
+    if (tiers.length > 0 && !tiers.includes(memberTier)) {
+      return "Hang thanh vien khong du dieu kien ap dung ma";
+    }
+  }
+
+  return null;
+};
+
+const countVoucherUsageByUser = async ({ voucherId, userId, session = null }) => {
+  if (!voucherId || !userId) return 0;
+
+  return Booking.countDocuments({
+    user_id: userId,
+    "voucher.voucher_id": voucherId,
+    status: { $ne: "cancelled" },
+  }).session(session);
 };
 
 const deriveVoucherStatus = (data) => {
@@ -351,11 +418,13 @@ const prepareUpdatePayload = (payload) => {
   return updatePayload;
 };
 
-const buildVoucherVerificationResponse = (voucher, orderAmount = null) => {
+const buildVoucherVerificationResponse = (voucher, context = {}) => {
+  const eligibleAmount = getEligibleAmount(voucher, context);
   const { discount_amount, final_amount } = calculateVoucherDiscount({
     voucher,
-    orderAmount,
+    orderAmount: eligibleAmount,
   });
+  const orderAmount = context.orderAmount ?? null;
 
   return {
     valid: true,
@@ -365,15 +434,18 @@ const buildVoucherVerificationResponse = (voucher, orderAmount = null) => {
       code: voucher.code,
       discount_type: voucher.discount_type,
       discount_value: voucher.discount_value,
+      max_discount_amount: voucher.max_discount_amount,
       min_order: voucher.min_order,
       quantity: voucher.quantity,
+      apply_scope: voucher.apply_scope,
       start_date: voucher.start_date,
       end_date: voucher.end_date,
       status: voucher.status,
     },
     order_amount: orderAmount,
+    eligible_amount: eligibleAmount,
     discount_amount,
-    final_amount,
+    final_amount: orderAmount === null ? final_amount : Math.max(orderAmount - Number(discount_amount || 0), 0),
   };
 };
 
@@ -678,9 +750,7 @@ export const consumeVoucherQuantityService = async ({
 
 export const verifyVoucherService = async (payload = {}) => {
   const code = normalizeVoucherCode(payload.code ?? payload.voucher_code);
-  const orderAmount = parseVoucherAmount(
-    payload.order_amount ?? payload.amount ?? payload.subtotal ?? payload.total_amount
-  );
+  const context = normalizeVoucherContext(payload);
 
   if (isMissing(code)) {
     const error = new Error("code la bat buoc");
@@ -726,7 +796,34 @@ export const verifyVoucherService = async (payload = {}) => {
     };
   }
 
-  if (orderAmount !== null && orderAmount < Number(voucher.min_order ?? 0)) {
+  const user = context.userId
+    ? await User.findOne({ _id: context.userId, deleted_at: null, status: true })
+    : null;
+
+  const scopeError = checkVoucherScope(voucher, context, user);
+  if (scopeError) {
+    return {
+      valid: false,
+      message: scopeError,
+    };
+  }
+
+  if (context.userId) {
+    const usedByCustomer = await countVoucherUsageByUser({
+      voucherId: voucher._id,
+      userId: context.userId,
+    });
+
+    if (usedByCustomer >= Number(voucher.usage_limit_per_user || 1)) {
+      return {
+        valid: false,
+        message: "Khach hang da dung het so lan cho ma nay",
+        used_by_customer: usedByCustomer,
+      };
+    }
+  }
+
+  if (context.orderAmount !== null && context.orderAmount < Number(voucher.min_order ?? 0)) {
     return {
       valid: false,
       message: `Don hang toi thieu phai dat ${voucher.min_order}`,
@@ -734,5 +831,5 @@ export const verifyVoucherService = async (payload = {}) => {
     };
   }
 
-  return buildVoucherVerificationResponse(voucher, orderAmount);
+  return buildVoucherVerificationResponse(voucher, context);
 };

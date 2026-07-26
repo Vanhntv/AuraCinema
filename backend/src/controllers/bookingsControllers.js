@@ -4,6 +4,8 @@ import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
+import Voucher from "../models/Voucher.js";
+import { verifyVoucherService } from "../services/voucherService.js";
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -160,6 +162,7 @@ export const createBooking = async (req, res) => {
   const session = await mongoose.startSession();
   try {
     const { showtime_id, showtime_seat_ids } = req.body;
+    const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
     const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
@@ -202,7 +205,56 @@ export const createBooking = async (req, res) => {
 
       const seatTotalPrice = calculateBookingTotalPrice(seats);
       const comboTotalPrice = reservedCombos.reduce((total, item) => total + Number(item.subtotal || 0), 0);
-      const totalPrice = seatTotalPrice + comboTotalPrice;
+      const subtotalPrice = seatTotalPrice + comboTotalPrice;
+      let discountAmount = 0;
+      let voucherSnapshot = undefined;
+
+      if (voucherCode) {
+        const voucherResult = await verifyVoucherService({
+          code: voucherCode,
+          order_amount: subtotalPrice,
+          ticket_amount: seatTotalPrice,
+          concession_amount: comboTotalPrice,
+          movie_id: showtime.movie_id,
+          user_id: user._id,
+        });
+
+        if (!voucherResult.valid) {
+          throw Object.assign(new Error(voucherResult.message), { statusCode: 400 });
+        }
+
+        discountAmount = Number(voucherResult.discount_amount || 0);
+        const updateVoucherResult = await Voucher.updateOne(
+          {
+            _id: voucherResult.voucher.id,
+            deleted_at: null,
+            status: true,
+            quantity: { $gt: 0 },
+          },
+          {
+            $inc: {
+              quantity: -1,
+              usage_count: 1,
+            },
+          },
+          { session },
+        );
+
+        if (updateVoucherResult.modifiedCount !== 1) {
+          throw Object.assign(new Error("Voucher da het luot su dung"), { statusCode: 409 });
+        }
+
+        voucherSnapshot = {
+          voucher_id: voucherResult.voucher.id,
+          code: voucherResult.voucher.code,
+          discount_type: voucherResult.voucher.discount_type,
+          discount_value: Number(voucherResult.voucher.discount_value || 0),
+          discount_amount: discountAmount,
+          apply_scope: voucherResult.voucher.apply_scope,
+        };
+      }
+
+      const totalPrice = Math.max(subtotalPrice - discountAmount, 0);
       [createdBooking] = await Booking.create([{
         user_id: user._id,
         showtime_id,
@@ -211,6 +263,9 @@ export const createBooking = async (req, res) => {
         customer_email: user.email,
         customer_phone: user.phone,
         combos: reservedCombos,
+        voucher: voucherSnapshot,
+        subtotal_price: subtotalPrice,
+        discount_amount: discountAmount,
         total_price: totalPrice,
       }], { session });
     });
@@ -247,6 +302,7 @@ export const getMyBookings = async (req, res) => {
         },
       })
       .populate({ path: "combos.combo_id", select: "name image type" })
+      .populate({ path: "voucher.voucher_id", select: "code name apply_scope" })
       .sort({ created_at: -1 });
     return res.json({ success: true, data: bookings });
   } catch (error) {

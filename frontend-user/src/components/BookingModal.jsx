@@ -3,6 +3,7 @@ import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../se
 import { getShowtimesByMovie } from "../services/showtimeService";
 import { createBooking } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
+import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 
 const SEAT_TYPES = {
@@ -176,6 +177,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [selectedConcessions, setSelectedConcessions] = useState({});
   const [isLoadingConcessions, setIsLoadingConcessions] = useState(false);
   const [concessionError, setConcessionError] = useState("");
+  const [voucherCode, setVoucherCode] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState(null);
+  const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
+  const [voucherError, setVoucherError] = useState("");
+  const [voucherMessage, setVoucherMessage] = useState("");
   const initialShowtimeId = getShowtimeId(initialShowtime);
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
@@ -233,6 +239,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setHoldExpiresAt(null);
     setRemainingSeconds(0);
     setSelectedConcessions({});
+    setVoucherCode("");
+    setAppliedVoucher(null);
+    setVoucherError("");
+    setVoucherMessage("");
   }, [movie?._id, initialShowtimeId]);
 
   useEffect(() => {
@@ -394,6 +404,15 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   );
 
   const totalPrice = seatTotal + concessionTotal;
+  const discountAmount = Number(appliedVoucher?.discount_amount || 0);
+  const finalTotal = Math.max(totalPrice - discountAmount, 0);
+
+  useEffect(() => {
+    if (!appliedVoucher) return;
+    setAppliedVoucher(null);
+    setVoucherMessage("");
+    setVoucherError("Tổng đơn đã thay đổi. Vui lòng áp dụng lại mã giảm giá.");
+  }, [seatTotal, concessionTotal]);
 
   const seatPriceNotes = useMemo(() => {
     const priceByType = new Map();
@@ -551,6 +570,59 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   };
 
+  const applyVoucher = async () => {
+    if (!isAuthenticated) {
+      setVoucherError("Vui lòng đăng nhập để áp dụng mã giảm giá.");
+      return;
+    }
+
+    const code = voucherCode.trim().toUpperCase();
+    if (!code) {
+      setVoucherError("Vui lòng nhập mã giảm giá.");
+      return;
+    }
+
+    if (totalPrice <= 0) {
+      setVoucherError("Vui lòng chọn vé hoặc bắp nước trước khi áp dụng mã.");
+      return;
+    }
+
+    try {
+      setIsApplyingVoucher(true);
+      setVoucherError("");
+      setVoucherMessage("");
+      const response = await verifyVoucher({
+        code,
+        order_amount: totalPrice,
+        ticket_amount: seatTotal,
+        concession_amount: concessionTotal,
+        movie_id: movie._id,
+      });
+      const result = response.data;
+
+      if (!result?.valid) {
+        setAppliedVoucher(null);
+        setVoucherError(result?.message || "Mã giảm giá không hợp lệ.");
+        return;
+      }
+
+      setAppliedVoucher(result);
+      setVoucherCode(result.voucher?.code || code);
+      setVoucherMessage(`Đã áp dụng mã ${result.voucher?.code || code}`);
+    } catch (requestError) {
+      setAppliedVoucher(null);
+      setVoucherError(requestError.response?.data?.message || "Không thể áp dụng mã giảm giá.");
+    } finally {
+      setIsApplyingVoucher(false);
+    }
+  };
+
+  const removeVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherError("");
+    setVoucherMessage("");
+  };
+
   const submitBooking = async () => {
     if (!isAuthenticated) {
       setSeatError("Vui lòng đăng nhập để đặt vé.");
@@ -566,6 +638,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           combo_id: item._id,
           quantity: item.quantity,
         })),
+        voucher_code: appliedVoucher?.voucher?.code || undefined,
       });
       setBookingResult(response.data);
       setShowtimeSeats((current) => current.map((seat) =>
@@ -575,6 +648,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       ));
       setSelectedSeats([]);
       setSelectedConcessions({});
+      setAppliedVoucher(null);
+      setVoucherCode("");
+      setVoucherError("");
+      setVoucherMessage("");
     } catch (requestError) {
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
@@ -739,9 +816,56 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
             )}
           </div>
 
-          <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><h3 className="text-lg font-black text-white">Thông tin vé</h3>{remainingSeconds > 0 && <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">Thời gian giữ ghế: <strong>{String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:{String(remainingSeconds % 60).padStart(2, "0")}</strong></div>}{bookingResult && <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><strong>Đặt vé thành công!</strong><br />Mã đơn: {bookingResult._id}</div>}<div className="mt-5 grid gap-4 text-sm text-slate-300">
-            <p><span className="text-slate-500">Ngày:</span> {selectedDate.label} · {selectedDate.displayDate}</p><p><span className="text-slate-500">Suất:</span> {selectedShowtime?.startTime || "Chưa chọn"}</p><p><span className="text-slate-500">Phòng:</span> {selectedShowtime?.roomName || "Chưa chọn"}</p><p><span className="text-slate-500">Loại:</span> {selectedTypeSummary}</p><p><span className="text-slate-500">Ghế:</span> {selectedSeats.length ? selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`).join(", ") : "Chưa chọn"}</p><p><span className="text-slate-500">Tiền vé:</span> <strong className="text-white">{seatTotal.toLocaleString("vi-VN")}đ</strong></p><p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{concessionTotal.toLocaleString("vi-VN")}đ</strong></p>{selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {(Number(item.price || 0) * item.quantity).toLocaleString("vi-VN")}đ</p>)}</div>}<p><span className="text-slate-500">Tổng:</span> <strong className="text-[#ff9aa5]">{totalPrice.toLocaleString("vi-VN")}đ</strong></p>
-          </div><div className="mt-6 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-4 text-sm"><p className="font-bold text-white">Thông tin người đặt</p>{isAuthenticated ? <><p className="text-slate-300">{user?.full_name}</p><p className="text-slate-400">{user?.email}</p><p className="text-slate-400">{user?.phone || "Chưa cập nhật số điện thoại"}</p></> : <p className="text-amber-200">Bạn cần đăng nhập trước khi đặt vé.</p>}</div><button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || !isAuthenticated || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button></aside>
+          <aside className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <h3 className="text-lg font-black text-white">Thông tin vé</h3>
+            {remainingSeconds > 0 && <div className="mt-4 rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">Thời gian giữ ghế: <strong>{String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:{String(remainingSeconds % 60).padStart(2, "0")}</strong></div>}
+            {bookingResult && <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><strong>Đặt vé thành công!</strong><br />Mã đơn: {bookingResult._id}</div>}
+
+            <div className="mt-5 grid gap-4 text-sm text-slate-300">
+              <p><span className="text-slate-500">Ngày:</span> {selectedDate.label} · {selectedDate.displayDate}</p>
+              <p><span className="text-slate-500">Suất:</span> {selectedShowtime?.startTime || "Chưa chọn"}</p>
+              <p><span className="text-slate-500">Phòng:</span> {selectedShowtime?.roomName || "Chưa chọn"}</p>
+              <p><span className="text-slate-500">Loại:</span> {selectedTypeSummary}</p>
+              <p><span className="text-slate-500">Ghế:</span> {selectedSeats.length ? selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`).join(", ") : "Chưa chọn"}</p>
+              <p><span className="text-slate-500">Tiền vé:</span> <strong className="text-white">{seatTotal.toLocaleString("vi-VN")}đ</strong></p>
+              <p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{concessionTotal.toLocaleString("vi-VN")}đ</strong></p>
+              {selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {(Number(item.price || 0) * item.quantity).toLocaleString("vi-VN")}đ</p>)}</div>}
+
+              <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+                <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã giảm giá</label>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold uppercase text-white outline-none placeholder:text-slate-600 focus:border-[#ff6070]"
+                    value={voucherCode}
+                    placeholder="AURA20"
+                    onChange={(event) => {
+                      setVoucherCode(event.target.value.toUpperCase());
+                      setVoucherError("");
+                      setVoucherMessage("");
+                    }}
+                    disabled={Boolean(appliedVoucher) || isApplyingVoucher}
+                  />
+                  {appliedVoucher ? (
+                    <button type="button" className="rounded-full bg-white/10 px-4 text-sm font-extrabold text-white hover:bg-white/15" onClick={removeVoucher}>Bỏ</button>
+                  ) : (
+                    <button type="button" className="rounded-full bg-[#ff6070] px-4 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" onClick={applyVoucher} disabled={isApplyingVoucher}>{isApplyingVoucher ? "..." : "Áp dụng"}</button>
+                  )}
+                </div>
+                {voucherError && <p className="mt-2 text-xs font-semibold text-amber-200">{voucherError}</p>}
+                {voucherMessage && <p className="mt-2 text-xs font-semibold text-emerald-200">{voucherMessage}</p>}
+              </div>
+
+              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{totalPrice.toLocaleString("vi-VN")}đ</strong></p>
+              <p><span className="text-slate-500">Giảm giá:</span> <strong className="text-emerald-200">-{discountAmount.toLocaleString("vi-VN")}đ</strong></p>
+              <p><span className="text-slate-500">Tổng sau giảm:</span> <strong className="text-[#ff9aa5]">{finalTotal.toLocaleString("vi-VN")}đ</strong></p>
+            </div>
+
+            <div className="mt-6 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-4 text-sm">
+              <p className="font-bold text-white">Thông tin người đặt</p>
+              {isAuthenticated ? <><p className="text-slate-300">{user?.full_name}</p><p className="text-slate-400">{user?.email}</p><p className="text-slate-400">{user?.phone || "Chưa cập nhật số điện thoại"}</p></> : <p className="text-amber-200">Bạn cần đăng nhập trước khi đặt vé.</p>}
+            </div>
+            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || !isAuthenticated || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+          </aside>
         </div>
       </div>
     </div>

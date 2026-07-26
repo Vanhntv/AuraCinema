@@ -143,6 +143,7 @@ export const verifyVoucher = async (req, res) => {
     const payload = {
       ...req.query,
       ...req.body,
+      user_id: req.user?.id,
     };
 
     const result = await verifyVoucherService(payload);

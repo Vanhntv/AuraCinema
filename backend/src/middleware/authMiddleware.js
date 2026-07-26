@@ -66,6 +66,43 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
+export const optionalAuthMiddleware = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.slice(7).trim();
+    if (!token) return next();
+
+    const payload = verifyJwt(token, process.env.JWT_SECRET);
+    const user = await User.findOne({
+      _id: payload.id,
+      deleted_at: null,
+      $or: [
+        { account_status: "active" },
+        { account_status: { $exists: false }, status: true },
+      ],
+    }).select("_id role role_id password_changed_at account_status status");
+
+    if (user) {
+      req.user = {
+        id: user._id.toString(),
+        role_id: user.role_id,
+        role: user.role === "admin" || user.role_id === 1 ? "admin" : "user",
+        iat: payload.iat,
+        exp: payload.exp,
+      };
+    }
+  } catch {
+    req.user = undefined;
+  }
+
+  return next();
+};
+
 export const authorizeRoles = (...allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
