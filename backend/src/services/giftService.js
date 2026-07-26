@@ -97,7 +97,10 @@ const normalizeGiftCondition = (condition = {}) => {
   };
 };
 
-const validateGiftPayload = async (payload) => {
+export const validateGiftPayload = async (
+  payload,
+  { isCodeTaken = async (code) => Boolean(await Gift.findOne({ code, deleted_at: null })) } = {},
+) => {
   if (!payload.name) return "Tên quà là bắt buộc.";
   if (!payload.code) return "Mã quà là bắt buộc.";
   if (!/^[A-Za-z0-9-]{2,}$/.test(payload.code)) {
@@ -105,8 +108,7 @@ const validateGiftPayload = async (payload) => {
   }
   if (!payload.type || !GIFT_TYPES.includes(payload.type)) return "Loại quà không hợp lệ.";
 
-  const existingGift = await Gift.findOne({ code: payload.code, deleted_at: null });
-  if (existingGift) return "Mã quà đã tồn tại.";
+  if (await isCodeTaken(payload.code)) return "Mã quà đã tồn tại.";
 
   if (!Number.isInteger(payload.quantity) || payload.quantity <= 0) {
     return "Tổng số lượng phải là số nguyên lớn hơn 0.";
@@ -151,7 +153,7 @@ const validateGiftPayload = async (payload) => {
   return null;
 };
 
-const prepareGiftCreatePayload = (payload = {}, user = null) => {
+export const prepareGiftCreatePayload = (payload = {}, user = null) => {
   const quantity = Number(payload.quantity);
   const value = isMissing(payload.value) ? 0 : Number(payload.value);
 
