@@ -1,9 +1,8 @@
 import axiosClient from "../api/axiosClient";
 
 export const getAvailableConcessions = async () => {
-  const response = await axiosClient.get("/combos", {
+  const response = await axiosClient.get("/combos/public", {
     params: {
-      status: "active",
       limit: 100,
     },
   });
