@@ -37,7 +37,7 @@ const VouchersPage = () => {
   const [statusTarget, setStatusTarget] = useState(null);
 
   const activeInPage = useMemo(
-    () => vouchers.filter((voucher) => voucher.status).length,
+    () => vouchers.filter((voucher) => voucher.computed_status === "active").length,
     [vouchers],
   );
   const usedInPage = useMemo(
@@ -215,7 +215,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{activeInPage}</div>
-            <div className="stat-card-label">Đang bật trong trang</div>
+            <div className="stat-card-label">Đang hoạt động trong trang</div>
           </div>
         </div>
         <div className="stat-card">
@@ -252,10 +252,11 @@ const VouchersPage = () => {
             <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "status")}>
               <option value="">Tất cả trạng thái</option>
               <option value="active">Đang hoạt động</option>
-              <option value="inactive">Tạm dừng</option>
+              <option value="paused">Tạm dừng</option>
               <option value="upcoming">Sắp diễn ra</option>
               <option value="expired">Hết hạn</option>
-              <option value="out_of_usage">Hết lượt</option>
+              <option value="out_of_usage">Đã hết lượt</option>
+              <option value="cancelled">Đã hủy</option>
             </select>
             <select className="user-filter-select" value={discountTypeFilter} onChange={handleFilterChange(setDiscountTypeFilter, "discount_type")}>
               <option value="">Tất cả loại giảm</option>

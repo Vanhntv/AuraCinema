@@ -308,10 +308,10 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
             </section>
 
             <section className="voucher-form-section">
-              <h3>Trạng thái</h3>
+              <h3>Quyền sử dụng mã</h3>
               <div className="segmented-options">
-                <label><input type="radio" checked={formData.status_mode === "draft"} onChange={() => handleChange("status_mode", "draft")} /> Lưu nháp</label>
-                <label><input type="radio" checked={formData.status_mode === "active"} onChange={() => handleChange("status_mode", "active")} /> Kích hoạt ngay</label>
+                <label><input type="radio" checked={formData.status_mode === "draft"} onChange={() => handleChange("status_mode", "draft")} /> Tạm dừng</label>
+                <label><input type="radio" checked={formData.status_mode === "active"} onChange={() => handleChange("status_mode", "active")} /> Cho phép sử dụng</label>
               </div>
             </section>
           </div>

@@ -69,10 +69,39 @@ const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
   };
 };
 
+const deriveVoucherStatus = (data) => {
+  const now = new Date();
+  const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
+  const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
+
+  if (data.deleted_at) {
+    return { value: "cancelled", label: "Da huy" };
+  }
+
+  if (!data.status) {
+    return { value: "paused", label: "Tam dung" };
+  }
+
+  if (data.start_date && now < data.start_date) {
+    return { value: "upcoming", label: "Sap dien ra" };
+  }
+
+  if (Number(usageLimit || 0) > 0 && Number(usageCount || 0) >= Number(usageLimit || 0)) {
+    return { value: "out_of_usage", label: "Da het luot" };
+  }
+
+  if (data.end_date && now > data.end_date) {
+    return { value: "expired", label: "Het han" };
+  }
+
+  return { value: "active", label: "Dang hoat dong" };
+};
+
 const toVoucherListItem = (voucher) => {
   const data = typeof voucher.toObject === "function" ? voucher.toObject() : { ...voucher };
   const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
   const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
+  const computedStatus = deriveVoucherStatus(data);
 
   return {
     ...data,
@@ -80,6 +109,8 @@ const toVoucherListItem = (voucher) => {
     apply_scope: data.apply_scope || "order",
     usage_limit: usageLimit,
     usage_count: usageCount,
+    computed_status: computedStatus.value,
+    computed_status_label: computedStatus.label,
   };
 };
 
@@ -87,12 +118,12 @@ export const normalizeVoucherForResponse = toVoucherListItem;
 
 const buildVoucherFilter = (query = {}) => {
   const { q, search, status, discount_type, apply_scope } = query;
+  const normalizedStatus = isMissing(status) ? "" : String(status).trim().toLowerCase();
   const filter = {
-    deleted_at: null,
+    deleted_at: normalizedStatus === "cancelled" ? { $ne: null } : null,
   };
 
   if (!isMissing(status)) {
-    const normalizedStatus = String(status).trim().toLowerCase();
     if (["active"].includes(normalizedStatus)) {
       filter.status = true;
       filter.start_date = { $lte: new Date() };
@@ -100,14 +131,17 @@ const buildVoucherFilter = (query = {}) => {
       filter.quantity = { $gt: 0 };
     } else if (["true", "1", "enabled"].includes(normalizedStatus)) {
       filter.status = true;
-    } else if (["false", "0", "inactive", "disabled"].includes(normalizedStatus)) {
+    } else if (["false", "0", "inactive", "disabled", "paused"].includes(normalizedStatus)) {
       filter.status = false;
     } else if (normalizedStatus === "upcoming") {
       filter.status = true;
       filter.start_date = { $gt: new Date() };
     } else if (normalizedStatus === "expired") {
+      filter.status = true;
       filter.end_date = { $lt: new Date() };
+      filter.quantity = { $gt: 0 };
     } else if (normalizedStatus === "out_of_usage") {
+      filter.status = true;
       filter.quantity = { $lte: 0 };
     }
   }

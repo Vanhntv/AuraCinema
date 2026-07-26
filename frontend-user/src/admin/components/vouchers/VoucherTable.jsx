@@ -32,6 +32,20 @@ const formatDate = (value) => {
 };
 
 const resolveVoucherStatus = (voucher) => {
+  const statusMap = {
+    active: { label: "Đang hoạt động", className: "status-now-showing" },
+    upcoming: { label: "Sắp diễn ra", className: "status-coming-soon" },
+    paused: { label: "Tạm dừng", className: "status-ended" },
+    out_of_usage: { label: "Đã hết lượt", className: "status-ended" },
+    expired: { label: "Hết hạn", className: "status-ended" },
+    cancelled: { label: "Đã hủy", className: "status-ended" },
+  };
+
+  if (voucher?.computed_status && statusMap[voucher.computed_status]) {
+    return statusMap[voucher.computed_status];
+  }
+
+  if (voucher?.deleted_at) return statusMap.cancelled;
   if (!voucher.status) return { label: "Tạm dừng", className: "status-ended" };
 
   const now = Date.now();
@@ -41,8 +55,8 @@ const resolveVoucherStatus = (voucher) => {
   const usageCount = Number(voucher.usage_count ?? Math.max(usageLimit - Number(voucher.quantity || 0), 0));
 
   if (startTime && now < startTime) return { label: "Sắp diễn ra", className: "status-coming-soon" };
+  if (usageLimit > 0 && usageCount >= usageLimit) return { label: "Đã hết lượt", className: "status-ended" };
   if (endTime && now > endTime) return { label: "Hết hạn", className: "status-ended" };
-  if (usageLimit > 0 && usageCount >= usageLimit) return { label: "Hết lượt", className: "status-ended" };
   return { label: "Đang hoạt động", className: "status-now-showing" };
 };
 
