@@ -2,6 +2,7 @@ import {
   createGiftService,
   getGiftByIdService,
   listGifts,
+  toggleGiftStatusService,
   updateGiftService,
 } from "../services/giftService.js";
 
@@ -69,6 +70,22 @@ export const updateGift = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Cập nhật quà tặng thành công.",
+      data: gift,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const toggleGiftStatus = async (req, res) => {
+  try {
+    const gift = await toggleGiftStatusService(req.params.id, req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: gift.status === "active"
+        ? "Kích hoạt quà tặng thành công."
+        : "Tạm dừng quà tặng thành công.",
       data: gift,
     });
   } catch (error) {

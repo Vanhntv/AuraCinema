@@ -480,6 +480,38 @@ export const updateGiftService = async (id, payload, user = null) => {
   return updatedGift;
 };
 
+export const toggleGiftStatusService = async (id, user = null) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error("Quà tặng không hợp lệ.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const gift = await Gift.findOne({ _id: id, deleted_at: null });
+  if (!gift) {
+    const error = new Error("Quà tặng không tồn tại.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (gift.status === "cancelled") {
+    const error = new Error("Không thể thay đổi trạng thái quà tặng đã hủy.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  gift.status = gift.status === "active" ? "paused" : "active";
+  if (user?.id || user?._id) {
+    gift.updated_by = user.id || user._id;
+  }
+  await gift.save();
+
+  await gift.populate("created_by", "full_name email");
+  await gift.populate("updated_by", "full_name email");
+
+  return gift;
+};
+
 export const getGiftByIdService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     const error = new Error("Quà tặng không hợp lệ.");

@@ -21,3 +21,8 @@ export const updateGift = async (id, data) => {
   const response = await axiosClient.put(`${API_URL}/${id}`, data);
   return response.data;
 };
+
+export const toggleGiftStatus = async (id) => {
+  const response = await axiosClient.patch(`${API_URL}/${id}/status`);
+  return response.data;
+};

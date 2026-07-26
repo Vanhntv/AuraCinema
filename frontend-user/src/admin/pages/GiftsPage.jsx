@@ -11,8 +11,9 @@ import {
   HiOutlineTrash,
   HiOutlineX,
 } from "react-icons/hi";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
-import { createGift, getGiftById, getGifts, updateGift } from "../services/giftService";
+import { createGift, getGiftById, getGifts, toggleGiftStatus, updateGift } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -512,6 +513,7 @@ const GiftsPage = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editGift, setEditGift] = useState(null);
+  const [statusTarget, setStatusTarget] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const addToast = useCallback((type, message) => {
@@ -625,6 +627,22 @@ const GiftsPage = () => {
       fetchGifts(currentPage);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật quà tặng");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmToggleStatus = async () => {
+    if (!statusTarget?._id) return;
+
+    try {
+      setSubmitting(true);
+      const response = await toggleGiftStatus(statusTarget._id);
+      addToast("success", response.message || "Cập nhật trạng thái quà tặng thành công.");
+      setStatusTarget(null);
+      fetchGifts(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái quà tặng");
     } finally {
       setSubmitting(false);
     }
@@ -776,7 +794,7 @@ const GiftsPage = () => {
                               <button className="btn btn-icon btn-ghost" title="Chỉnh sửa" onClick={() => handleEditGift(gift)}>
                                 <HiOutlinePencil />
                               </button>
-                              <button className="btn btn-icon btn-ghost" title={gift.status === "active" ? "Tạm dừng" : "Kích hoạt"} disabled>
+                              <button className="btn btn-icon btn-ghost" title={gift.status === "active" ? "Tạm dừng" : "Kích hoạt"} onClick={() => setStatusTarget(gift)}>
                                 {gift.status === "active" ? <HiOutlinePause /> : <HiOutlinePlay />}
                               </button>
                               <button className="btn btn-icon btn-ghost btn-danger-text" title="Xóa" disabled>
@@ -840,6 +858,20 @@ const GiftsPage = () => {
         onClose={() => setEditGift(null)}
         onSubmit={handleUpdateGift}
         initialData={editGift}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(statusTarget)}
+        title={statusTarget?.status === "active" ? "Tạm dừng quà tặng?" : "Kích hoạt quà tặng?"}
+        message={
+          statusTarget?.status === "active"
+            ? `Quà "${statusTarget?.code}" sẽ tạm dừng phát cho khách hàng cho đến khi được kích hoạt lại.`
+            : `Quà "${statusTarget?.code}" sẽ được kích hoạt và có thể phát theo điều kiện đã cấu hình.`
+        }
+        confirmLabel={statusTarget?.status === "active" ? "Tạm dừng" : "Kích hoạt"}
+        confirmClassName={statusTarget?.status === "active" ? "btn-danger" : "btn-primary"}
+        onConfirm={handleConfirmToggleStatus}
+        onCancel={() => setStatusTarget(null)}
       />
     </>
   );

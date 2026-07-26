@@ -1,5 +1,11 @@
 import express from "express";
-import { createGift, getAllGifts, getGiftById, updateGift } from "../controllers/giftControllers.js";
+import {
+  createGift,
+  getAllGifts,
+  getGiftById,
+  toggleGiftStatus,
+  updateGift,
+} from "../controllers/giftControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -9,5 +15,6 @@ router.get("/", adminOnly, getAllGifts);
 router.get("/:id", adminOnly, getGiftById);
 router.post("/", adminOnly, createGift);
 router.put("/:id", adminOnly, updateGift);
+router.patch("/:id/status", adminOnly, toggleGiftStatus);
 
 export default router;
