@@ -9,6 +9,11 @@ const voucherSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
     },
+    name: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     discount_type: {
       type: String,
       required: true,
@@ -29,6 +34,22 @@ const voucherSchema = new mongoose.Schema(
       type: Number,
       required: true,
       min: 0,
+    },
+    usage_limit: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    usage_count: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    apply_scope: {
+      type: String,
+      enum: ["order", "ticket", "concession", "movie", "member"],
+      default: "order",
+      trim: true,
     },
     start_date: {
       type: Date,

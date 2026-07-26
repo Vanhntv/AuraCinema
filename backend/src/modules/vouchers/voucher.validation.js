@@ -4,14 +4,32 @@ const isEmptyValue = (value) =>
 export const normalizeVoucherPayload = (payload, defaults = {}) => {
   return {
     code: payload.code ?? defaults.code,
+    name: payload.name ?? defaults.name,
     discount_type: payload.discount_type ?? defaults.discount_type,
     discount_value: payload.discount_value ?? defaults.discount_value,
     min_order: payload.min_order ?? defaults.min_order,
     quantity: payload.quantity ?? defaults.quantity,
+    usage_limit: payload.usage_limit ?? defaults.usage_limit,
+    usage_count: payload.usage_count ?? defaults.usage_count,
+    apply_scope: payload.apply_scope ?? defaults.apply_scope,
     start_date: payload.start_date ?? defaults.start_date,
     end_date: payload.end_date ?? defaults.end_date,
     status: payload.status ?? defaults.status,
   };
+};
+
+export const parseVoucherApplyScope = (value, fallback = "order") => {
+  if (isEmptyValue(value)) {
+    return fallback;
+  }
+
+  const normalizedValue = String(value).trim().toLowerCase();
+
+  if (["order", "ticket", "concession", "movie", "member"].includes(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return fallback;
 };
 
 export const parseVoucherDiscountType = (value, fallback = "percent") => {

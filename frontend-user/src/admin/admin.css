@@ -3685,3 +3685,44 @@
     display: none;
   }
 }
+
+.vouchers-table-wrapper {
+  overflow-x: auto;
+}
+
+.vouchers-table {
+  min-width: 1180px;
+}
+
+.voucher-code {
+  display: inline-flex;
+  max-width: 120px;
+  overflow: hidden;
+  border: 1px solid rgba(139, 92, 246, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--color-accent-light);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voucher-discount-value,
+.text-usage {
+  color: var(--color-text-primary);
+  font-weight: 800;
+}
+
+.text-muted-inline {
+  color: var(--color-text-muted);
+}
+
+.voucher-filter-row {
+  flex-wrap: wrap;
+}
+
+.voucher-sort-select {
+  min-width: 190px;
+}

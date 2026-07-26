@@ -1,0 +1,222 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  HiOutlineRefresh,
+  HiOutlineSearch,
+  HiOutlineTag,
+  HiOutlineTicket,
+  HiOutlineTrendingUp,
+} from "react-icons/hi";
+import Toast from "../components/common/Toast";
+import VoucherTable from "../components/vouchers/VoucherTable";
+import { getVouchers } from "../services/voucherService";
+
+const PAGE_SIZE = 10;
+
+const VouchersPage = () => {
+  const [vouchers, setVouchers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [discountTypeFilter, setDiscountTypeFilter] = useState("");
+  const [scopeFilter, setScopeFilter] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [toasts, setToasts] = useState([]);
+
+  const activeInPage = useMemo(
+    () => vouchers.filter((voucher) => voucher.status).length,
+    [vouchers],
+  );
+  const usedInPage = useMemo(
+    () => vouchers.reduce((total, voucher) => total + Number(voucher.usage_count || 0), 0),
+    [vouchers],
+  );
+
+  const addToast = useCallback((type, message) => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, type, message }]);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  const fetchVouchers = useCallback(
+    async (page = 1, overrides = {}) => {
+      try {
+        setLoading(true);
+        const response = await getVouchers({
+          q: overrides.q ?? searchQuery.trim(),
+          status: overrides.status ?? statusFilter,
+          discount_type: overrides.discount_type ?? discountTypeFilter,
+          apply_scope: overrides.apply_scope ?? scopeFilter,
+          sort_by: overrides.sort_by ?? sortBy,
+          sort_order: overrides.sort_order ?? sortOrder,
+          page,
+          limit: PAGE_SIZE,
+        });
+
+        setVouchers(response.data || []);
+        setCurrentPage(response.pagination?.page || page);
+        setTotalPages(response.pagination?.totalPages || 1);
+        setTotalItems(response.pagination?.totalItems || 0);
+      } catch (error) {
+        addToast("error", error.response?.data?.message || "Không thể tải danh sách mã giảm giá");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [addToast, discountTypeFilter, scopeFilter, searchQuery, sortBy, sortOrder, statusFilter],
+  );
+
+  useEffect(() => {
+    fetchVouchers(1);
+  }, [fetchVouchers]);
+
+  const handleSearch = (event) => {
+    const value = event.target.value;
+    setSearchQuery(value);
+    fetchVouchers(1, { q: value.trim() });
+  };
+
+  const handleFilterChange = (setter, key) => (event) => {
+    const value = event.target.value;
+    setter(value);
+    fetchVouchers(1, { [key]: value });
+  };
+
+  const handleSortChange = (event) => {
+    const [nextSortBy, nextSortOrder] = event.target.value.split(":");
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortOrder);
+    fetchVouchers(1, { sort_by: nextSortBy, sort_order: nextSortOrder });
+  };
+
+  return (
+    <>
+      <div className="page-header">
+        <div className="page-header-info">
+          <h1>Quản lý Mã giảm giá</h1>
+          <p>Theo dõi danh sách chương trình ưu đãi, trạng thái và lượt sử dụng.</p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage)}>
+            <HiOutlineRefresh />
+            Làm mới
+          </button>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-card-icon purple">
+            <HiOutlineTag />
+          </div>
+          <div>
+            <div className="stat-card-value">{totalItems}</div>
+            <div className="stat-card-label">Tổng mã giảm giá</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon green">
+            <HiOutlineTicket />
+          </div>
+          <div>
+            <div className="stat-card-value">{activeInPage}</div>
+            <div className="stat-card-label">Đang bật trong trang</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-card-icon orange">
+            <HiOutlineTrendingUp />
+          </div>
+          <div>
+            <div className="stat-card-value">{usedInPage}</div>
+            <div className="stat-card-label">Lượt dùng trong trang</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="table-container">
+        <div className="table-toolbar">
+          <div className="table-toolbar-left">
+            <span className="table-toolbar-title">Danh sách mã giảm giá</span>
+            <span className="table-toolbar-count">{totalItems} kết quả</span>
+          </div>
+          <div className="table-search">
+            <HiOutlineSearch className="table-search-icon" />
+            <input
+              type="text"
+              className="table-search-input"
+              placeholder="Tìm mã hoặc tên chương trình..."
+              value={searchQuery}
+              onChange={handleSearch}
+            />
+          </div>
+        </div>
+
+        <div className="table-toolbar" style={{ borderTop: "1px solid var(--color-border)" }}>
+          <div className="table-toolbar-left voucher-filter-row">
+            <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "status")}>
+              <option value="">Tất cả trạng thái</option>
+              <option value="active">Đang hoạt động</option>
+              <option value="inactive">Tạm dừng</option>
+              <option value="upcoming">Sắp diễn ra</option>
+              <option value="expired">Hết hạn</option>
+              <option value="out_of_usage">Hết lượt</option>
+            </select>
+            <select className="user-filter-select" value={discountTypeFilter} onChange={handleFilterChange(setDiscountTypeFilter, "discount_type")}>
+              <option value="">Tất cả loại giảm</option>
+              <option value="percent">Phần trăm</option>
+              <option value="fixed">Số tiền cố định</option>
+            </select>
+            <select className="user-filter-select" value={scopeFilter} onChange={handleFilterChange(setScopeFilter, "apply_scope")}>
+              <option value="">Tất cả phạm vi</option>
+              <option value="order">Toàn đơn</option>
+              <option value="ticket">Vé xem phim</option>
+              <option value="concession">Bắp nước</option>
+              <option value="movie">Phim</option>
+              <option value="member">Thành viên</option>
+            </select>
+            <select className="user-filter-select voucher-sort-select" value={`${sortBy}:${sortOrder}`} onChange={handleSortChange}>
+              <option value="created_at:desc">Ngày tạo mới nhất</option>
+              <option value="created_at:asc">Ngày tạo cũ nhất</option>
+              <option value="end_date:asc">Sắp hết hạn</option>
+              <option value="end_date:desc">Hết hạn xa nhất</option>
+              <option value="usage_count:desc">Lượt dùng cao nhất</option>
+              <option value="usage_count:asc">Lượt dùng thấp nhất</option>
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="loading-spinner">
+            <div className="spinner"></div>
+          </div>
+        ) : (
+          <>
+            <VoucherTable vouchers={vouchers} rowStart={(currentPage - 1) * PAGE_SIZE} />
+            <div className="pagination">
+              <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
+                Trang trước
+              </button>
+              <span className="pagination-info">
+                Trang {currentPage} / {totalPages}
+              </span>
+              <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage + 1)} disabled={currentPage === totalPages}>
+                Trang sau
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <Toast toasts={toasts} onRemove={removeToast} />
+    </>
+  );
+};
+
+export default VouchersPage;

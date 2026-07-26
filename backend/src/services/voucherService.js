@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Voucher from "../models/Voucher.js";
 import {
   normalizeVoucherPayload,
+  parseVoucherApplyScope,
   parseVoucherDiscountType,
   parseVoucherStatus,
   validateVoucherPayload,
@@ -60,18 +61,44 @@ const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
   };
 };
 
+const toVoucherListItem = (voucher) => {
+  const data = typeof voucher.toObject === "function" ? voucher.toObject() : { ...voucher };
+  const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
+  const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
+
+  return {
+    ...data,
+    name: data.name || data.code,
+    apply_scope: data.apply_scope || "order",
+    usage_limit: usageLimit,
+    usage_count: usageCount,
+  };
+};
+
 const buildVoucherFilter = (query = {}) => {
-  const { q, search, status, discount_type } = query;
+  const { q, search, status, discount_type, apply_scope } = query;
   const filter = {
     deleted_at: null,
   };
 
   if (!isMissing(status)) {
     const normalizedStatus = String(status).trim().toLowerCase();
-    if (["true", "1", "active", "enabled"].includes(normalizedStatus)) {
+    if (["active"].includes(normalizedStatus)) {
+      filter.status = true;
+      filter.start_date = { $lte: new Date() };
+      filter.end_date = { $gte: new Date() };
+      filter.quantity = { $gt: 0 };
+    } else if (["true", "1", "enabled"].includes(normalizedStatus)) {
       filter.status = true;
     } else if (["false", "0", "inactive", "disabled"].includes(normalizedStatus)) {
       filter.status = false;
+    } else if (normalizedStatus === "upcoming") {
+      filter.status = true;
+      filter.start_date = { $gt: new Date() };
+    } else if (normalizedStatus === "expired") {
+      filter.end_date = { $lt: new Date() };
+    } else if (normalizedStatus === "out_of_usage") {
+      filter.quantity = { $lte: 0 };
     }
   }
 
@@ -82,18 +109,36 @@ const buildVoucherFilter = (query = {}) => {
     }
   }
 
+  if (!isMissing(apply_scope)) {
+    const normalizedApplyScope = parseVoucherApplyScope(apply_scope, null);
+    if (normalizedApplyScope) {
+      filter.apply_scope = normalizedApplyScope;
+    }
+  }
+
   const keyword = (q ?? search ?? "").trim();
 
   if (!isMissing(keyword)) {
     filter.$or = [
       { code: { $regex: keyword, $options: "i" } },
-      { discount_type: { $regex: keyword, $options: "i" } },
+      { name: { $regex: keyword, $options: "i" } },
     ];
   }
 
   return {
     filter,
   };
+};
+
+const buildVoucherSort = (query = {}) => {
+  const sortBy = String(query.sort_by ?? query.sort ?? "created_at").trim().toLowerCase();
+  const direction = String(query.sort_order ?? query.order ?? "desc").trim().toLowerCase() === "asc" ? 1 : -1;
+
+  if (["end_date", "usage_count", "created_at"].includes(sortBy)) {
+    return { [sortBy]: direction };
+  }
+
+  return { created_at: -1 };
 };
 
 const ensureVoucherCodeIsUnique = async (code, excludeId = null) => {
@@ -124,17 +169,25 @@ const buildPagination = ({ page, limit }) => {
 
 const prepareCreatePayload = (payload) => {
   const normalizedPayload = normalizeVoucherPayload(payload, {
+    name: "",
     min_order: 0,
+    usage_count: 0,
+    apply_scope: "order",
     status: true,
   });
+  const quantity = Number(normalizedPayload.quantity);
 
   return {
     ...normalizedPayload,
     code: normalizeVoucherCode(normalizedPayload.code),
+    name: isMissing(normalizedPayload.name) ? "" : String(normalizedPayload.name).trim(),
     discount_type: parseVoucherDiscountType(normalizedPayload.discount_type, "percent"),
     discount_value: Number(normalizedPayload.discount_value),
     min_order: Number(normalizedPayload.min_order ?? 0),
-    quantity: Number(normalizedPayload.quantity),
+    quantity,
+    usage_limit: Number(normalizedPayload.usage_limit ?? quantity),
+    usage_count: Number(normalizedPayload.usage_count ?? 0),
+    apply_scope: parseVoucherApplyScope(normalizedPayload.apply_scope, "order"),
     start_date: new Date(normalizedPayload.start_date),
     end_date: new Date(normalizedPayload.end_date),
     status: parseVoucherStatus(normalizedPayload.status, true),
@@ -146,6 +199,10 @@ const prepareUpdatePayload = (payload) => {
 
   if (Object.prototype.hasOwnProperty.call(payload, "code")) {
     updatePayload.code = normalizeVoucherCode(payload.code);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "name")) {
+    updatePayload.name = isMissing(payload.name) ? "" : String(payload.name).trim();
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "discount_type")) {
@@ -165,6 +222,18 @@ const prepareUpdatePayload = (payload) => {
 
   if (Object.prototype.hasOwnProperty.call(payload, "quantity")) {
     updatePayload.quantity = Number(payload.quantity);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_limit")) {
+    updatePayload.usage_limit = Number(payload.usage_limit);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "usage_count")) {
+    updatePayload.usage_count = Number(payload.usage_count);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "apply_scope")) {
+    updatePayload.apply_scope = parseVoucherApplyScope(payload.apply_scope, "order");
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "start_date")) {
@@ -210,20 +279,22 @@ const buildVoucherVerificationResponse = (voucher, orderAmount = null) => {
 
 export const listVouchers = async (query = {}) => {
   const { filter } = buildVoucherFilter(query);
+  const sort = buildVoucherSort(query);
   const shouldPaginate = query.page !== undefined || query.limit !== undefined;
 
   if (!shouldPaginate) {
-    return Voucher.find(filter).sort({ created_at: -1 });
+    const vouchers = await Voucher.find(filter).sort(sort);
+    return vouchers.map(toVoucherListItem);
   }
 
   const { currentPage, pageSize, skip } = buildPagination(query);
   const [vouchers, totalItems] = await Promise.all([
-    Voucher.find(filter).sort({ created_at: -1 }).skip(skip).limit(pageSize),
+    Voucher.find(filter).sort(sort).skip(skip).limit(pageSize),
     Voucher.countDocuments(filter),
   ]);
 
   return {
-    data: vouchers,
+    data: vouchers.map(toVoucherListItem),
     pagination: {
       page: currentPage,
       limit: pageSize,
@@ -402,6 +473,7 @@ export const consumeVoucherQuantityService = async ({
     {
       $inc: {
         quantity: -consumeQuantity,
+        usage_count: consumeQuantity,
       },
     },
     { new: true, runValidators: true }
