@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
-import Booking from "../models/Booking.js";
 import Voucher from "../models/Voucher.js";
+import VoucherUsage from "../models/VoucherUsage.js";
 import User from "../models/User.js";
 import {
   normalizeVoucherPayload,
@@ -135,10 +135,10 @@ const checkVoucherScope = (voucher, context, user) => {
 const countVoucherUsageByUser = async ({ voucherId, userId, session = null }) => {
   if (!voucherId || !userId) return 0;
 
-  return Booking.countDocuments({
+  return VoucherUsage.countDocuments({
     user_id: userId,
-    "voucher.voucher_id": voucherId,
-    status: { $ne: "cancelled" },
+    voucher_id: voucherId,
+    payment_status: "paid",
   }).session(session);
 };
 

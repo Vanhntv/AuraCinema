@@ -5,6 +5,7 @@ import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
 import Voucher from "../models/Voucher.js";
+import VoucherUsage from "../models/VoucherUsage.js";
 import { verifyVoucherService } from "../services/voucherService.js";
 
 const normalizeText = (value = "") =>
@@ -208,6 +209,7 @@ export const createBooking = async (req, res) => {
       const subtotalPrice = seatTotalPrice + comboTotalPrice;
       let discountAmount = 0;
       let voucherSnapshot = undefined;
+      let voucherUsagePayload = null;
 
       if (voucherCode) {
         const voucherResult = await verifyVoucherService({
@@ -256,6 +258,21 @@ export const createBooking = async (req, res) => {
           discount_amount: discountAmount,
           apply_scope: voucherResult.voucher.apply_scope,
         };
+
+        voucherUsagePayload = {
+          voucher_id: voucherResult.voucher.id,
+          user_id: user._id,
+          code: voucherResult.voucher.code,
+          discount_type: voucherResult.voucher.discount_type,
+          discount_value: Number(voucherResult.voucher.discount_value || 0),
+          apply_scope: voucherResult.voucher.apply_scope,
+          subtotal_price: subtotalPrice,
+          eligible_amount: Number(voucherResult.eligible_amount || 0),
+          discount_amount: discountAmount,
+          final_price: Math.max(subtotalPrice - discountAmount, 0),
+          payment_status: "paid",
+          used_at: new Date(),
+        };
       }
 
       const totalPrice = Math.max(subtotalPrice - discountAmount, 0);
@@ -272,6 +289,13 @@ export const createBooking = async (req, res) => {
         discount_amount: discountAmount,
         total_price: totalPrice,
       }], { session });
+
+      if (voucherUsagePayload) {
+        await VoucherUsage.create([{
+          ...voucherUsagePayload,
+          booking_id: createdBooking._id,
+        }], { session });
+      }
     });
 
     return res.status(201).json({ success: true, message: "Đặt vé thành công", data: createdBooking });
