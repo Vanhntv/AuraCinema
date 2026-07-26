@@ -16,3 +16,8 @@ export const createGift = async (data) => {
   const response = await axiosClient.post(API_URL, data);
   return response.data;
 };
+
+export const updateGift = async (id, data) => {
+  const response = await axiosClient.put(`${API_URL}/${id}`, data);
+  return response.data;
+};

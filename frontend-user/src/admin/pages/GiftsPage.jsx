@@ -12,7 +12,7 @@ import {
   HiOutlineX,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
-import { createGift, getGiftById, getGifts } from "../services/giftService";
+import { createGift, getGiftById, getGifts, updateGift } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -63,6 +63,14 @@ const formatDateTime = (value) => {
     month: "2-digit",
     year: "numeric",
   });
+};
+
+const toDateTimeLocalValue = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return offsetDate.toISOString().slice(0, 16);
 };
 
 const formatGiftValue = (gift) => {
@@ -225,15 +233,37 @@ const emptyGiftForm = {
   status: "active",
 };
 
-const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
+const buildGiftFormFromGift = (gift) => ({
+  name: gift?.name || "",
+  code: gift?.code || "",
+  description: gift?.description || "",
+  image_url: gift?.image_url || "",
+  type: gift?.type || "ticket",
+  value_label: gift?.value_label || "",
+  value: gift?.value ?? "",
+  quantity: gift?.quantity ?? "",
+  min_order: gift?.condition?.min_order ?? "",
+  member_tier: gift?.condition?.member_tier || "",
+  birthday: Boolean(gift?.condition?.birthday),
+  campaign: gift?.condition?.campaign || "",
+  condition_note: gift?.condition?.note || "",
+  start_date: toDateTimeLocalValue(gift?.start_date),
+  end_date: toDateTimeLocalValue(gift?.end_date),
+  status: gift?.status || "active",
+});
+
+const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = null }) => {
   const [formData, setFormData] = useState(emptyGiftForm);
   const [errors, setErrors] = useState({});
+  const isEditMode = Boolean(initialData?._id);
+  const issuedQuantity = Number(initialData?.issued_quantity || 0);
+  const isIssuedGift = isEditMode && issuedQuantity > 0;
 
   useEffect(() => {
     if (!isOpen) return;
-    setFormData(emptyGiftForm);
+    setFormData(initialData ? buildGiftFormFromGift(initialData) : emptyGiftForm);
     setErrors({});
-  }, [isOpen]);
+  }, [initialData, isOpen]);
 
   if (!isOpen) return null;
 
@@ -254,21 +284,21 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
     const imagePattern = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i;
 
     if (!formData.name.trim()) nextErrors.name = "Tên quà là bắt buộc";
-    if (!/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
+    if (!isIssuedGift && !/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
       nextErrors.code = "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự";
     }
-    if (!formData.value_label.trim() && (!Number.isFinite(value) || value <= 0)) {
+    if (!isIssuedGift && !formData.value_label.trim() && (!Number.isFinite(value) || value <= 0)) {
       nextErrors.value_label = "Vui lòng nhập giá trị quà";
     }
-    if (["voucher", "point"].includes(formData.type) && (!Number.isFinite(value) || value <= 0)) {
+    if (!isIssuedGift && ["voucher", "point"].includes(formData.type) && (!Number.isFinite(value) || value <= 0)) {
       nextErrors.value = formData.type === "point"
         ? "Quà điểm thưởng phải có số điểm lớn hơn 0"
         : "Quà voucher phải có giá trị lớn hơn 0";
     }
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (!isIssuedGift && (!Number.isInteger(quantity) || quantity <= 0)) {
       nextErrors.quantity = "Tổng số lượng phải là số nguyên lớn hơn 0";
     }
-    if (minOrder !== null && (!Number.isFinite(minOrder) || minOrder < 0)) {
+    if (!isIssuedGift && minOrder !== null && (!Number.isFinite(minOrder) || minOrder < 0)) {
       nextErrors.min_order = "Đơn tối thiểu không hợp lệ";
     }
     if (!formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
@@ -288,7 +318,16 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
     event.preventDefault();
     if (!validate()) return;
 
-    onSubmit({
+    const issuedGiftPayload = {
+      name: formData.name.trim(),
+      description: formData.description.trim(),
+      image_url: formData.image_url.trim(),
+      start_date: formData.start_date,
+      end_date: formData.end_date,
+      status: formData.status,
+    };
+
+    const fullPayload = {
       name: formData.name.trim(),
       code: formData.code.trim().toUpperCase(),
       description: formData.description.trim(),
@@ -307,14 +346,16 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
       start_date: formData.start_date,
       end_date: formData.end_date,
       status: formData.status,
-    });
+    };
+
+    onSubmit(isIssuedGift ? issuedGiftPayload : fullPayload);
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Thêm quà tặng</h2>
+          <h2 className="modal-title">{isEditMode ? "Chỉnh sửa quà tặng" : "Thêm quà tặng"}</h2>
           <button type="button" className="modal-close" onClick={onClose}>
             <HiOutlineX />
           </button>
@@ -324,6 +365,11 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
           <div className="modal-body voucher-form">
             <section className="voucher-form-section">
               <h3>Thông tin cơ bản</h3>
+              {isIssuedGift && (
+                <p className="form-hint">
+                  Quà đã phát {issuedQuantity.toLocaleString("vi-VN")} lượt nên chỉ có thể sửa tên, mô tả, hình ảnh, trạng thái và thời gian.
+                </p>
+              )}
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Tên quà <span className="required">*</span></label>
@@ -332,7 +378,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Mã quà <span className="required">*</span></label>
-                  <input className={`form-input ${errors.code ? "error" : ""}`} value={formData.code} onChange={(event) => handleChange("code", event.target.value.toUpperCase())} />
+                  <input className={`form-input ${errors.code ? "error" : ""}`} value={formData.code} onChange={(event) => handleChange("code", event.target.value.toUpperCase())} disabled={isIssuedGift} />
                   {errors.code && <p className="form-error">{errors.code}</p>}
                 </div>
               </div>
@@ -348,7 +394,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Loại quà <span className="required">*</span></label>
-                  <select className="form-input" value={formData.type} onChange={(event) => handleChange("type", event.target.value)}>
+                  <select className="form-input" value={formData.type} onChange={(event) => handleChange("type", event.target.value)} disabled={isIssuedGift}>
                     <option value="ticket">Vé</option>
                     <option value="combo">Combo</option>
                     <option value="voucher">Voucher</option>
@@ -364,17 +410,17 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Giá trị hiển thị <span className="required">*</span></label>
-                  <input className={`form-input ${errors.value_label ? "error" : ""}`} placeholder="Combo Big, Voucher 50.000 VNĐ, 500 điểm" value={formData.value_label} onChange={(event) => handleChange("value_label", event.target.value)} />
+                  <input className={`form-input ${errors.value_label ? "error" : ""}`} placeholder="Combo Big, Voucher 50.000 VNĐ, 500 điểm" value={formData.value_label} onChange={(event) => handleChange("value_label", event.target.value)} disabled={isIssuedGift} />
                   {errors.value_label && <p className="form-error">{errors.value_label}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Giá trị quy đổi</label>
-                  <input className={`form-input ${errors.value ? "error" : ""}`} type="number" min="0" value={formData.value} onChange={(event) => handleChange("value", event.target.value)} />
+                  <input className={`form-input ${errors.value ? "error" : ""}`} type="number" min="0" value={formData.value} onChange={(event) => handleChange("value", event.target.value)} disabled={isIssuedGift} />
                   {errors.value && <p className="form-error">{errors.value}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Tổng số lượng <span className="required">*</span></label>
-                  <input className={`form-input ${errors.quantity ? "error" : ""}`} type="number" min="1" value={formData.quantity} onChange={(event) => handleChange("quantity", event.target.value)} />
+                  <input className={`form-input ${errors.quantity ? "error" : ""}`} type="number" min="1" value={formData.quantity} onChange={(event) => handleChange("quantity", event.target.value)} disabled={isIssuedGift} />
                   {errors.quantity && <p className="form-error">{errors.quantity}</p>}
                 </div>
               </div>
@@ -385,12 +431,12 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Đơn tối thiểu</label>
-                  <input className={`form-input ${errors.min_order ? "error" : ""}`} type="number" min="0" placeholder="300000" value={formData.min_order} onChange={(event) => handleChange("min_order", event.target.value)} />
+                  <input className={`form-input ${errors.min_order ? "error" : ""}`} type="number" min="0" placeholder="300000" value={formData.min_order} onChange={(event) => handleChange("min_order", event.target.value)} disabled={isIssuedGift} />
                   {errors.min_order && <p className="form-error">{errors.min_order}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Hạng thành viên</label>
-                  <select className="form-input" value={formData.member_tier} onChange={(event) => handleChange("member_tier", event.target.value)}>
+                  <select className="form-input" value={formData.member_tier} onChange={(event) => handleChange("member_tier", event.target.value)} disabled={isIssuedGift}>
                     <option value="">Không yêu cầu</option>
                     <option value="member">Member</option>
                     <option value="gold">Gold</option>
@@ -400,18 +446,18 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Chương trình</label>
-                  <input className="form-input" placeholder="Sinh nhật Aura, Khách Gold..." value={formData.campaign} onChange={(event) => handleChange("campaign", event.target.value)} />
+                  <input className="form-input" placeholder="Sinh nhật Aura, Khách Gold..." value={formData.campaign} onChange={(event) => handleChange("campaign", event.target.value)} disabled={isIssuedGift} />
                 </div>
               </div>
               <div className="segmented-options">
                 <label>
-                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} />
+                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} disabled={isIssuedGift} />
                   Sinh nhật
                 </label>
               </div>
               <div className="form-group">
                 <label className="form-label">Ghi chú điều kiện</label>
-                <textarea className="form-input form-textarea" placeholder="Ví dụ: Đơn trên 300.000 VNĐ, khách Gold, sinh nhật..." value={formData.condition_note} onChange={(event) => handleChange("condition_note", event.target.value)} />
+                <textarea className="form-input form-textarea" placeholder="Ví dụ: Đơn trên 300.000 VNĐ, khách Gold, sinh nhật..." value={formData.condition_note} onChange={(event) => handleChange("condition_note", event.target.value)} disabled={isIssuedGift} />
               </div>
             </section>
 
@@ -441,7 +487,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit }) => {
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Hủy bỏ</button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : "Tạo quà tặng"}</button>
+            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo quà tặng"}</button>
           </div>
         </form>
       </div>
@@ -465,6 +511,7 @@ const GiftsPage = () => {
   const [detailGift, setDetailGift] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editGift, setEditGift] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const addToast = useCallback((type, message) => {
@@ -541,6 +588,18 @@ const GiftsPage = () => {
     }
   };
 
+  const handleEditGift = async (gift) => {
+    try {
+      setDetailLoading(true);
+      const response = await getGiftById(gift._id);
+      setEditGift(response.data);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể tải quà tặng để chỉnh sửa");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const handleCreateGift = async (payload) => {
     try {
       setSubmitting(true);
@@ -550,6 +609,22 @@ const GiftsPage = () => {
       fetchGifts(1);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể tạo quà tặng");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateGift = async (payload) => {
+    if (!editGift?._id) return;
+
+    try {
+      setSubmitting(true);
+      const response = await updateGift(editGift._id, payload);
+      addToast("success", response.message || "Cập nhật quà tặng thành công.");
+      setEditGift(null);
+      fetchGifts(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể cập nhật quà tặng");
     } finally {
       setSubmitting(false);
     }
@@ -698,7 +773,7 @@ const GiftsPage = () => {
                               <button className="btn btn-icon btn-ghost" title="Xem chi tiết" onClick={() => handleViewDetail(gift)}>
                                 <HiOutlineEye />
                               </button>
-                              <button className="btn btn-icon btn-ghost" title="Chỉnh sửa" disabled>
+                              <button className="btn btn-icon btn-ghost" title="Chỉnh sửa" onClick={() => handleEditGift(gift)}>
                                 <HiOutlinePencil />
                               </button>
                               <button className="btn btn-icon btn-ghost" title={gift.status === "active" ? "Tạm dừng" : "Kích hoạt"} disabled>
@@ -757,6 +832,14 @@ const GiftsPage = () => {
         isLoading={submitting}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateGift}
+      />
+
+      <GiftCreateModal
+        isOpen={Boolean(editGift)}
+        isLoading={submitting}
+        onClose={() => setEditGift(null)}
+        onSubmit={handleUpdateGift}
+        initialData={editGift}
       />
     </>
   );

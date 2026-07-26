@@ -6,6 +6,14 @@ const isMissing = (value) => value === undefined || value === null || value === 
 const GIFT_TYPES = ["ticket", "combo", "voucher", "point", "physical"];
 const GIFT_STATUSES = ["draft", "active", "paused", "cancelled"];
 const IMAGE_URL_PATTERN = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i;
+const ISSUED_GIFT_EDITABLE_FIELDS = new Set([
+  "name",
+  "description",
+  "image_url",
+  "status",
+  "start_date",
+  "end_date",
+]);
 
 const giftTypeLabels = {
   ticket: "Vé miễn phí",
@@ -177,6 +185,90 @@ export const prepareGiftCreatePayload = (payload = {}, user = null) => {
   };
 };
 
+const prepareGiftUpdatePayload = (payload = {}, user = null) => {
+  const updatePayload = {};
+
+  if (Object.prototype.hasOwnProperty.call(payload, "code")) {
+    updatePayload.code = normalizeGiftCode(payload.code);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "name")) {
+    updatePayload.name = String(payload.name || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "description")) {
+    updatePayload.description = String(payload.description || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "image_url")) {
+    updatePayload.image_url = String(payload.image_url || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "type")) {
+    updatePayload.type = parseGiftType(payload.type) || "";
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "value")) {
+    updatePayload.value = isMissing(payload.value) ? 0 : Number(payload.value);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "value_label")) {
+    updatePayload.value_label = String(payload.value_label || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "quantity")) {
+    updatePayload.quantity = Number(payload.quantity);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "condition")) {
+    updatePayload.condition = normalizeGiftCondition(payload.condition);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "start_date")) {
+    updatePayload.start_date = new Date(payload.start_date);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "end_date")) {
+    updatePayload.end_date = new Date(payload.end_date);
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "status")) {
+    updatePayload.status = parseGiftStatus(payload.status);
+  }
+  if (user?.id || user?._id) {
+    updatePayload.updated_by = user.id || user._id;
+  }
+
+  return updatePayload;
+};
+
+const validateIssuedGiftUpdatePayload = (payload) => {
+  if (Object.prototype.hasOwnProperty.call(payload, "name") && !payload.name) {
+    return "Tên quà là bắt buộc.";
+  }
+
+  if (payload.image_url && !IMAGE_URL_PATTERN.test(payload.image_url)) {
+    return "Ảnh quà tặng phải là URL ảnh jpg, jpeg, png, webp hoặc gif.";
+  }
+
+  if (
+    payload.start_date &&
+    (!payload.end_date || Number.isNaN(payload.end_date.getTime()))
+  ) {
+    return "Ngày kết thúc không hợp lệ.";
+  }
+
+  if (
+    payload.end_date &&
+    (!payload.start_date || Number.isNaN(payload.start_date.getTime()))
+  ) {
+    return "Ngày bắt đầu không hợp lệ.";
+  }
+
+  if (payload.start_date && Number.isNaN(payload.start_date.getTime())) {
+    return "Ngày bắt đầu không hợp lệ.";
+  }
+
+  if (payload.end_date && Number.isNaN(payload.end_date.getTime())) {
+    return "Ngày kết thúc không hợp lệ.";
+  }
+
+  if (payload.start_date && payload.end_date && payload.end_date <= payload.start_date) {
+    return "Ngày kết thúc phải sau ngày bắt đầu.";
+  }
+
+  return null;
+};
+
 const buildGiftFilter = (query = {}) => {
   const { q, search, type, status, stock } = query;
   const normalizedStatus = isMissing(status) ? "" : String(status).trim().toLowerCase();
@@ -292,6 +384,100 @@ export const createGiftService = async (payload, user = null) => {
   return Gift.findOne({ _id: createdGift._id, deleted_at: null })
     .populate("created_by", "full_name email")
     .populate("updated_by", "full_name email");
+};
+
+export const updateGiftService = async (id, payload, user = null) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error("Quà tặng không hợp lệ.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existingGift = await Gift.findOne({ _id: id, deleted_at: null });
+  if (!existingGift) {
+    const error = new Error("Quà tặng không tồn tại.");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const issuedQuantity = Number(existingGift.issued_quantity || 0);
+  const normalizedPayload = prepareGiftUpdatePayload(payload, user);
+
+  if (issuedQuantity > 0) {
+    const blockedFields = Object.keys(payload).filter(
+      (field) => !ISSUED_GIFT_EDITABLE_FIELDS.has(field),
+    );
+
+    if (blockedFields.length > 0) {
+      const error = new Error(
+        `Quà tặng đã phát, không thể cập nhật các trường: ${blockedFields.join(", ")}.`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const nextState = {
+      ...existingGift.toObject(),
+      ...normalizedPayload,
+    };
+
+    const validationError = validateIssuedGiftUpdatePayload({
+      ...normalizedPayload,
+      start_date: nextState.start_date,
+      end_date: nextState.end_date,
+    });
+
+    if (validationError) {
+      const error = new Error(validationError);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const updatedGift = await Gift.findOneAndUpdate(
+      { _id: id, deleted_at: null },
+      normalizedPayload,
+      { new: true, runValidators: true },
+    )
+      .populate("created_by", "full_name email")
+      .populate("updated_by", "full_name email");
+
+    return updatedGift;
+  }
+
+  const nextGiftState = {
+    ...existingGift.toObject(),
+    ...normalizedPayload,
+  };
+  const nextQuantity = Number(nextGiftState.quantity || 0);
+  const nextIssuedQuantity = Number(nextGiftState.issued_quantity || 0);
+  nextGiftState.remaining_quantity = Math.max(nextQuantity - nextIssuedQuantity, 0);
+
+  const validationError = await validateGiftPayload(nextGiftState, {
+    isCodeTaken: async (code) =>
+      Boolean(await Gift.findOne({
+        code,
+        deleted_at: null,
+        _id: { $ne: id },
+      })),
+  });
+
+  if (validationError) {
+    const error = new Error(validationError);
+    error.statusCode = validationError.includes("đã tồn tại") ? 409 : 400;
+    throw error;
+  }
+
+  normalizedPayload.remaining_quantity = nextGiftState.remaining_quantity;
+
+  const updatedGift = await Gift.findOneAndUpdate(
+    { _id: id, deleted_at: null },
+    normalizedPayload,
+    { new: true, runValidators: true },
+  )
+    .populate("created_by", "full_name email")
+    .populate("updated_by", "full_name email");
+
+  return updatedGift;
 };
 
 export const getGiftByIdService = async (id) => {
