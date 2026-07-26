@@ -37,7 +37,7 @@ function PriceTable({ table }) {
         </div>
       </div>
 
-      <div className="hidden border-b border-white/10 px-6 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 md:grid md:grid-cols-[1.4fr_1fr_1fr_0.9fr] md:gap-4">
+      <div className="hidden border-b border-white/10 px-6 py-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 md:grid md:grid-cols-[1.3fr_1fr_1fr_1fr] md:gap-4">
         {table.columns.map((column) => (
           <div key={column}>{column}</div>
         ))}
@@ -47,13 +47,14 @@ function PriceTable({ table }) {
         {table.rows.map((row) => (
           <div
             key={`${table.name}-${row.label}`}
-            className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[1.4fr_1fr_1fr_0.9fr] md:items-center md:gap-4"
+            className="grid gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-[1.3fr_1fr_1fr_1fr] md:items-center md:gap-4"
           >
             <div>
               <div className="text-base font-extrabold text-white">{row.label}</div>
-              <div className="mt-1 text-sm text-slate-400 md:hidden">
+              <div className="mt-1 text-sm leading-6 text-slate-400 md:hidden">
                 {table.columns[1]}: {row.weekday}
                 {table.currency} · {table.columns[2]}: {row.weekend}
+                {table.currency} · {table.columns[3]}: {row.holiday}
                 {table.currency}
               </div>
             </div>
@@ -68,8 +69,9 @@ function PriceTable({ table }) {
               <span className="ml-1 text-sm font-semibold text-slate-400">{table.currency}</span>
             </div>
 
-            <div className="justify-self-start rounded-full border border-white/10 bg-[#0f141c] px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[#ffb4bb]">
-              {row.badge}
+            <div className="hidden text-lg font-black text-white md:block">
+              {row.holiday}
+              <span className="ml-1 text-sm font-semibold text-slate-400">{table.currency}</span>
             </div>
           </div>
         ))}
@@ -103,7 +105,7 @@ function CardGrid({ title, items }) {
   return (
     <section className="rounded-[28px] border border-white/10 bg-[#111823] p-6">
       <h2 className="text-2xl font-black uppercase text-white">{title}</h2>
-      <div className="mt-5 grid gap-4 md:grid-cols-3">
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
         {items.map((item) => (
           <article key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <h3 className="text-lg font-extrabold text-white">{item.title}</h3>
@@ -126,8 +128,7 @@ function TicketPricePage() {
     rules,
     paymentWarnings,
     terms,
-  } =
-    ticketPriceData;
+  } = ticketPriceData;
 
   return (
     <main className="bg-[#0f141c] px-4 py-10 text-white sm:px-6 lg:px-8">
