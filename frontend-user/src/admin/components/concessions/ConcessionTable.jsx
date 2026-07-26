@@ -21,6 +21,13 @@ const formatDate = (value) => {
   });
 };
 
+const typeLabels = {
+  combo: "Combo",
+  popcorn: "Bắp",
+  drink: "Nước",
+  snack: "Snack",
+};
+
 const resolveImageUrl = (image) => {
   if (!image) return "";
   if (/^https?:\/\//i.test(image)) return image;
@@ -39,6 +46,7 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
             <th style={{ width: "58px" }}>#</th>
             <th style={{ width: "92px" }}>Ảnh</th>
             <th>Dịch vụ</th>
+            <th style={{ width: "120px" }}>Loại</th>
             <th style={{ width: "150px" }}>Giá bán</th>
             <th style={{ width: "110px" }}>Tồn kho</th>
             <th style={{ width: "150px" }}>Trạng thái</th>
@@ -48,7 +56,7 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan="7">
+              <td colSpan="8">
                 <div className="table-empty">
                   <div className="table-empty-icon">BN</div>
                   <div className="table-empty-text">Chưa có dịch vụ phù hợp</div>
@@ -78,6 +86,11 @@ const ConcessionTable = ({ items, rowStart = 0, onToggleStatus }) => {
                   <div className="table-cell-desc">
                     {item.description || "Chưa có mô tả"}
                   </div>
+                </td>
+                <td>
+                  <span className="status-badge status-coming-soon">
+                    {typeLabels[item.type] || "Combo"}
+                  </span>
                 </td>
                 <td className="concession-price">{formatCurrency(item.price)}</td>
                 <td>{Number(item.stock || 0)}</td>

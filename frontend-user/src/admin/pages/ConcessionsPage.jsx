@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineShoppingBag,
@@ -7,8 +8,10 @@ import {
   HiOutlineTrendingUp,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
+import ConcessionModal from "../components/concessions/ConcessionModal";
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
+  createConcession,
   getConcessions,
   updateConcessionStatus,
 } from "../services/concessionService";
@@ -18,12 +21,15 @@ const PAGE_SIZE = 10;
 const ConcessionsPage = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [toasts, setToasts] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const activeCount = useMemo(
     () => items.filter((item) => item.status).length,
@@ -50,6 +56,7 @@ const ConcessionsPage = () => {
         const params = {
           q: overrides.q ?? searchQuery.trim(),
           status: overrides.status ?? statusFilter,
+          type: overrides.type ?? typeFilter,
           page,
           limit: PAGE_SIZE,
         };
@@ -74,7 +81,7 @@ const ConcessionsPage = () => {
         setLoading(false);
       }
     },
-    [addToast, searchQuery, statusFilter],
+    [addToast, searchQuery, statusFilter, typeFilter],
   );
 
   useEffect(() => {
@@ -91,6 +98,29 @@ const ConcessionsPage = () => {
     const value = event.target.value;
     setStatusFilter(value);
     fetchConcessions(1, { status: value });
+  };
+
+  const handleTypeFilter = (event) => {
+    const value = event.target.value;
+    setTypeFilter(value);
+    fetchConcessions(1, { type: value });
+  };
+
+  const handleCreate = async (formData, name) => {
+    try {
+      setSubmitting(true);
+      await createConcession(formData);
+      addToast("success", `Đã thêm dịch vụ "${name}"`);
+      setIsModalOpen(false);
+      fetchConcessions(1);
+    } catch (error) {
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể thêm dịch vụ bắp nước",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleToggleStatus = async (item) => {
@@ -117,6 +147,10 @@ const ConcessionsPage = () => {
           <p>Quản lý danh sách dịch vụ ăn uống đang kinh doanh tại AuraCinema</p>
         </div>
         <div className="page-actions">
+          <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+            <HiOutlinePlus />
+            Thêm dịch vụ
+          </button>
           <button
             className="btn btn-secondary"
             onClick={() => fetchConcessions(currentPage)}
@@ -183,6 +217,17 @@ const ConcessionsPage = () => {
           <div className="table-toolbar-left">
             <select
               className="user-filter-select"
+              value={typeFilter}
+              onChange={handleTypeFilter}
+            >
+              <option value="">Tất cả loại</option>
+              <option value="popcorn">Bắp</option>
+              <option value="drink">Nước</option>
+              <option value="snack">Snack</option>
+              <option value="combo">Combo</option>
+            </select>
+            <select
+              className="user-filter-select"
               value={statusFilter}
               onChange={handleStatusFilter}
             >
@@ -227,6 +272,13 @@ const ConcessionsPage = () => {
           </>
         )}
       </div>
+
+      <ConcessionModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleCreate}
+        isLoading={submitting}
+      />
 
       <Toast toasts={toasts} onRemove={removeToast} />
     </>
