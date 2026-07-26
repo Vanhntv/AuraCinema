@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 import "dotenv/config";
 
 import { connectDB } from "./config/db.js";
@@ -18,12 +19,14 @@ import vouchersRoute from "./router/vouchersRouters.js";
 import bookingsRoute from "./router/bookingsRouters.js";
 import usersRoute from "./router/usersRouters.js";
 import settingsRoute from "./router/settingsRouters.js";
+import combosRoute from "./router/combosRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.use("/api/genres", genresRoute);
 app.use("/api/movies", moviesRoute);
@@ -43,6 +46,16 @@ app.use("/api/vouchers", vouchersRoute);
 app.use("/api/bookings", bookingsRoute);
 app.use("/api/users", usersRoute);
 app.use("/api/settings", settingsRoute);
+app.use("/api/combos", combosRoute);
+
+app.use((error, req, res, next) => {
+  const statusCode = error.statusCode || 500;
+
+  return res.status(statusCode).json({
+    success: false,
+    message: error.message || "Internal Server Error",
+  });
+});
 
 connectDB().then(() => {
   const server = app.listen(PORT, () => {
