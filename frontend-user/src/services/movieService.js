@@ -13,3 +13,14 @@ export async function getMovies(params = {}) {
   const result = await response.json()
   return result.data || []
 }
+
+export async function getMovieById(movieId) {
+  const response = await fetch(`${API_BASE_URL}/movies/${movieId}`)
+
+  if (!response.ok) {
+    throw new Error('Không thể tải chi tiết phim')
+  }
+
+  const result = await response.json()
+  return result.data || null
+}
