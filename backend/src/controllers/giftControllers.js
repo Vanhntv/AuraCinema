@@ -1,5 +1,6 @@
 import {
   createGiftService,
+  deleteGiftService,
   getGiftByIdService,
   listGifts,
   toggleGiftStatusService,
@@ -87,6 +88,23 @@ export const toggleGiftStatus = async (req, res) => {
         ? "Kích hoạt quà tặng thành công."
         : "Tạm dừng quà tặng thành công.",
       data: gift,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
+export const deleteGift = async (req, res) => {
+  try {
+    const result = await deleteGiftService(req.params.id, req.user);
+
+    return res.status(200).json({
+      success: true,
+      message: result.message,
+      data: {
+        deletion_type: result.deletion_type,
+        gift: result.gift,
+      },
     });
   } catch (error) {
     return sendError(res, error);

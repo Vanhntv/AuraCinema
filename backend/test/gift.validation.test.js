@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  deriveGiftStatus,
+  getGiftDeletionType,
+  normalizeGiftForResponse,
   prepareGiftCreatePayload,
   validateGiftPayload,
 } from "../src/services/giftService.js";
@@ -92,4 +95,24 @@ test("validateGiftPayload rejects invalid image URL format", async () => {
   });
 
   assert.match(error, /URL ảnh jpg, jpeg, png, webp hoặc gif/);
+});
+
+test("getGiftDeletionType allows hard delete before issuing", () => {
+  assert.equal(getGiftDeletionType({ issued_quantity: 0 }), "hard");
+});
+
+test("getGiftDeletionType uses soft delete after issuing", () => {
+  assert.equal(getGiftDeletionType({ issued_quantity: 1 }), "soft");
+});
+
+test("normalizeGiftForResponse marks is_deleted gifts as cancelled", () => {
+  const gift = normalizeGiftForResponse({
+    ...prepareGiftCreatePayload(validGiftInput),
+    is_deleted: true,
+  });
+  const status = deriveGiftStatus(gift);
+
+  assert.equal(gift.is_deleted, true);
+  assert.equal(gift.computed_status, "cancelled");
+  assert.equal(status.value, "cancelled");
 });

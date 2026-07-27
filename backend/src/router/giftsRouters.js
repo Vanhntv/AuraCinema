@@ -1,6 +1,7 @@
 import express from "express";
 import {
   createGift,
+  deleteGift,
   getAllGifts,
   getGiftById,
   toggleGiftStatus,
@@ -16,5 +17,6 @@ router.get("/:id", adminOnly, getGiftById);
 router.post("/", adminOnly, createGift);
 router.put("/:id", adminOnly, updateGift);
 router.patch("/:id/status", adminOnly, toggleGiftStatus);
+router.delete("/:id", adminOnly, deleteGift);
 
 export default router;

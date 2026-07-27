@@ -22,6 +22,11 @@ export const updateGift = async (id, data) => {
   return response.data;
 };
 
+export const deleteGift = async (id) => {
+  const response = await axiosClient.delete(`${API_URL}/${id}`);
+  return response.data;
+};
+
 export const toggleGiftStatus = async (id) => {
   const response = await axiosClient.patch(`${API_URL}/${id}/status`);
   return response.data;

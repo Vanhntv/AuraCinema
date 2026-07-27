@@ -23,11 +23,18 @@ const giftTypeLabels = {
   physical: "Quà vật phẩm",
 };
 
+export const GIFT_MESSAGES = {
+  DELETED: "Xóa quà tặng thành công.",
+  DELETE_SOFT: "Quà tặng đã phát nên không xóa vật lý. Đã đánh dấu is_deleted=true.",
+  INVALID: "Quà tặng không hợp lệ.",
+  NOT_FOUND: "Quà tặng không tồn tại.",
+};
+
 export const deriveGiftStatus = (gift) => {
   const now = new Date();
   const data = typeof gift.toObject === "function" ? gift.toObject() : { ...gift };
 
-  if (data.deleted_at || data.status === "cancelled") {
+  if (data.is_deleted || data.deleted_at || data.status === "cancelled") {
     return { value: "cancelled", label: "Đã hủy" };
   }
 
@@ -62,6 +69,7 @@ export const normalizeGiftForResponse = (gift) => {
   const computedStatus = deriveGiftStatus({
     ...data,
     remaining_quantity: remainingQuantity,
+    is_deleted: Boolean(data.is_deleted),
   });
 
   return {
@@ -69,6 +77,7 @@ export const normalizeGiftForResponse = (gift) => {
     quantity,
     issued_quantity: issuedQuantity,
     remaining_quantity: remainingQuantity,
+    is_deleted: Boolean(data.is_deleted),
     value_label: data.value_label || "",
     type_label: giftTypeLabels[data.type] || data.type,
     computed_status: computedStatus.value,
@@ -274,7 +283,8 @@ const buildGiftFilter = (query = {}) => {
   const normalizedStatus = isMissing(status) ? "" : String(status).trim().toLowerCase();
   const now = new Date();
   const filter = {
-    deleted_at: normalizedStatus === "cancelled" ? { $ne: null } : null,
+    deleted_at: null,
+    is_deleted: normalizedStatus === "cancelled" ? true : { $ne: true },
   };
 
   const giftType = parseGiftType(type);
@@ -393,7 +403,7 @@ export const updateGiftService = async (id, payload, user = null) => {
     throw error;
   }
 
-  const existingGift = await Gift.findOne({ _id: id, deleted_at: null });
+  const existingGift = await Gift.findOne({ _id: id, deleted_at: null, is_deleted: { $ne: true } });
   if (!existingGift) {
     const error = new Error("Quà tặng không tồn tại.");
     error.statusCode = 404;
@@ -434,7 +444,7 @@ export const updateGiftService = async (id, payload, user = null) => {
     }
 
     const updatedGift = await Gift.findOneAndUpdate(
-      { _id: id, deleted_at: null },
+      { _id: id, deleted_at: null, is_deleted: { $ne: true } },
       normalizedPayload,
       { new: true, runValidators: true },
     )
@@ -470,7 +480,7 @@ export const updateGiftService = async (id, payload, user = null) => {
   normalizedPayload.remaining_quantity = nextGiftState.remaining_quantity;
 
   const updatedGift = await Gift.findOneAndUpdate(
-    { _id: id, deleted_at: null },
+    { _id: id, deleted_at: null, is_deleted: { $ne: true } },
     normalizedPayload,
     { new: true, runValidators: true },
   )
@@ -487,7 +497,7 @@ export const toggleGiftStatusService = async (id, user = null) => {
     throw error;
   }
 
-  const gift = await Gift.findOne({ _id: id, deleted_at: null });
+  const gift = await Gift.findOne({ _id: id, deleted_at: null, is_deleted: { $ne: true } });
   if (!gift) {
     const error = new Error("Quà tặng không tồn tại.");
     error.statusCode = 404;
@@ -512,6 +522,49 @@ export const toggleGiftStatusService = async (id, user = null) => {
   return gift;
 };
 
+export const getGiftDeletionType = (gift) =>
+  Number(gift?.issued_quantity || 0) > 0 ? "soft" : "hard";
+
+export const deleteGiftService = async (id, user = null) => {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    const error = new Error(GIFT_MESSAGES.INVALID);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const gift = await Gift.findOne({ _id: id, deleted_at: null, is_deleted: { $ne: true } });
+  if (!gift) {
+    const error = new Error(GIFT_MESSAGES.NOT_FOUND);
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (getGiftDeletionType(gift) === "soft") {
+    gift.is_deleted = true;
+    if (user?.id || user?._id) {
+      gift.updated_by = user.id || user._id;
+    }
+    await gift.save();
+
+    await gift.populate("created_by", "full_name email");
+    await gift.populate("updated_by", "full_name email");
+
+    return {
+      gift,
+      deletion_type: "soft",
+      message: GIFT_MESSAGES.DELETE_SOFT,
+    };
+  }
+
+  await Gift.deleteOne({ _id: id });
+
+  return {
+    gift,
+    deletion_type: "hard",
+    message: GIFT_MESSAGES.DELETED,
+  };
+};
+
 export const getGiftByIdService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     const error = new Error("Quà tặng không hợp lệ.");
@@ -519,7 +572,7 @@ export const getGiftByIdService = async (id) => {
     throw error;
   }
 
-  const gift = await Gift.findOne({ _id: id, deleted_at: null })
+  const gift = await Gift.findOne({ _id: id, deleted_at: null, is_deleted: { $ne: true } })
     .populate("created_by", "full_name email")
     .populate("updated_by", "full_name email");
 

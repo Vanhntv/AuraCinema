@@ -13,7 +13,7 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
-import { createGift, getGiftById, getGifts, toggleGiftStatus, updateGift } from "../services/giftService";
+import { createGift, deleteGift, getGiftById, getGifts, toggleGiftStatus, updateGift } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -514,6 +514,7 @@ const GiftsPage = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editGift, setEditGift] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
+  const [deletingGift, setDeletingGift] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   const addToast = useCallback((type, message) => {
@@ -643,6 +644,22 @@ const GiftsPage = () => {
       fetchGifts(currentPage);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái quà tặng");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmDeleteGift = async () => {
+    if (!deletingGift?._id) return;
+
+    try {
+      setSubmitting(true);
+      const response = await deleteGift(deletingGift._id);
+      addToast("success", response.message || "Xóa quà tặng thành công.");
+      setDeletingGift(null);
+      fetchGifts(currentPage);
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Không thể xóa quà tặng");
     } finally {
       setSubmitting(false);
     }
@@ -797,7 +814,7 @@ const GiftsPage = () => {
                               <button className="btn btn-icon btn-ghost" title={gift.status === "active" ? "Tạm dừng" : "Kích hoạt"} onClick={() => setStatusTarget(gift)}>
                                 {gift.status === "active" ? <HiOutlinePause /> : <HiOutlinePlay />}
                               </button>
-                              <button className="btn btn-icon btn-ghost btn-danger-text" title="Xóa" disabled>
+                              <button className="btn btn-icon btn-ghost btn-danger-text" title="Xóa" onClick={() => setDeletingGift(gift)}>
                                 <HiOutlineTrash />
                               </button>
                             </div>
@@ -872,6 +889,20 @@ const GiftsPage = () => {
         confirmClassName={statusTarget?.status === "active" ? "btn-danger" : "btn-primary"}
         onConfirm={handleConfirmToggleStatus}
         onCancel={() => setStatusTarget(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(deletingGift)}
+        title="Xóa quà tặng?"
+        message={
+          Number(deletingGift?.issued_quantity || 0) > 0
+            ? `Quà "${deletingGift?.code}" đã phát ${Number(deletingGift?.issued_quantity || 0).toLocaleString("vi-VN")} lượt nên hệ thống sẽ không xóa vật lý, chỉ đánh dấu is_deleted=true.`
+            : `Quà "${deletingGift?.code}" chưa phát lượt nào nên sẽ được xóa khỏi hệ thống.`
+        }
+        confirmLabel={submitting ? "Đang xóa..." : "Xóa quà"}
+        confirmClassName="btn-danger"
+        onConfirm={handleConfirmDeleteGift}
+        onCancel={() => setDeletingGift(null)}
       />
     </>
   );

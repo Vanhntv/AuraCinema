@@ -82,6 +82,10 @@ const giftSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    is_deleted: {
+      type: Boolean,
+      default: false,
+    },
     created_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updated_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },
