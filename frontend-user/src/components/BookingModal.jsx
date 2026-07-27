@@ -157,7 +157,7 @@ function isBookedSeat(seat) {
 }
 
 function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal" }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, login } = useAuth();
   const [dateOptions] = useState(buildDateOptions);
   const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
   const [showtimes, setShowtimes] = useState([]);
@@ -182,6 +182,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [voucherError, setVoucherError] = useState("");
   const [voucherMessage, setVoucherMessage] = useState("");
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [authForm, setAuthForm] = useState({ email: "", password: "" });
+  const [authError, setAuthError] = useState("");
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const initialShowtimeId = getShowtimeId(initialShowtime);
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
@@ -243,6 +247,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setAppliedVoucher(null);
     setVoucherError("");
     setVoucherMessage("");
+    setShowAuthPrompt(false);
+    setAuthForm({ email: "", password: "" });
+    setAuthError("");
   }, [movie?._id, initialShowtimeId]);
 
   useEffect(() => {
@@ -346,6 +353,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
   }, [holdExpiresAt]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    setShowAuthPrompt(false);
+    setAuthError("");
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const showtimeId = getShowtimeId(selectedShowtime);
@@ -574,6 +587,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const applyVoucher = async () => {
     if (!isAuthenticated) {
+      setShowAuthPrompt(true);
+      setAuthError("");
       setVoucherError("Vui lòng đăng nhập để áp dụng mã giảm giá.");
       return;
     }
@@ -625,14 +640,58 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setVoucherMessage("");
   };
 
-  const submitBooking = async () => {
-    if (!isAuthenticated) {
-      setSeatError("Vui lòng đăng nhập để đặt vé.");
-      return;
+  const syncSelectedSeatsBeforeSubmit = async () => {
+    const showtimeId = getShowtimeId(selectedShowtime);
+    const seatIds = selectedSeats.map((seat) => seat._id);
+
+    if (!showtimeId || !seatIds.length) return false;
+
+    try {
+      const latestSeatsResponse = await getShowtimeSeats(showtimeId);
+      const latestSeats = latestSeatsResponse?.data || [];
+      const latestSeatMap = new Map(latestSeats.map((seat) => [seat._id, seat]));
+      const unavailableSeat = seatIds.some((seatId) => {
+        const latestSeat = latestSeatMap.get(seatId);
+        return !latestSeat || isBookedSeat(latestSeat);
+      });
+
+      setShowtimeSeats(latestSeats);
+
+      if (unavailableSeat) {
+        setSeatError("Một số ghế vừa được đặt bởi người khác. Vui lòng chọn lại ghế.");
+        setSelectedSeats((current) =>
+          current.filter((seat) => {
+            const latestSeat = latestSeatMap.get(seat._id);
+            return latestSeat && !isBookedSeat(latestSeat);
+          }),
+        );
+        return false;
+      }
+
+      const holdResponse = await holdShowtimeSeats(showtimeId, seatIds);
+      setHoldExpiresAt(holdResponse.data.expires_at);
+      setSeatError("");
+      return true;
+    } catch (requestError) {
+      setSeatError(requestError.response?.data?.message || "Không thể kiểm tra trạng thái ghế mới nhất.");
+      try {
+        const latestSeats = await getShowtimeSeats(showtimeId);
+        setShowtimeSeats(latestSeats?.data || []);
+      } catch {
+        // Keep the validation message from the first request.
+      }
+      return false;
     }
+  };
+
+  const finalizeBooking = async () => {
     try {
       setIsSubmitting(true);
       setSeatError("");
+
+      const canContinue = await syncSelectedSeatsBeforeSubmit();
+      if (!canContinue) return;
+
       const response = await createBooking({
         showtime_id: getShowtimeId(selectedShowtime),
         showtime_seat_ids: selectedSeats.map((seat) => seat._id),
@@ -658,6 +717,42 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const submitBooking = async () => {
+    if (!selectedSeats.length || !selectedShowtime) return;
+
+    if (!isAuthenticated) {
+      setShowAuthPrompt(true);
+      setAuthError("");
+      setSeatError("");
+      return;
+    }
+
+    await finalizeBooking();
+  };
+
+  const handleAuthChange = (event) => {
+    const { name, value } = event.target;
+    setAuthForm((current) => ({ ...current, [name]: value }));
+    setAuthError("");
+  };
+
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault();
+    setAuthError("");
+    setIsAuthenticating(true);
+
+    try {
+      await login(authForm);
+      setShowAuthPrompt(false);
+      setAuthForm({ email: "", password: "" });
+      await finalizeBooking();
+    } catch (requestError) {
+      setAuthError(requestError.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.");
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
@@ -866,7 +961,40 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
               <p className="font-bold text-white">Thông tin người đặt</p>
               {isAuthenticated ? <><p className="text-slate-300">{user?.full_name}</p><p className="text-slate-400">{user?.email}</p><p className="text-slate-400">{user?.phone || "Chưa cập nhật số điện thoại"}</p></> : <p className="text-amber-200">Bạn cần đăng nhập trước khi đặt vé.</p>}
             </div>
-            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || !isAuthenticated || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+            {!isAuthenticated && showAuthPrompt && (
+              <form className="mt-4 grid gap-3 rounded-xl border border-[#ff6070]/20 bg-[#ff6070]/10 p-4" onSubmit={handleAuthSubmit}>
+                <div>
+                  <p className="text-sm font-black text-white">Đăng nhập để tiếp tục</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">Ghế đã chọn vẫn được giữ trong khi bạn đăng nhập.</p>
+                </div>
+                {authError && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">{authError}</p>}
+                <input
+                  autoComplete="email"
+                  className="h-10 rounded-full border border-white/10 bg-black/20 px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
+                  name="email"
+                  onChange={handleAuthChange}
+                  placeholder="Email"
+                  required
+                  type="email"
+                  value={authForm.email}
+                />
+                <input
+                  autoComplete="current-password"
+                  className="h-10 rounded-full border border-white/10 bg-black/20 px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
+                  minLength={6}
+                  name="password"
+                  onChange={handleAuthChange}
+                  placeholder="Mật khẩu"
+                  required
+                  type="password"
+                  value={authForm.password}
+                />
+                <button className="h-10 rounded-full bg-white text-sm font-black text-[#111827] disabled:cursor-not-allowed disabled:opacity-60" disabled={isAuthenticating || isSubmitting} type="submit">
+                  {isAuthenticating ? "Đang đăng nhập..." : "Đăng nhập và tiếp tục"}
+                </button>
+              </form>
+            )}
+            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting || isAuthenticating}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
         </div>
       </div>

@@ -12,8 +12,11 @@ const axiosClient = axios.create({
 axiosClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const hasAuthorizationHeader = Boolean(
+      config.headers?.Authorization || config.headers?.authorization
+    );
 
-    if (token) {
+    if (token && !hasAuthorizationHeader) {
       config.headers.Authorization = `Bearer ${token}`;
     }
 
