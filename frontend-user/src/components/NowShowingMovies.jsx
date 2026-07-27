@@ -25,29 +25,132 @@ function normalizeText(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 }
 
+function normalizeFilterValue(value = '') {
+  return normalizeText(value).trim()
+}
+
 function matchesMovieSearch(movie, searchTerm) {
-  const keyword = normalizeText(searchTerm).trim()
+  const keyword = normalizeFilterValue(searchTerm)
   if (!keyword) return true
   return normalizeText(movie?.title).includes(keyword)
 }
 
-function isComingSoonMovie(movie) {
-  const status = normalizeText(movie.status || movie.movieStatus)
-  const releaseDate = new Date(movie.release_date || movie.releaseDate)
-  const isFutureRelease = !Number.isNaN(releaseDate.getTime()) && releaseDate > new Date()
+function getMovieStatusValue(movie) {
+  const explicitStatus = normalizeFilterValue(
+    movie?.status ||
+      movie?.release_status ||
+      movie?.releaseStatus ||
+      movie?.screening_status ||
+      movie?.screeningStatus ||
+      movie?.movieStatus,
+  )
 
-  return (
-    status === 'coming_soon' ||
-    status === 'comingsoon' ||
-    status === 'upcoming' ||
-    status.includes('sap_chieu') ||
-    status.includes('sap chieu') ||
-    isFutureRelease
+  if (explicitStatus) {
+    if (
+      explicitStatus === 'coming_soon' ||
+      explicitStatus === 'comingsoon' ||
+      explicitStatus === 'upcoming' ||
+      explicitStatus === 'scheduled' ||
+      explicitStatus.includes('sap_chieu') ||
+      explicitStatus.includes('sap chieu')
+    ) {
+      return 'coming_soon'
+    }
+
+    if (
+      explicitStatus === 'now_showing' ||
+      explicitStatus === 'nowshowing' ||
+      explicitStatus === 'showing' ||
+      explicitStatus.includes('dang_chieu') ||
+      explicitStatus.includes('dang chieu')
+    ) {
+      return 'now_showing'
+    }
+  }
+
+  const releaseDate = new Date(movie?.release_date || movie?.releaseDate)
+  if (!Number.isNaN(releaseDate.getTime()) && releaseDate > new Date()) {
+    return 'coming_soon'
+  }
+
+  return 'now_showing'
+}
+
+function getMovieGenreItems(movie) {
+  return [
+    ...(Array.isArray(movie?.genres) ? movie.genres : []),
+    ...(Array.isArray(movie?.genreIds) ? movie.genreIds : []),
+    ...(movie?.genre ? [movie.genre] : []),
+  ].filter(Boolean)
+}
+
+function getGenreOptionParts(item) {
+  if (typeof item === 'string') {
+    return {
+      label: item,
+      keys: [item],
+    }
+  }
+
+  const label = item?.name || item?.title || item?.slug || item?._id || item?.id
+  return {
+    label,
+    keys: [item?._id, item?.id, item?.slug, item?.name, item?.title].filter(Boolean),
+  }
+}
+
+function getMovieGenreKeys(movie) {
+  return new Set(
+    getMovieGenreItems(movie)
+      .flatMap((item) => getGenreOptionParts(item).keys)
+      .map(normalizeFilterValue)
+      .filter(Boolean),
   )
 }
 
+function matchesMovieGenre(movie, selectedGenre) {
+  if (selectedGenre === 'all') return true
+  return getMovieGenreKeys(movie).has(selectedGenre)
+}
+
+function matchesMovieStatus(movie, selectedStatus) {
+  if (selectedStatus === 'all') return true
+  return getMovieStatusValue(movie) === selectedStatus
+}
+
+function matchesMovieFilters(movie, { searchTerm, selectedGenre, selectedStatus }) {
+  return (
+    matchesMovieSearch(movie, searchTerm) &&
+    matchesMovieGenre(movie, selectedGenre) &&
+    matchesMovieStatus(movie, selectedStatus)
+  )
+}
+
+function buildGenreOptions(movies) {
+  const genreMap = new Map()
+
+  movies.forEach((movie) => {
+    getMovieGenreItems(movie).forEach((item) => {
+      const { label, keys } = getGenreOptionParts(item)
+      const value = normalizeFilterValue(keys[0] || label)
+
+      if (value && label && !genreMap.has(value)) {
+        genreMap.set(value, String(label))
+      }
+    })
+  })
+
+  return Array.from(genreMap.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
+}
+
+function isComingSoonMovie(movie) {
+  return getMovieStatusValue(movie) === 'coming_soon'
+}
+
 function isNowShowingMovie(movie) {
-  return !isComingSoonMovie(movie) && movie.status === 'now_showing'
+  return getMovieStatusValue(movie) === 'now_showing'
 }
 
 function getMovieId(movie) {
@@ -188,6 +291,35 @@ function MovieSearchBox({ value, onChange, onClear }) {
   )
 }
 
+function MovieFilterSelect({ value, onChange, options, ariaLabel }) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label={ariaLabel}
+      className="h-11 w-full rounded-full border border-white/10 bg-[#151b26] px-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-white outline-none transition duration-200 hover:border-white/20 focus:border-[#ff6070]/50 focus:bg-[#192131] sm:max-w-xs"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value} className="bg-[#151b26] text-white">
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function ClearFiltersButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-11 rounded-full border border-[#ff6070]/25 bg-[#ff6070]/10 px-5 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-bold text-[#ffb4bb] transition duration-200 hover:border-[#ff6070]/45 hover:bg-[#ff6070]/15 hover:text-white"
+    >
+      Xóa bộ lọc
+    </button>
+  )
+}
+
 function NowShowingMovies() {
   const navigate = useNavigate()
   const [movies, setMovies] = useState([])
@@ -197,6 +329,8 @@ function NowShowingMovies() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedGenre, setSelectedGenre] = useState('all')
+  const [selectedStatus, setSelectedStatus] = useState('all')
 
   useEffect(() => {
     let isMounted = true
@@ -237,6 +371,12 @@ function NowShowingMovies() {
     setBookingMovie(movie)
   }
 
+  const clearFilters = () => {
+    setSearchTerm('')
+    setSelectedGenre('all')
+    setSelectedStatus('all')
+  }
+
   const nowShowingMovies = useMemo(
     () => movies.filter(isNowShowingMovie),
     [movies],
@@ -251,17 +391,25 @@ function NowShowingMovies() {
     }),
     [movies, scheduledShowtimes],
   )
+  const genreOptions = useMemo(() => buildGenreOptions(movies), [movies])
+  const filterState = useMemo(
+    () => ({ searchTerm, selectedGenre, selectedStatus }),
+    [searchTerm, selectedGenre, selectedStatus],
+  )
   const filteredNowShowingMovies = useMemo(
-    () => nowShowingMovies.filter((movie) => matchesMovieSearch(movie, searchTerm)),
-    [nowShowingMovies, searchTerm],
+    () => nowShowingMovies.filter((movie) => matchesMovieFilters(movie, filterState)),
+    [filterState, nowShowingMovies],
   )
   const filteredComingSoonMovies = useMemo(
-    () => comingSoonMovies.filter((movie) => matchesMovieSearch(movie, searchTerm)),
-    [comingSoonMovies, searchTerm],
+    () => comingSoonMovies.filter((movie) => matchesMovieFilters(movie, filterState)),
+    [comingSoonMovies, filterState],
   )
-  const hasSearchTerm = Boolean(searchTerm.trim())
+  const hasActiveFilters =
+    Boolean(searchTerm.trim()) || selectedGenre !== 'all' || selectedStatus !== 'all'
   const hasSearchResults =
     filteredNowShowingMovies.length > 0 || filteredComingSoonMovies.length > 0
+  const shouldShowNowShowing = selectedStatus !== 'coming_soon' && filteredNowShowingMovies.length > 0
+  const shouldShowComingSoon = selectedStatus !== 'now_showing' && filteredComingSoonMovies.length > 0
 
   return (
     <section className="mx-auto w-[min(1280px,calc(100%_-_40px))] py-14 max-sm:w-[calc(100%_-_28px)] max-sm:py-10">
@@ -282,12 +430,34 @@ function NowShowingMovies() {
         </a>
       </div>
 
-      <div className="mb-8">
+      <div className="mb-8 grid gap-3">
         <MovieSearchBox
           value={searchTerm}
           onChange={setSearchTerm}
           onClear={() => setSearchTerm('')}
         />
+        <div className="flex flex-wrap gap-3 max-sm:grid max-sm:grid-cols-1">
+          <MovieFilterSelect
+            value={selectedGenre}
+            onChange={setSelectedGenre}
+            ariaLabel="Lọc theo thể loại"
+            options={[
+              { value: 'all', label: 'Thể loại' },
+              ...genreOptions,
+            ]}
+          />
+          <MovieFilterSelect
+            value={selectedStatus}
+            onChange={setSelectedStatus}
+            ariaLabel="Lọc theo trạng thái"
+            options={[
+              { value: 'all', label: 'Trạng thái' },
+              { value: 'now_showing', label: 'Đang chiếu' },
+              { value: 'coming_soon', label: 'Sắp chiếu' },
+            ]}
+          />
+          {hasActiveFilters ? <ClearFiltersButton onClick={clearFilters} /> : null}
+        </div>
       </div>
 
       {isLoading && (
@@ -309,26 +479,30 @@ function NowShowingMovies() {
 
       {!isLoading && !error && (
         <>
-          {hasSearchTerm && !hasSearchResults ? (
+          {!hasSearchResults ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-slate-300">
               Không tìm thấy phim phù hợp.
             </div>
           ) : (
             <>
-              <MovieGroup
-                title="Phim đang chiếu"
-                movies={(hasSearchTerm ? filteredNowShowingMovies : nowShowingMovies).slice(0, 4)}
-                emptyText="Chưa có phim đang chiếu."
-                onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-                onOpenBooking={openBooking}
-              />
-              <MovieGroup
-                title="Phim sắp chiếu"
-                movies={hasSearchTerm ? filteredComingSoonMovies : comingSoonMovies}
-                emptyText="Chưa có phim sắp chiếu."
-                onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-                onOpenBooking={openBooking}
-              />
+              {shouldShowNowShowing ? (
+                <MovieGroup
+                  title="Phim đang chiếu"
+                  movies={filteredNowShowingMovies.slice(0, 4)}
+                  emptyText="Chưa có phim đang chiếu."
+                  onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
+                  onOpenBooking={openBooking}
+                />
+              ) : null}
+              {shouldShowComingSoon ? (
+                <MovieGroup
+                  title="Phim sắp chiếu"
+                  movies={filteredComingSoonMovies}
+                  emptyText="Chưa có phim sắp chiếu."
+                  onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
+                  onOpenBooking={openBooking}
+                />
+              ) : null}
             </>
           )}
         </>
