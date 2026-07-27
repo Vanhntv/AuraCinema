@@ -5,18 +5,15 @@ import { getNewsArticleBySlug, newsArticles } from '../data/newsContent';
 function DetailSkeleton() {
   return (
     <div className="mx-auto w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)] py-8 text-white">
-      <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03]">
-        <div className="aspect-[16/9] w-full animate-pulse bg-white/10" />
-        <div className="p-6 sm:p-8">
-          <div className="h-4 w-32 animate-pulse rounded-full bg-white/10" />
-          <div className="mt-4 h-12 w-[85%] animate-pulse rounded-2xl bg-white/10" />
-          <div className="mt-3 h-6 w-[60%] animate-pulse rounded-full bg-white/10" />
-          <div className="mt-8 grid gap-4">
-            <div className="h-4 w-full animate-pulse rounded-full bg-white/10" />
-            <div className="h-4 w-[95%] animate-pulse rounded-full bg-white/10" />
-            <div className="h-4 w-[90%] animate-pulse rounded-full bg-white/10" />
-            <div className="h-4 w-[75%] animate-pulse rounded-full bg-white/10" />
-          </div>
+      <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <div className="h-4 w-32 animate-pulse rounded-full bg-white/10" />
+        <div className="mt-4 h-12 w-[85%] animate-pulse rounded-2xl bg-white/10" />
+        <div className="mt-3 h-6 w-[60%] animate-pulse rounded-full bg-white/10" />
+        <div className="mt-8 grid gap-4">
+          <div className="h-4 w-full animate-pulse rounded-full bg-white/10" />
+          <div className="h-4 w-[95%] animate-pulse rounded-full bg-white/10" />
+          <div className="h-4 w-[90%] animate-pulse rounded-full bg-white/10" />
+          <div className="h-4 w-[75%] animate-pulse rounded-full bg-white/10" />
         </div>
       </div>
     </div>
@@ -89,15 +86,6 @@ function NewsDetailPage() {
         </div>
 
         <article className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] shadow-[0_24px_80px_rgba(0,0,0,0.3)]">
-          <div className="relative aspect-[16/9] overflow-hidden bg-slate-900">
-            <img
-              src={article.thumbnail}
-              alt={article.title}
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0f141c] via-black/20 to-transparent" />
-          </div>
-
           <div className="p-6 sm:p-8 lg:p-10">
             <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-[#ff6070]">
               <span>{article.category}</span>
