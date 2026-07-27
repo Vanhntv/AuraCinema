@@ -99,16 +99,49 @@ const parseGiftStatus = (value) => {
   return GIFT_STATUSES.includes(normalized) ? normalized : "draft";
 };
 
+const parseConditionIdList = (value) => {
+  const rawItems = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[\n,;]+/);
+
+  return [...new Set(
+    rawItems
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )];
+};
+
+const parseMemberTierList = (value) => {
+  const allowedTiers = new Set(["member", "gold", "vip", "vvip"]);
+  return parseConditionIdList(value)
+    .map((tier) => tier.toLowerCase())
+    .filter((tier) => allowedTiers.has(tier));
+};
+
+const isValidConditionIdList = (ids = []) =>
+  ids.every((id) => mongoose.Types.ObjectId.isValid(id));
+
 const normalizeGiftCondition = (condition = {}) => {
   if (typeof condition === "string") {
     return { note: condition.trim() };
   }
 
   const source = condition && typeof condition === "object" ? condition : {};
+  const memberTiers = parseMemberTierList(
+    source.member_tiers ?? source.member_tier,
+  );
+  const pointRequired = isMissing(source.point_required) ? null : Number(source.point_required);
+
   return {
     min_order: isMissing(source.min_order) ? null : Number(source.min_order),
-    member_tier: String(source.member_tier || "").trim(),
+    movie_ids: parseConditionIdList(source.movie_ids ?? source.applicable_movie_ids),
+    combo_required: Boolean(source.combo_required),
+    combo_ids: parseConditionIdList(source.combo_ids),
+    member_tiers: memberTiers,
+    member_tier: memberTiers[0] || "",
     birthday: Boolean(source.birthday),
+    new_member: Boolean(source.new_member),
+    point_required: pointRequired,
     campaign: String(source.campaign || "").trim(),
     note: String(source.note || "").trim(),
   };
@@ -148,6 +181,20 @@ export const validateGiftPayload = async (
   if (payload.condition.min_order !== null) {
     if (!Number.isFinite(payload.condition.min_order) || payload.condition.min_order < 0) {
       return "Điều kiện đơn tối thiểu không hợp lệ.";
+    }
+  }
+
+  if (!isValidConditionIdList(payload.condition.movie_ids)) {
+    return "Danh sách phim chỉ định không hợp lệ.";
+  }
+
+  if (!isValidConditionIdList(payload.condition.combo_ids)) {
+    return "Danh sách combo yêu cầu không hợp lệ.";
+  }
+
+  if (payload.condition.point_required !== null) {
+    if (!Number.isInteger(payload.condition.point_required) || payload.condition.point_required <= 0) {
+      return "Điểm đổi quà phải là số nguyên lớn hơn 0.";
     }
   }
 

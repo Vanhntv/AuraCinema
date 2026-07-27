@@ -19,8 +19,13 @@ const validGiftInput = {
   quantity: 100,
   condition: {
     min_order: 300000,
-    member_tier: "gold",
+    movie_ids: ["64b64c6f2f4a2f1a9c0d1234"],
+    combo_required: true,
+    combo_ids: ["64b64c6f2f4a2f1a9c0d5678"],
+    member_tiers: ["gold"],
     birthday: true,
+    new_member: true,
+    point_required: 500,
     campaign: "Sinh nhật Aura",
     note: "Đơn trên 300.000 VNĐ, khách Gold, sinh nhật",
   },
@@ -95,6 +100,47 @@ test("validateGiftPayload rejects invalid image URL format", async () => {
   });
 
   assert.match(error, /URL ảnh jpg, jpeg, png, webp hoặc gif/);
+});
+
+test("prepareGiftCreatePayload keeps multiple gift conditions", () => {
+  const payload = prepareGiftCreatePayload(validGiftInput);
+
+  assert.equal(payload.condition.min_order, 300000);
+  assert.deepEqual(payload.condition.movie_ids, ["64b64c6f2f4a2f1a9c0d1234"]);
+  assert.equal(payload.condition.combo_required, true);
+  assert.deepEqual(payload.condition.combo_ids, ["64b64c6f2f4a2f1a9c0d5678"]);
+  assert.deepEqual(payload.condition.member_tiers, ["gold"]);
+  assert.equal(payload.condition.birthday, true);
+  assert.equal(payload.condition.new_member, true);
+  assert.equal(payload.condition.point_required, 500);
+});
+
+test("validateGiftPayload rejects invalid condition ids and points", async () => {
+  const movieError = await validateInput({
+    ...validGiftInput,
+    condition: {
+      ...validGiftInput.condition,
+      movie_ids: ["not-a-movie-id"],
+    },
+  });
+  const comboError = await validateInput({
+    ...validGiftInput,
+    condition: {
+      ...validGiftInput.condition,
+      combo_ids: ["not-a-combo-id"],
+    },
+  });
+  const pointError = await validateInput({
+    ...validGiftInput,
+    condition: {
+      ...validGiftInput.condition,
+      point_required: 1.5,
+    },
+  });
+
+  assert.match(movieError, /phim chỉ định không hợp lệ/);
+  assert.match(comboError, /combo yêu cầu không hợp lệ/);
+  assert.match(pointError, /Điểm đổi quà/);
 });
 
 test("getGiftDeletionType allows hard delete before issuing", () => {

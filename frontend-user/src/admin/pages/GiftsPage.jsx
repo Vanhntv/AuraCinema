@@ -35,6 +35,13 @@ const statusClasses = {
   cancelled: "status-ended",
 };
 
+const memberTierOptions = [
+  { value: "member", label: "Member" },
+  { value: "gold", label: "Gold" },
+  { value: "vip", label: "VIP" },
+  { value: "vvip", label: "VVIP" },
+];
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -95,6 +102,14 @@ const getGiftImage = (gift) => {
   return "";
 };
 
+const parseDelimitedList = (value) =>
+  String(value || "")
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const stringifyList = (value) => (Array.isArray(value) ? value.join(", ") : "");
+
 const formatCondition = (condition) => {
   if (!condition || (typeof condition === "object" && Object.keys(condition).length === 0)) {
     return "Chưa cấu hình";
@@ -104,20 +119,44 @@ const formatCondition = (condition) => {
     return condition;
   }
 
-  const labels = {
-    min_order: "Đơn tối thiểu",
-    member_tier: "Hạng thành viên",
-    birthday: "Sinh nhật",
-    campaign: "Chương trình",
-    combo_required: "Yêu cầu combo",
-    first_order: "Đơn đầu tiên",
-    point_required: "Điểm yêu cầu",
-  };
+  const rows = [];
+  if (Number(condition.min_order || 0) > 0) {
+    rows.push(`Đơn tối thiểu: ${formatCurrency(condition.min_order)}`);
+  }
+  if (Array.isArray(condition.movie_ids) && condition.movie_ids.length > 0) {
+    rows.push(`Phim chỉ định: ${condition.movie_ids.length} phim`);
+  }
+  if (condition.combo_required) {
+    rows.push("Mua combo");
+  }
+  if (Array.isArray(condition.combo_ids) && condition.combo_ids.length > 0) {
+    rows.push(`Combo chỉ định: ${condition.combo_ids.length} combo`);
+  }
+  const memberTiers = Array.isArray(condition.member_tiers)
+    ? condition.member_tiers
+    : condition.member_tier
+      ? [condition.member_tier]
+      : [];
+  if (memberTiers.length > 0) {
+    rows.push(`Hạng thành viên: ${memberTiers.map((tier) => memberTierOptions.find((item) => item.value === tier)?.label || tier).join(", ")}`);
+  }
+  if (condition.birthday) {
+    rows.push("Sinh nhật");
+  }
+  if (condition.new_member) {
+    rows.push("Thành viên mới");
+  }
+  if (Number(condition.point_required || 0) > 0) {
+    rows.push(`Đổi điểm: ${Number(condition.point_required).toLocaleString("vi-VN")} điểm`);
+  }
+  if (condition.campaign) {
+    rows.push(`Chương trình: ${condition.campaign}`);
+  }
+  if (condition.note) {
+    rows.push(condition.note);
+  }
 
-  return Object.entries(condition)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .map(([key, value]) => `${labels[key] || key}: ${Array.isArray(value) ? value.join(", ") : value}`)
-    .join(" | ") || "Chưa cấu hình";
+  return rows.join(" | ") || "Chưa cấu hình";
 };
 
 const DetailField = ({ label, value }) => (
@@ -225,8 +264,13 @@ const emptyGiftForm = {
   value: "",
   quantity: "",
   min_order: "",
-  member_tier: "",
+  movie_ids: "",
+  combo_required: false,
+  combo_ids: "",
+  member_tiers: [],
   birthday: false,
+  new_member: false,
+  point_required: "",
   campaign: "",
   condition_note: "",
   start_date: "",
@@ -244,8 +288,17 @@ const buildGiftFormFromGift = (gift) => ({
   value: gift?.value ?? "",
   quantity: gift?.quantity ?? "",
   min_order: gift?.condition?.min_order ?? "",
-  member_tier: gift?.condition?.member_tier || "",
+  movie_ids: stringifyList(gift?.condition?.movie_ids || gift?.condition?.applicable_movie_ids),
+  combo_required: Boolean(gift?.condition?.combo_required),
+  combo_ids: stringifyList(gift?.condition?.combo_ids),
+  member_tiers: Array.isArray(gift?.condition?.member_tiers)
+    ? gift.condition.member_tiers
+    : gift?.condition?.member_tier
+      ? [gift.condition.member_tier]
+      : [],
   birthday: Boolean(gift?.condition?.birthday),
+  new_member: Boolean(gift?.condition?.new_member),
+  point_required: gift?.condition?.point_required ?? "",
   campaign: gift?.condition?.campaign || "",
   condition_note: gift?.condition?.note || "",
   start_date: toDateTimeLocalValue(gift?.start_date),
@@ -275,14 +328,27 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     }
   };
 
+  const handleMemberTierToggle = (tier, checked) => {
+    setFormData((prev) => ({
+      ...prev,
+      member_tiers: checked
+        ? [...new Set([...prev.member_tiers, tier])]
+        : prev.member_tiers.filter((item) => item !== tier),
+    }));
+  };
+
   const validate = () => {
     const nextErrors = {};
     const quantity = Number(formData.quantity);
     const value = formData.value === "" ? 0 : Number(formData.value);
     const minOrder = formData.min_order === "" ? null : Number(formData.min_order);
+    const pointRequired = formData.point_required === "" ? null : Number(formData.point_required);
+    const movieIds = parseDelimitedList(formData.movie_ids);
+    const comboIds = parseDelimitedList(formData.combo_ids);
     const startDate = formData.start_date ? new Date(formData.start_date) : null;
     const endDate = formData.end_date ? new Date(formData.end_date) : null;
     const imagePattern = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i;
+    const objectIdPattern = /^[a-f\d]{24}$/i;
 
     if (!formData.name.trim()) nextErrors.name = "Tên quà là bắt buộc";
     if (!isIssuedGift && !/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
@@ -301,6 +367,15 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     }
     if (!isIssuedGift && minOrder !== null && (!Number.isFinite(minOrder) || minOrder < 0)) {
       nextErrors.min_order = "Đơn tối thiểu không hợp lệ";
+    }
+    if (!isIssuedGift && movieIds.some((id) => !objectIdPattern.test(id))) {
+      nextErrors.movie_ids = "ID phim không hợp lệ";
+    }
+    if (!isIssuedGift && comboIds.some((id) => !objectIdPattern.test(id))) {
+      nextErrors.combo_ids = "ID combo không hợp lệ";
+    }
+    if (!isIssuedGift && pointRequired !== null && (!Number.isInteger(pointRequired) || pointRequired <= 0)) {
+      nextErrors.point_required = "Điểm đổi quà phải là số nguyên lớn hơn 0";
     }
     if (!formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
     if (!formData.end_date) nextErrors.end_date = "Ngày kết thúc là bắt buộc";
@@ -327,6 +402,8 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       end_date: formData.end_date,
       status: formData.status,
     };
+    const movieIds = parseDelimitedList(formData.movie_ids);
+    const comboIds = parseDelimitedList(formData.combo_ids);
 
     const fullPayload = {
       name: formData.name.trim(),
@@ -339,8 +416,13 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       quantity: Number(formData.quantity),
       condition: {
         min_order: formData.min_order === "" ? null : Number(formData.min_order),
-        member_tier: formData.member_tier,
+        movie_ids: movieIds,
+        combo_required: formData.combo_required || comboIds.length > 0,
+        combo_ids: comboIds,
+        member_tiers: formData.member_tiers,
         birthday: formData.birthday,
+        new_member: formData.new_member,
+        point_required: formData.point_required === "" ? null : Number(formData.point_required),
         campaign: formData.campaign.trim(),
         note: formData.condition_note.trim(),
       },
@@ -436,25 +518,51 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                   {errors.min_order && <p className="form-error">{errors.min_order}</p>}
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Phim chỉ định</label>
+                  <input className={`form-input ${errors.movie_ids ? "error" : ""}`} placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.movie_ids} onChange={(event) => handleChange("movie_ids", event.target.value)} disabled={isIssuedGift} />
+                  {errors.movie_ids && <p className="form-error">{errors.movie_ids}</p>}
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Combo chỉ định</label>
+                  <input className={`form-input ${errors.combo_ids ? "error" : ""}`} placeholder="Nhập ID combo, cách nhau bằng dấu phẩy" value={formData.combo_ids} onChange={(event) => handleChange("combo_ids", event.target.value)} disabled={isIssuedGift} />
+                  {errors.combo_ids && <p className="form-error">{errors.combo_ids}</p>}
+                </div>
+              </div>
+              <div className="segmented-options">
+                <label>
+                  <input type="checkbox" checked={formData.combo_required} onChange={(event) => handleChange("combo_required", event.target.checked)} disabled={isIssuedGift} />
+                  Mua combo
+                </label>
+                <label>
+                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} disabled={isIssuedGift} />
+                  Sinh nhật
+                </label>
+                <label>
+                  <input type="checkbox" checked={formData.new_member} onChange={(event) => handleChange("new_member", event.target.checked)} disabled={isIssuedGift} />
+                  Thành viên mới
+                </label>
+              </div>
+              <div className="form-row">
+                <div className="form-group">
                   <label className="form-label">Hạng thành viên</label>
-                  <select className="form-input" value={formData.member_tier} onChange={(event) => handleChange("member_tier", event.target.value)} disabled={isIssuedGift}>
-                    <option value="">Không yêu cầu</option>
-                    <option value="member">Member</option>
-                    <option value="gold">Gold</option>
-                    <option value="vip">VIP</option>
-                    <option value="vvip">VVIP</option>
-                  </select>
+                  <div className="segmented-options">
+                    {memberTierOptions.map((tier) => (
+                      <label key={tier.value}>
+                        <input type="checkbox" checked={formData.member_tiers.includes(tier.value)} onChange={(event) => handleMemberTierToggle(tier.value, event.target.checked)} disabled={isIssuedGift} />
+                        {tier.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Điểm đổi quà</label>
+                  <input className={`form-input ${errors.point_required ? "error" : ""}`} type="number" min="1" placeholder="Ví dụ: 500" value={formData.point_required} onChange={(event) => handleChange("point_required", event.target.value)} disabled={isIssuedGift} />
+                  {errors.point_required && <p className="form-error">{errors.point_required}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Chương trình</label>
                   <input className="form-input" placeholder="Sinh nhật Aura, Khách Gold..." value={formData.campaign} onChange={(event) => handleChange("campaign", event.target.value)} disabled={isIssuedGift} />
                 </div>
-              </div>
-              <div className="segmented-options">
-                <label>
-                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} disabled={isIssuedGift} />
-                  Sinh nhật
-                </label>
               </div>
               <div className="form-group">
                 <label className="form-label">Ghi chú điều kiện</label>
