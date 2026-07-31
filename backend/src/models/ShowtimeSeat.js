@@ -19,6 +19,7 @@ const showtimeSeatSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: ["available", "held", "reserved", "booked"],
       default: "available",
       trim: true,
     },

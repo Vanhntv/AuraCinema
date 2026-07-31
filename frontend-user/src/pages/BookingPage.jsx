@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BookingModal from "../components/BookingModal";
 import { getShowtimeById } from "../services/showtimeService";
+import { getShowtimeDateValue } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
@@ -17,12 +18,6 @@ function buildMovieFromShowtime(showtime) {
     duration: showtime.movieDuration,
     status: showtime.movieStatus || "now_showing",
   };
-}
-
-function getShowtimeDateValue(showtime) {
-  const date = new Date(showtime?.start_time);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 }
 
 function BookingPage() {

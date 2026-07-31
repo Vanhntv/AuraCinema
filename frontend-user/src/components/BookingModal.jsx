@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
-import { createBooking } from "../services/bookingService";
+import { cancelBooking, createBooking, payBooking } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
+import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const SEAT_TYPES = {
   normal: { label: "Ghế thường", color: "bg-slate-600", selected: "bg-sky-500" },
@@ -94,26 +96,12 @@ function calculateSelectedSeatTotal(selectedSeats, allSeats) {
   }, 0);
 }
 
-function buildDateOptions() {
-  return Array.from({ length: 4 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
-    return {
-      value: date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
-      displayDate: date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
-      label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : date.toLocaleDateString("vi-VN", { weekday: "long" }),
-    };
-  });
-}
-
 function getShowtimeId(showtime) {
   return showtime?.id || showtime?._id || "";
 }
 
-function getShowtimeDateValue(showtime) {
-  const date = new Date(showtime?.start_time);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+function formatCurrency(value) {
+  return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
 }
 
 function getUserId(user) {
@@ -230,8 +218,9 @@ function isBookedSeat(seat) {
 }
 
 function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal" }) {
-  const { user, isAuthenticated, login } = useAuth();
-  const [dateOptions] = useState(buildDateOptions);
+  const navigate = useNavigate();
+  const { user, isAuthenticated, login, logout } = useAuth();
+  const [dateOptions] = useState(() => buildRelativeDateOptions(4));
   const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
   const [showtimes, setShowtimes] = useState([]);
   const [selectedShowtime, setSelectedShowtime] = useState(null);
@@ -243,7 +232,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [error, setError] = useState("");
   const [seatError, setSeatError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPaying, setIsPaying] = useState(false);
+  const [isCancellingBooking, setIsCancellingBooking] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
   const [bookingResult, setBookingResult] = useState(null);
+  const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [concessions, setConcessions] = useState([]);
@@ -313,6 +306,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setError("");
     setSeatError("");
     setBookingResult(null);
+    setConfirmedBookingSummary(null);
     setHoldExpiresAt(null);
     setRemainingSeconds(0);
     setSelectedConcessions({});
@@ -463,7 +457,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     return selectedTypes.map((type) => SEAT_TYPES[type]?.label || "Ghế").join(", ");
   }, [selectedSeats]);
-
   const seatTotal = useMemo(
     () => calculateSelectedSeatTotal(selectedSeats, showtimeSeats),
     [selectedSeats, showtimeSeats],
@@ -592,6 +585,13 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   };
 
   const toggleSeat = async (seat) => {
+    if (!isAuthenticated) {
+      setShowAuthPrompt(true);
+      setAuthError("");
+      setSeatError("Vui lòng đăng nhập trước khi chọn ghế.");
+      return;
+    }
+
     const couplePair = getCoupleSeatPair(seat, showtimeSeats);
     const seatsToToggle = couplePair || [seat];
     const isCoupleSeat = getSeatType(seat) === "couple";
@@ -621,8 +621,15 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
       try {
         await releaseShowtimeSeats(releaseIds);
-      } catch {
-        setSeatError("Không thể bỏ giữ ghế lúc này.");
+      } catch (requestError) {
+        if (requestError.response?.status === 401) {
+          logout();
+          setShowAuthPrompt(true);
+          setAuthError("");
+          setSeatError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+        } else {
+          setSeatError("Không thể bỏ giữ ghế lúc này.");
+        }
         return;
       }
       setSelectedSeats((current) =>
@@ -667,6 +674,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setHoldExpiresAt(response.data.expires_at);
       setSeatError("");
     } catch (requestError) {
+      if (requestError.response?.status === 401) {
+        logout();
+        setShowAuthPrompt(true);
+        setAuthError("");
+        setSeatError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi chọn ghế.");
+        return;
+      }
+
       setSeatError(requestError.response?.data?.message || "Không thể giữ ghế này.");
       try {
         const latestSeats = await getShowtimeSeats(getShowtimeId(selectedShowtime));
@@ -784,6 +799,26 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const canContinue = await syncSelectedSeatsBeforeSubmit();
       if (!canContinue) return;
 
+      const bookingSummary = {
+        movieTitle: movie.title,
+        dateLabel: `${selectedDate.fullLabel || selectedDate.label} · ${selectedDate.displayDate}`,
+        showtimeLabel: selectedShowtime?.startTime || "Chưa chọn",
+        roomName: selectedShowtime?.roomName || "Chưa chọn",
+        seatType: selectedTypeSummary,
+        seatLabels: selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`),
+        seatTotal,
+        concessionTotal,
+        concessionItems: selectedConcessionItems.map((item) => ({
+          id: item._id,
+          name: item.name,
+          quantity: item.quantity,
+          subtotal: Number(item.price || 0) * item.quantity,
+        })),
+        voucherCode: appliedVoucher?.voucher?.code || "",
+        discountAmount,
+        totalPrice,
+        finalTotal,
+      };
       const response = await createBooking({
         showtime_id: getShowtimeId(selectedShowtime),
         showtime_seat_ids: selectedSeats.map((seat) => seat._id),
@@ -794,9 +829,15 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         voucher_code: appliedVoucher?.voucher?.code || undefined,
       });
       setBookingResult(response.data);
+      setConfirmedBookingSummary({
+        ...bookingSummary,
+        bookingCode: response.data?.booking_code || response.data?._id,
+        bookingId: response.data?._id,
+        paymentStatus: response.data?.payment_status || "pending",
+      });
       setShowtimeSeats((current) => current.map((seat) =>
         selectedSeats.some((selected) => selected._id === seat._id)
-          ? { ...seat, status: "booked" }
+          ? { ...seat, status: "reserved", held_by: currentUserId }
           : seat,
       ));
       setSelectedSeats([]);
@@ -805,10 +846,62 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setVoucherCode("");
       setVoucherError("");
       setVoucherMessage("");
+      setPaymentError("");
     } catch (requestError) {
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const completePayment = async () => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    if (!bookingId) return;
+
+    try {
+      setIsPaying(true);
+      setPaymentError("");
+      const response = await payBooking(bookingId, { payment_provider: "internal" });
+      setBookingResult(response.data);
+      setConfirmedBookingSummary((current) => ({
+        ...current,
+        bookingCode: response.data?.booking_code || current?.bookingCode,
+        bookingId: response.data?._id || current?.bookingId,
+        discountAmount: Number(response.data?.discount_amount ?? current?.discountAmount ?? 0),
+        finalTotal: Number(response.data?.total_price ?? current?.finalTotal ?? 0),
+        paymentStatus: response.data?.payment_status || "paid",
+      }));
+    } catch (requestError) {
+      setPaymentError(requestError.response?.data?.message || "Thanh toán không thành công.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const cancelPendingBooking = async () => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    if (!bookingId || bookingIsPaid) return;
+
+    try {
+      setIsCancellingBooking(true);
+      setPaymentError("");
+      await cancelBooking(bookingId, { reason: "Khách hủy trước khi thanh toán" });
+      setBookingResult(null);
+      setConfirmedBookingSummary(null);
+      setSelectedSeats([]);
+      setHoldExpiresAt(null);
+      setRemainingSeconds(0);
+      setStep("select-seat");
+      const showtimeId = getShowtimeId(selectedShowtime);
+      if (showtimeId) {
+        const latestSeats = await getShowtimeSeats(showtimeId);
+        setShowtimeSeats(latestSeats?.data || []);
+      }
+      setSeatError("Đã hủy đơn chờ thanh toán. Bạn có thể chọn lại ghế.");
+    } catch (requestError) {
+      setPaymentError(requestError.response?.data?.message || "Không thể hủy đơn đặt vé.");
+    } finally {
+      setIsCancellingBooking(false);
     }
   };
 
@@ -840,7 +933,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       await login(authForm);
       setShowAuthPrompt(false);
       setAuthForm({ email: "", password: "" });
-      await finalizeBooking();
+      if (selectedSeats.length && selectedShowtime) {
+        await finalizeBooking();
+      }
     } catch (requestError) {
       setAuthError(requestError.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.");
     } finally {
@@ -865,6 +960,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     await releaseHeldSeats();
     onClose?.();
   };
+  const viewMyTickets = () => {
+    navigate("/tai-khoan?tab=tickets");
+  };
+  const bookingIsPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
 
   return (
     <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
@@ -874,9 +973,85 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           <button className="grid h-10 shrink-0 place-items-center rounded-full bg-white/10 px-4 text-sm font-black text-white hover:bg-[#ff6070]" type="button" aria-label={isPageVariant ? "Quay lại lịch chiếu" : "Đóng đặt vé"} onClick={handleClose}>{isPageVariant ? "← Lịch chiếu" : "×"}</button>
         </div>
 
+        {bookingResult && confirmedBookingSummary ? (
+          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <section className={`rounded-3xl border p-7 ${bookingIsPaid ? "border-emerald-400/20 bg-emerald-400/10" : "border-amber-400/20 bg-amber-400/10"}`}>
+              <div className="flex flex-wrap items-start justify-between gap-5">
+                <div>
+                  <p className={`text-sm font-black uppercase tracking-[0.22em] ${bookingIsPaid ? "text-emerald-200" : "text-amber-200"}`}>{bookingIsPaid ? "Đặt vé thành công" : "Chờ thanh toán"}</p>
+                  <h3 className="mt-3 text-3xl font-black text-white max-sm:text-2xl">{confirmedBookingSummary.movieTitle}</h3>
+                  {!bookingIsPaid && <p className="mt-3 max-w-2xl text-sm leading-6 text-amber-100/90">Đơn đã được tạo và ghế đang được giữ cho bạn. Hoàn tất thanh toán để nhận vé trong tài khoản.</p>}
+                </div>
+                <div className={`rounded-2xl border bg-black/20 px-5 py-4 text-right ${bookingIsPaid ? "border-emerald-300/20" : "border-amber-300/20"}`}>
+                  <p className={`text-xs font-bold uppercase tracking-[0.18em] ${bookingIsPaid ? "text-emerald-200" : "text-amber-200"}`}>{bookingIsPaid ? "Mã vé" : "Mã đơn"}</p>
+                  <strong className="mt-1 block text-lg text-white">{confirmedBookingSummary.bookingCode}</strong>
+                </div>
+              </div>
+
+              <div className="mt-7 grid gap-4 rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-slate-300 md:grid-cols-2">
+                <p><span className="text-slate-500">Ngày:</span> {confirmedBookingSummary.dateLabel}</p>
+                <p><span className="text-slate-500">Suất:</span> {confirmedBookingSummary.showtimeLabel}</p>
+                <p><span className="text-slate-500">Phòng:</span> {confirmedBookingSummary.roomName}</p>
+                <p><span className="text-slate-500">Loại:</span> {confirmedBookingSummary.seatType}</p>
+                <p className="md:col-span-2"><span className="text-slate-500">Ghế:</span> <strong className="text-white">{confirmedBookingSummary.seatLabels.join(", ")}</strong></p>
+              </div>
+
+              {confirmedBookingSummary.concessionItems.length > 0 && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-5">
+                  <p className="text-sm font-black text-white">Bắp nước</p>
+                  <div className="mt-3 grid gap-2 text-sm text-slate-300">
+                    {confirmedBookingSummary.concessionItems.map((item) => (
+                      <p className="flex justify-between gap-4" key={item.id}>
+                        <span>{item.name} x{item.quantity}</span>
+                        <strong className="text-white">{formatCurrency(item.subtotal)}</strong>
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {paymentError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                {bookingIsPaid ? (
+                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
+                    Xem vé của tôi
+                  </button>
+                ) : (
+                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={completePayment} disabled={isPaying}>
+                    {isPaying ? "Đang thanh toán..." : "Thanh toán"}
+                  </button>
+                )}
+                {!bookingIsPaid && (
+                  <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+                    {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
+                  </button>
+                )}
+                <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>
+                  Đóng
+                </button>
+              </div>
+            </section>
+
+            <aside className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
+              <h3 className="text-lg font-black text-white">Thanh toán</h3>
+              <div className="mt-5 grid gap-4 text-sm text-slate-300">
+                <p className="flex justify-between gap-4"><span className="text-slate-500">Trạng thái</span><strong className={bookingIsPaid ? "text-emerald-200" : "text-amber-200"}>{bookingIsPaid ? "Đã thanh toán" : "Chờ thanh toán"}</strong></p>
+                <p className="flex justify-between gap-4"><span className="text-slate-500">Tiền vé</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.seatTotal)}</strong></p>
+                <p className="flex justify-between gap-4"><span className="text-slate-500">Bắp nước</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.concessionTotal)}</strong></p>
+                {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
+                <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
+                <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
+                <div className="border-t border-white/10 pt-4">
+                  <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        ) : (
         <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid content-start gap-7">
-            {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[#ff6070] text-white" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.label} · {option.displayDate}</button>)}</div></div>}
+            {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[#ff6070] text-white" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.fullLabel} · {option.displayDate}</button>)}</div></div>}
 
             <div><h3 className="text-lg font-black text-white">{step === "select-seat" ? "Chọn ghế" : "Chọn suất chiếu"}</h3>
               {step === "select-showtime" ? <div className="mt-4 space-y-3">
@@ -1011,14 +1186,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
             {bookingResult && <div className="mt-4 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"><strong>Đặt vé thành công!</strong><br />Mã đơn: {bookingResult._id}</div>}
 
             <div className="mt-5 grid gap-4 text-sm text-slate-300">
-              <p><span className="text-slate-500">Ngày:</span> {selectedDate.label} · {selectedDate.displayDate}</p>
+              <p><span className="text-slate-500">Ngày:</span> {selectedDate.fullLabel || selectedDate.label} · {selectedDate.displayDate}</p>
               <p><span className="text-slate-500">Suất:</span> {selectedShowtime?.startTime || "Chưa chọn"}</p>
               <p><span className="text-slate-500">Phòng:</span> {selectedShowtime?.roomName || "Chưa chọn"}</p>
               <p><span className="text-slate-500">Loại:</span> {selectedTypeSummary}</p>
               <p><span className="text-slate-500">Ghế:</span> {selectedSeats.length ? selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`).join(", ") : "Chưa chọn"}</p>
-              <p><span className="text-slate-500">Tiền vé:</span> <strong className="text-white">{seatTotal.toLocaleString("vi-VN")}đ</strong></p>
-              <p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{concessionTotal.toLocaleString("vi-VN")}đ</strong></p>
-              {selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {(Number(item.price || 0) * item.quantity).toLocaleString("vi-VN")}đ</p>)}</div>}
+	              <p><span className="text-slate-500">Tiền vé:</span> <strong className="text-white">{formatCurrency(seatTotal)}</strong></p>
+	              <p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{formatCurrency(concessionTotal)}</strong></p>
+	              {selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {formatCurrency(Number(item.price || 0) * item.quantity)}</p>)}</div>}
 
               <div className="rounded-xl border border-white/10 bg-black/15 p-3">
                 <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã giảm giá</label>
@@ -1044,9 +1219,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 {voucherMessage && <p className="mt-2 text-xs font-semibold text-emerald-200">{voucherMessage}</p>}
               </div>
 
-              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{totalPrice.toLocaleString("vi-VN")}đ</strong></p>
-              <p><span className="text-slate-500">Giảm giá:</span> <strong className="text-emerald-200">-{discountAmount.toLocaleString("vi-VN")}đ</strong></p>
-              <p><span className="text-slate-500">Tổng sau giảm:</span> <strong className="text-[#ff9aa5]">{finalTotal.toLocaleString("vi-VN")}đ</strong></p>
+	              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{formatCurrency(totalPrice)}</strong></p>
+	              <p><span className="text-slate-500">Giảm giá:</span> <strong className="text-emerald-200">-{formatCurrency(discountAmount)}</strong></p>
+	              <p><span className="text-slate-500">Tổng sau giảm:</span> <strong className="text-[#ff9aa5]">{formatCurrency(finalTotal)}</strong></p>
             </div>
 
             <div className="mt-6 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-4 text-sm">
@@ -1088,7 +1263,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
             )}
             <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting || isAuthenticating}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
-        </div>
+	        </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { getPromotionBySlug, isPromotionExpired, promotionItems } from '../data/promotionContent';
+import { getMarketingContent, getMarketingContentBySlug } from '../services/marketingContentService';
+import { mapCmsContentItem } from '../utils/marketingContent';
 
 function PromotionSkeleton() {
   return (
@@ -37,18 +39,23 @@ function PromotionDetailPage() {
   const { slug } = useParams();
   const [isLoading, setIsLoading] = useState(true);
   const [promotion, setPromotion] = useState(null);
-
-  const relatedPromotions = useMemo(
-    () => promotionItems.filter((item) => item.slug !== slug).slice(0, 3),
-    [slug]
+  const [relatedPromotions, setRelatedPromotions] = useState(() =>
+    promotionItems.filter((item) => item.slug !== slug).slice(0, 3),
   );
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
 
-    const timer = window.setTimeout(() => {
-      const found = getPromotionBySlug(slug);
+    const loadPromotion = async () => {
+      let found = null;
+      try {
+        const response = await getMarketingContentBySlug('promotion', slug);
+        found = mapCmsContentItem(response.data);
+      } catch {
+        found = getPromotionBySlug(slug);
+      }
+
       if (!active) return;
 
       if (found) {
@@ -61,8 +68,21 @@ function PromotionDetailPage() {
         setPromotion(null);
       }
 
+      try {
+        const relatedResponse = await getMarketingContent({ type: 'promotion', limit: 4 });
+        const relatedItems = (relatedResponse.data || [])
+          .map(mapCmsContentItem)
+          .filter((item) => item.slug !== slug)
+          .slice(0, 3);
+        if (active && relatedItems.length) setRelatedPromotions(relatedItems);
+      } catch {
+        if (active) setRelatedPromotions(promotionItems.filter((item) => item.slug !== slug).slice(0, 3));
+      }
+
       setIsLoading(false);
-    }, 450);
+    };
+
+    const timer = window.setTimeout(loadPromotion, 150);
 
     return () => {
       active = false;
