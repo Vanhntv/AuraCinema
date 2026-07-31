@@ -197,6 +197,16 @@ function validateSeatSpacing(nextSelectedSeats, allSeats) {
   return "";
 }
 
+function validateSingleSeatType(nextSelectedSeats) {
+  const selectedTypes = new Set(nextSelectedSeats.map((seat) => getSeatType(seat)));
+
+  if (selectedTypes.size > 1) {
+    return "Không được chọn nhiều loại ghế khác nhau trong cùng một lần đặt vé.";
+  }
+
+  return "";
+}
+
 function resolveImageUrl(image) {
   if (!image) return "";
   if (/^https?:\/\//i.test(image)) return image;
@@ -601,9 +611,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const nextSelectedSeats = selectedSeats.filter(
         (item) => !releaseIds.includes(item._id),
       );
-      const spacingError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
-      if (spacingError) {
-        setSeatError(spacingError);
+      const selectionError =
+        validateSingleSeatType(nextSelectedSeats) ||
+        validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+      if (selectionError) {
+        setSeatError(selectionError);
         return;
       }
 
@@ -632,9 +644,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     const newSeats = seatsToToggle.filter((item) => !selectedSeatIds.has(item._id));
     const nextSelectedSeats = [...selectedSeats, ...newSeats];
-    const spacingError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
-    if (spacingError) {
-      setSeatError(spacingError);
+    const selectionError =
+      validateSingleSeatType(nextSelectedSeats) ||
+      validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+    if (selectionError) {
+      setSeatError(selectionError);
       return;
     }
 
