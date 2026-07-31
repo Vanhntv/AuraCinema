@@ -96,6 +96,55 @@ const getBookingMovieTitle = (booking) =>
 
 const getBookingSeatCount = (booking) => booking.showtime_seat_ids?.length || 0;
 
+const getBookingCode = (booking) => booking.booking_code || booking.bookingCode || booking._id || "-";
+
+const getBookingCinemaName = (booking) =>
+  booking.showtime_id?.room_id?.cinema_id?.name ||
+  booking.showtime_id?.cinemaName ||
+  "Rạp đang cập nhật";
+
+const getBookingRoomName = (booking) =>
+  booking.showtime_id?.room_id?.name ||
+  booking.showtime_id?.roomName ||
+  "Phòng đang cập nhật";
+
+const getBookingShowtime = (booking) => formatDateTime(booking.showtime_id?.start_time);
+
+const getBookingSeatLabels = (booking) => {
+  const labels = (booking.showtime_seat_ids || [])
+    .map((item) => {
+      const seat = item.seat_id || item;
+      const row = seat.seat_row || seat.row || "";
+      const number = seat.seat_number || seat.number || "";
+      return row || number ? `${row}${number}` : "";
+    })
+    .filter(Boolean);
+
+  return labels.length ? labels.join(", ") : "-";
+};
+
+const getBookingComboText = (booking) => {
+  const combos = (booking.combos || [])
+    .map((item) => {
+      const name = item.name || item.combo_id?.name;
+      const quantity = Number(item.quantity || 0);
+      if (!name || quantity <= 0) return "";
+      return `${name} x${quantity}`;
+    })
+    .filter(Boolean);
+
+  return combos.length ? combos.join(", ") : "Không có";
+};
+
+const getBookingVoucherText = (booking) => {
+  const code = booking.voucher?.code || booking.voucher?.voucher_id?.code;
+  const discount = Number(booking.discount_amount || booking.voucher?.discount_amount || 0);
+
+  if (!code && discount <= 0) return "Không có";
+  if (!code) return `Giảm ${currencyFormatter.format(discount)}`;
+  return discount > 0 ? `${code} · -${currencyFormatter.format(discount)}` : code;
+};
+
 const getBookingStatusLabel = (booking) => {
   if (booking.status === "cancelled") return "Đã hủy";
   if (booking.payment_status === "pending") return "Chờ thanh toán";
