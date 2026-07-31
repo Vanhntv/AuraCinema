@@ -17,9 +17,12 @@ import showtimesRoute from "./router/showtimesRouters.js";
 import showtimeSeatsRoute from "./router/showtimeSeatsRouters.js";
 import vouchersRoute from "./router/vouchersRouters.js";
 import bookingsRoute from "./router/bookingsRouters.js";
+import adminBookingsRoute from "./router/adminBookingsRouters.js";
 import usersRoute from "./router/usersRouters.js";
 import settingsRoute from "./router/settingsRouters.js";
 import combosRoute from "./router/combosRouters.js";
+import marketingContentRoute from "./router/marketingContentRouters.js";
+import adminMarketingContentRoute from "./router/adminMarketingContentRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -44,9 +47,12 @@ app.use("/api/showtime-seats", showtimeSeatsRoute);
 app.use("/showtime-seats", showtimeSeatsRoute);
 app.use("/api/vouchers", vouchersRoute);
 app.use("/api/bookings", bookingsRoute);
+app.use("/api/admin/bookings", adminBookingsRoute);
 app.use("/api/users", usersRoute);
 app.use("/api/settings", settingsRoute);
 app.use("/api/combos", combosRoute);
+app.use("/api/marketing-content", marketingContentRoute);
+app.use("/api/admin/marketing-content", adminMarketingContentRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

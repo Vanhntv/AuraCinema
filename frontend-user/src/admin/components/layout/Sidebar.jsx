@@ -27,8 +27,10 @@ const menuItems = [
       { path: "/admin/movies", icon: <HiOutlineFilm />, label: "Phim" },
       { path: "/admin/rooms", icon: <HiOutlineViewGrid />, label: "Phòng chiếu" },
       { path: "/admin/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
+      { path: "/admin/bookings", icon: <HiOutlineTicket />, label: "Đơn vé" },
       { path: "/admin/concessions", icon: <HiOutlineShoppingBag />, label: "Bắp Nước" },
       { path: "/admin/vouchers", icon: <HiOutlineTag />, label: "Mã giảm giá" },
+      { path: "/admin/marketing", icon: <HiOutlineTag />, label: "Marketing CMS" },
     ],
   },
   {

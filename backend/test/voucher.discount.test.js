@@ -60,3 +60,25 @@ test("calculateVoucherDiscount returns null amounts when order amount is unavail
   assert.equal(result.discount_amount, null);
   assert.equal(result.final_amount, null);
 });
+
+test("calculateVoucherDiscount changes when booking total changes", () => {
+  const voucher = {
+    discount_type: "percent",
+    discount_value: 15,
+    max_discount_amount: 50000,
+  };
+
+  const beforeOrderChange = calculateVoucherDiscount({
+    voucher,
+    orderAmount: 100000,
+  });
+  const afterOrderChange = calculateVoucherDiscount({
+    voucher,
+    orderAmount: 200000,
+  });
+
+  assert.equal(beforeOrderChange.discount_amount, 15000);
+  assert.equal(beforeOrderChange.final_amount, 85000);
+  assert.equal(afterOrderChange.discount_amount, 30000);
+  assert.equal(afterOrderChange.final_amount, 170000);
+});

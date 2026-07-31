@@ -3,26 +3,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import BookingModal from "../components/BookingModal";
 import MovieDetailModal from "../components/MovieDetailModal";
 import { getShowtimes } from "../services/showtimeService";
+import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
-
-function buildDateOptions() {
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
-
-    return {
-      value: date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
-      day: date.toLocaleDateString("vi-VN", { weekday: "short" }),
-      date: date.toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-      }),
-      label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : "",
-    };
-  });
-}
 
 function formatPrice(value) {
   const price = Number(value);
@@ -33,12 +17,6 @@ function formatPrice(value) {
 
 function formatRoomType(value) {
   return String(value || "2D").toUpperCase() === "3D" ? "3D" : "2D";
-}
-
-function getShowtimeDateValue(showtime) {
-  const date = new Date(showtime?.start_time);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
 }
 
 function groupShowtimes(showtimes) {
@@ -84,7 +62,7 @@ function groupShowtimes(showtimes) {
 function MovieSchedule() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [dateOptions] = useState(buildDateOptions);
+  const [dateOptions] = useState(() => buildRelativeDateOptions(7));
   const dateQuery = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(
     dateOptions.some((option) => option.value === dateQuery)
