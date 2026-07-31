@@ -10,6 +10,9 @@ import {
 
 const isMissing = (value) => value === undefined || value === null || value === "";
 
+const escapeRegex = (value) =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const normalizeVoucherCode = (value) => {
   if (isMissing(value)) {
     return value;
@@ -31,6 +34,62 @@ const parseVoucherAmount = (value) => {
   }
 
   return amount;
+};
+
+const parseVoucherDate = (value) => {
+  if (isMissing(value)) {
+    return null;
+  }
+
+  return new Date(value);
+};
+
+const assertVoucherStateIsValid = (voucherState) => {
+  const quantity = Number(voucherState.quantity);
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    const error = new Error("quantity khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const discountValue = Number(voucherState.discount_value);
+  if (!Number.isFinite(discountValue) || discountValue <= 0) {
+    const error = new Error("discount_value khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (voucherState.discount_type === "percent" && discountValue > 100) {
+    const error = new Error(
+      "discount_value khong duoc lon hon 100 khi discount_type la percent"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const startDate = voucherState.start_date instanceof Date
+    ? voucherState.start_date
+    : parseVoucherDate(voucherState.start_date);
+  const endDate = voucherState.end_date instanceof Date
+    ? voucherState.end_date
+    : parseVoucherDate(voucherState.end_date);
+
+  if (
+    !startDate ||
+    !endDate ||
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime())
+  ) {
+    const error = new Error("start_date va end_date khong hop le");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (endDate < startDate) {
+    const error = new Error("end_date phai lon hon hoac bang start_date");
+    error.statusCode = 400;
+    throw error;
+  }
 };
 
 const calculateVoucherDiscount = ({ voucher, orderAmount }) => {
@@ -82,12 +141,12 @@ const buildVoucherFilter = (query = {}) => {
     }
   }
 
-  const keyword = (q ?? search ?? "").trim();
+  const keyword = String(q ?? search ?? "").trim();
 
-  if (!isMissing(keyword)) {
+  if (keyword) {
     filter.$or = [
-      { code: { $regex: keyword, $options: "i" } },
-      { discount_type: { $regex: keyword, $options: "i" } },
+      { code: { $regex: escapeRegex(keyword), $options: "i" } },
+      { discount_type: { $regex: escapeRegex(keyword), $options: "i" } },
     ];
   }
 
@@ -135,8 +194,8 @@ const prepareCreatePayload = (payload) => {
     discount_value: Number(normalizedPayload.discount_value),
     min_order: Number(normalizedPayload.min_order ?? 0),
     quantity: Number(normalizedPayload.quantity),
-    start_date: new Date(normalizedPayload.start_date),
-    end_date: new Date(normalizedPayload.end_date),
+    start_date: parseVoucherDate(normalizedPayload.start_date),
+    end_date: parseVoucherDate(normalizedPayload.end_date),
     status: parseVoucherStatus(normalizedPayload.status, true),
   };
 };
@@ -168,11 +227,11 @@ const prepareUpdatePayload = (payload) => {
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "start_date")) {
-    updatePayload.start_date = new Date(payload.start_date);
+    updatePayload.start_date = parseVoucherDate(payload.start_date);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "end_date")) {
-    updatePayload.end_date = new Date(payload.end_date);
+    updatePayload.end_date = parseVoucherDate(payload.end_date);
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, "status")) {
@@ -292,29 +351,11 @@ export const updateVoucherService = async (id, payload) => {
     ...normalizedPayload,
   };
 
-  if (
-    nextVoucherState.start_date &&
-    nextVoucherState.end_date &&
-    nextVoucherState.end_date < nextVoucherState.start_date
-  ) {
-    const error = new Error("end_date phai lon hon hoac bang start_date");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const effectiveDiscountType = nextVoucherState.discount_type;
-  const effectiveDiscountValue = Number(nextVoucherState.discount_value);
-  if (effectiveDiscountType === "percent" && effectiveDiscountValue > 100) {
-    const error = new Error(
-      "discount_value khong duoc lon hon 100 khi discount_type la percent"
-    );
-    error.statusCode = 400;
-    throw error;
-  }
+  assertVoucherStateIsValid(nextVoucherState);
 
   const updatedVoucher = await Voucher.findOneAndUpdate(
     { _id: id, deleted_at: null },
-    normalizedPayload,
+    { $set: normalizedPayload },
     { new: true, runValidators: true }
   );
 

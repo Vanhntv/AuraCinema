@@ -1,6 +1,24 @@
 const isEmptyValue = (value) =>
   value === undefined || value === null || value === "";
 
+const parseVoucherBoolean = (value) => {
+  if (isEmptyValue(value)) {
+    return null;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase();
+    if (["true", "1", "active", "enabled"].includes(normalizedValue)) return true;
+    if (["false", "0", "inactive", "disabled"].includes(normalizedValue)) return false;
+  }
+
+  return null;
+};
+
 export const normalizeVoucherPayload = (payload, defaults = {}) => {
   return {
     code: payload.code ?? defaults.code,
@@ -29,21 +47,8 @@ export const parseVoucherDiscountType = (value, fallback = "percent") => {
 };
 
 export const parseVoucherStatus = (value, fallback = true) => {
-  if (isEmptyValue(value)) {
-    return fallback;
-  }
-
-  if (typeof value === "boolean") {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const normalizedValue = value.trim().toLowerCase();
-    if (["true", "1", "active", "enabled"].includes(normalizedValue)) return true;
-    if (["false", "0", "inactive", "disabled"].includes(normalizedValue)) return false;
-  }
-
-  return fallback;
+  const parsedValue = parseVoucherBoolean(value);
+  return parsedValue === null ? fallback : parsedValue;
 };
 
 const parseDateValue = (value) => {
@@ -143,6 +148,18 @@ const validateVoucherQuantity = (quantity, prefix, required = true) => {
   return null;
 };
 
+const validateVoucherStatus = (status, prefix) => {
+  if (isEmptyValue(status)) {
+    return null;
+  }
+
+  if (parseVoucherBoolean(status) === null) {
+    return `${prefix}status khong hop le`;
+  }
+
+  return null;
+};
+
 const validateVoucherDates = (startDateInput, endDateInput, prefix, required = true) => {
   const hasStartDate = !isEmptyValue(startDateInput);
   const hasEndDate = !isEmptyValue(endDateInput);
@@ -201,9 +218,8 @@ export const validateVoucherPayload = (voucher, index = null) => {
   const dateError = validateVoucherDates(voucher.start_date, voucher.end_date, prefix, true);
   if (dateError) return dateError;
 
-  if (!isEmptyValue(voucher.status) && typeof voucher.status !== "boolean" && typeof voucher.status !== "string") {
-    return `${prefix}status khong hop le`;
-  }
+  const statusError = validateVoucherStatus(voucher.status, prefix);
+  if (statusError) return statusError;
 
   return null;
 };
@@ -250,8 +266,9 @@ export const validateVoucherUpdatePayload = (voucher, index = null) => {
     if (dateError) return dateError;
   }
 
-  if ("status" in voucher && !isEmptyValue(voucher.status) && typeof voucher.status !== "boolean" && typeof voucher.status !== "string") {
-    return `${prefix}status khong hop le`;
+  if ("status" in voucher) {
+    const statusError = validateVoucherStatus(voucher.status, prefix);
+    if (statusError) return statusError;
   }
 
   return null;
