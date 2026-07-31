@@ -12,8 +12,10 @@ import {
 import { changePassword, updateProfile } from "../api/authApi";
 import { promotionItems } from "../data/promotionContent";
 import { getMyBookings } from "../services/bookingService";
+import { getMarketingContent } from "../services/marketingContentService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
+import { mapCmsContentItem } from "../utils/marketingContent";
 
 const tierTargets = {
   member: { label: "Member", next: "VIP", target: 3000000 },
@@ -204,6 +206,9 @@ function AccountPage() {
   });
   const [bookings, setBookings] = useState([]);
   const [vouchers, setVouchers] = useState([]);
+  const [activePromotions, setActivePromotions] = useState(() =>
+    promotionItems.filter((item) => item.status !== "expired"),
+  );
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
@@ -286,6 +291,25 @@ function AccountPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    getMarketingContent({ type: "promotion", limit: 100 })
+      .then((response) => {
+        const items = (response.data || []).map(mapCmsContentItem);
+        if (isActive && items.length) setActivePromotions(items);
+      })
+      .catch(() => {
+        if (isActive) {
+          setActivePromotions(promotionItems.filter((item) => item.status !== "expired"));
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   const loyalty = useMemo(() => {
     const tier = tierTargets[user?.member_tier] || tierTargets.member;
     const spent = Number(user?.total_spent || 0);
@@ -299,11 +323,6 @@ function AccountPage() {
       remaining,
     };
   }, [user]);
-
-  const activePromotions = useMemo(
-    () => promotionItems.filter((item) => item.status !== "expired"),
-    [],
-  );
 
   const handleTabClick = (tabId) => {
     setActiveTab(tabId);
@@ -584,39 +603,86 @@ function AccountPage() {
     </section>
   );
 
-  const renderTicketsTab = () => {
-    const rows = bookings.map((booking) => (
-      <tr key={booking._id}>
-        <td className="whitespace-nowrap px-5 py-4">{formatDateTime(booking.created_at)}</td>
-        <td className="px-5 py-4 font-bold text-white">{getBookingMovieTitle(booking)}</td>
-        <td className="whitespace-nowrap px-5 py-4">{getBookingStatusLabel(booking)}</td>
-        <td className="whitespace-nowrap px-5 py-4">{getBookingSeatCount(booking)}</td>
-        <td className="whitespace-nowrap px-5 py-4 font-bold text-[#ff9aa5]">
-          {currencyFormatter.format(Number(booking.total_price || 0))}
-        </td>
-      </tr>
-    ));
+  const renderTicketCard = (booking) => (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5" key={booking._id}>
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã đơn</p>
+          <h3 className="mt-1 text-lg font-black text-white">{getBookingCode(booking)}</h3>
+        </div>
+        <span
+          className={`rounded-full px-3 py-1.5 text-xs font-black ${
+            booking.status === "cancelled"
+              ? "bg-red-500/10 text-red-200"
+              : "bg-emerald-400/10 text-emerald-200"
+          }`}
+        >
+          {getBookingStatusLabel(booking)}
+        </span>
+      </div>
 
-    return (
-      <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
-        {bookingsError && (
-          <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-            {bookingsError}
-          </div>
-        )}
-        {loadingBookings ? (
-          <EmptyState>Đang tải lịch sử mua vé...</EmptyState>
-        ) : (
-          <AccountTable
-            empty="Không có dữ liệu"
-            headers={["Ngày giao dịch", "Tên phim", "Loại giao dịch", "Số vé", "Số tiền"]}
-          >
-            {rows.length ? rows : null}
-          </AccountTable>
-        )}
-      </section>
-    );
-  };
+      <div className="mt-5 grid gap-4 text-sm text-slate-300 md:grid-cols-2 xl:grid-cols-3">
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Phim</span>
+          <strong className="mt-1 block text-white">{getBookingMovieTitle(booking)}</strong>
+        </div>
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Rạp</span>
+          <strong className="mt-1 block text-white">{getBookingCinemaName(booking)}</strong>
+        </div>
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Phòng</span>
+          <strong className="mt-1 block text-white">{getBookingRoomName(booking)}</strong>
+        </div>
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Suất</span>
+          <strong className="mt-1 block text-white">{getBookingShowtime(booking)}</strong>
+        </div>
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ghế</span>
+          <strong className="mt-1 block text-white">{getBookingSeatLabels(booking)}</strong>
+        </div>
+        <div>
+          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tổng tiền</span>
+          <strong className="mt-1 block text-[#ff9aa5]">
+            {currencyFormatter.format(Number(booking.total_price || 0))}
+          </strong>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 rounded-xl bg-black/15 p-4 text-sm text-slate-300 md:grid-cols-2">
+        <p>
+          <span className="text-slate-500">Combo:</span> {getBookingComboText(booking)}
+        </p>
+        <p>
+          <span className="text-slate-500">Voucher:</span> {getBookingVoucherText(booking)}
+        </p>
+        <p>
+          <span className="text-slate-500">Ngày đặt:</span> {formatDateTime(booking.created_at)}
+        </p>
+        <p>
+          <span className="text-slate-500">Số vé:</span> {getBookingSeatCount(booking)}
+        </p>
+      </div>
+    </article>
+  );
+
+  const renderTicketsTab = () => (
+    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
+      {bookingsError && (
+        <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+          {bookingsError}
+        </div>
+      )}
+      {loadingBookings ? (
+        <EmptyState>Đang tải lịch sử mua vé...</EmptyState>
+      ) : bookings.length ? (
+        <div className="grid gap-4">{bookings.map(renderTicketCard)}</div>
+      ) : (
+        <EmptyState>Không có dữ liệu</EmptyState>
+      )}
+    </section>
+  );
 
   const renderPointsTab = () => (
     <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">

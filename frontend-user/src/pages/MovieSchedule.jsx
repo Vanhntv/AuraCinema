@@ -1,31 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getShowtimes } from "../services/showtimeService";
+import { buildRelativeDateOptions, formatDate } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
-
-function buildDateOptions() {
-  return Array.from({ length: 4 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
-    return {
-      value: date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
-      label: date.toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).replaceAll("/", "-"),
-    };
-  });
-}
-
-function formatDate(value) {
-  if (!value) return "Đang cập nhật";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Đang cập nhật";
-  return date.toLocaleDateString("vi-VN");
-}
 
 function formatRoomType(value) {
   return String(value || "2D").toUpperCase() === "3D" ? "3D" : "2D";
@@ -69,7 +48,7 @@ function groupShowtimes(showtimes) {
 function MovieSchedule() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [dateOptions] = useState(buildDateOptions);
+  const [dateOptions] = useState(() => buildRelativeDateOptions(7));
   const dateQuery = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(
     dateOptions.some((option) => option.value === dateQuery)
