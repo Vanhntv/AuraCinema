@@ -5,6 +5,7 @@ import {
   HiOutlineGift,
   HiOutlineLockClosed,
   HiOutlineSparkles,
+  HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUser,
 } from "react-icons/hi";
@@ -12,6 +13,7 @@ import { changePassword, updateProfile } from "../api/authApi";
 import { promotionItems } from "../data/promotionContent";
 import { getMyBookings } from "../services/bookingService";
 import { getMarketingContent } from "../services/marketingContentService";
+import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import { mapCmsContentItem } from "../utils/marketingContent";
 
@@ -38,6 +40,7 @@ const tabs = [
   { id: "member", label: "Thông tin thẻ thành viên", icon: HiOutlineCreditCard },
   { id: "tickets", label: "Lịch sử mua vé", icon: HiOutlineTicket },
   { id: "points", label: "Lịch sử điểm thưởng", icon: HiOutlineSparkles },
+  { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
   { id: "promotions", label: "Chương trình khuyến mãi", icon: HiOutlineGift },
 ];
 
@@ -254,14 +257,18 @@ function AccountPage() {
   const [activePromotions, setActivePromotions] = useState(() =>
     promotionItems.filter((item) => item.status !== "expired"),
   );
+  const [vouchers, setVouchers] = useState([]);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [bookingsError, setBookingsError] = useState("");
+  const [vouchersError, setVouchersError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [loadingVouchers, setLoadingVouchers] = useState(true);
+  const [voucherFilter, setVoucherFilter] = useState("available");
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
 
   useEffect(() => {
@@ -320,6 +327,19 @@ function AccountPage() {
       })
       .catch(() => {
         if (isActive) setActivePromotions(promotionItems.filter((item) => item.status !== "expired"));
+    getMyVoucherWallet()
+      .then((response) => {
+        if (isActive) setVouchers(response.data || []);
+      })
+      .catch((error) => {
+        if (isActive) {
+          setVouchersError(
+            error.response?.data?.message || "Không thể tải ví Voucher cá nhân.",
+          );
+        }
+      })
+      .finally(() => {
+        if (isActive) setLoadingVouchers(false);
       });
 
     return () => {
@@ -698,6 +718,95 @@ function AccountPage() {
     </section>
   );
 
+  const renderVouchersTab = () => {
+    const statusLabels = {
+      available: "Có thể sử dụng",
+      used: "Đã sử dụng",
+      expired: "Đã hết hạn",
+    };
+    const filteredVouchers = vouchers.filter((item) => item.status === voucherFilter);
+    const formatVoucherValue = (voucher) =>
+      voucher.discount_type === "percent"
+        ? `Giảm ${Number(voucher.discount_value || 0)}%`
+        : `Giảm ${currencyFormatter.format(Number(voucher.discount_value || 0))}`;
+
+    return (
+      <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8 max-sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-white">Ví Voucher cá nhân</h2>
+            <p className="mt-1 text-sm text-slate-400">Các ưu đãi đã được thêm vào tài khoản của bạn.</p>
+          </div>
+          <div className="flex gap-2 overflow-x-auto">
+            {Object.entries(statusLabels).map(([status, label]) => (
+              <button
+                className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-bold transition ${
+                  voucherFilter === status
+                    ? "border-[#ff6070] bg-[#ff5364] text-white"
+                    : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-[#ff6070]/60"
+                }`}
+                key={status}
+                onClick={() => setVoucherFilter(status)}
+                type="button"
+              >
+                {label} ({vouchers.filter((item) => item.status === status).length})
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {vouchersError && (
+          <div className="mt-6 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
+            {vouchersError}
+          </div>
+        )}
+
+        {loadingVouchers ? (
+          <EmptyState>Đang tải ví Voucher...</EmptyState>
+        ) : filteredVouchers.length ? (
+          <div className="mt-7 grid gap-5 md:grid-cols-2">
+            {filteredVouchers.map((item) => (
+              <article
+                className={`relative overflow-hidden rounded-2xl border bg-[#101620] p-5 ${
+                  item.status === "available" ? "border-[#ff6070]/35" : "border-white/10 opacity-70"
+                }`}
+                key={item.id}
+              >
+                <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full bg-[#ff5364]/10" />
+                <div className="relative flex items-start justify-between gap-4">
+                  <div>
+                    <span className="rounded-full bg-[#ff5364]/15 px-3 py-1 text-xs font-black uppercase text-[#ff8b96]">
+                      {statusLabels[item.status]}
+                    </span>
+                    <h3 className="mt-3 text-lg font-black text-white">
+                      {item.voucher?.name || item.voucher?.code}
+                    </h3>
+                    <p className="mt-1 text-2xl font-black text-[#ff6070]">
+                      {formatVoucherValue(item.voucher || {})}
+                    </p>
+                  </div>
+                  <span className="rounded-lg border border-dashed border-[#ff6070]/50 bg-black/20 px-3 py-2 font-mono text-sm font-black text-white">
+                    {item.voucher?.code}
+                  </span>
+                </div>
+                {item.voucher?.description && (
+                  <p className="mt-4 text-sm leading-6 text-slate-400">{item.voucher.description}</p>
+                )}
+                <div className="mt-4 border-t border-dashed border-white/10 pt-4 text-xs text-slate-400">
+                  <p>Đơn tối thiểu: {currencyFormatter.format(Number(item.voucher?.min_order || 0))}</p>
+                  <p className="mt-1">Hạn sử dụng: {formatDate(item.expires_at)}</p>
+                  {item.used_at && <p className="mt-1">Đã dùng: {formatDateTime(item.used_at)}</p>}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState>Không có Voucher ở trạng thái này.</EmptyState>
+        )}
+      </section>
+    );
+  };
+
   const renderPromotionsTab = () => {
     const rows = activePromotions.map((promotion, index) => (
       <tr key={promotion.slug}>
@@ -741,6 +850,7 @@ function AccountPage() {
     if (activeTab === "member") return renderMemberTab();
     if (activeTab === "tickets") return renderTicketsTab();
     if (activeTab === "points") return renderPointsTab();
+    if (activeTab === "vouchers") return renderVouchersTab();
     if (activeTab === "promotions") return renderPromotionsTab();
     return renderAccountTab();
   };

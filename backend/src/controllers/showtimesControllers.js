@@ -281,6 +281,13 @@ const mapShowtime = (showtime) => ({
   movieTitle: showtime.movie_id?.title ?? null,
   moviePoster: showtime.movie_id?.poster ?? null,
   movieDuration: showtime.movie_id?.duration ?? null,
+  movieCountry: showtime.movie_id?.country ?? null,
+  movieLanguage: showtime.movie_id?.language ?? null,
+  movieReleaseDate:
+    showtime.movie_id?.release_date ?? showtime.movie_id?.releaseDate ?? null,
+  movieAgeLimit:
+    showtime.movie_id?.age_limit ?? showtime.movie_id?.ageLimit ?? null,
+  movieDescription: showtime.movie_id?.description ?? null,
   movieStatus: showtime.movie_id?.status ?? null,
   room_id: showtime.room_id?._id ?? showtime.room_id ?? null,
   roomName: showtime.room_id?.name ?? null,
@@ -431,7 +438,7 @@ export const getAllShowtimes = async (req, res) => {
     }
 
     let showtimes = await Showtime.find(filter)
-      .populate("movie_id", "title poster duration release_date status")
+      .populate("movie_id", "title poster duration release_date releaseDate status country language age_limit ageLimit description")
       .populate({
         path: "room_id",
         select: "name capacity cinema_id room_type status",

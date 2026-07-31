@@ -7,6 +7,7 @@ import {
   getVoucherById,
   getVoucherStats,
   getVoucherUsageHistory,
+  getMyVoucherWallet,
   verifyVoucher,
   toggleVoucherStatus,
   updateVoucher,
@@ -19,6 +20,7 @@ const customerOnly = [authMiddleware, authorizeRoles("user")];
 
 router.post("/verify", customerOnly, verifyVoucher);
 router.get("/verify", customerOnly, verifyVoucher);
+router.get("/my-wallet", customerOnly, getMyVoucherWallet);
 router.get("/", adminOnly, getAllVouchers);
 router.get("/stats", adminOnly, getVoucherStats);
 router.get("/:id/usages", adminOnly, getVoucherUsageHistory);

@@ -122,6 +122,79 @@ function getSeatStatus(seat) {
   return String(seat?.status || "available").trim().toLowerCase();
 }
 
+function validateSeatSpacing(nextSelectedSeats, allSeats) {
+  const selectedIds = new Set(nextSelectedSeats.map((seat) => seat._id));
+  const rows = new Map();
+
+  allSeats.forEach((seat) => {
+    const row = seat?.seat_id?.seat_row || "?";
+    if (!rows.has(row)) rows.set(row, []);
+    rows.get(row).push(seat);
+  });
+
+  for (const seats of rows.values()) {
+    const sortedSeats = seats.sort(
+      (first, second) =>
+        Number(first.seat_id?.seat_number) - Number(second.seat_id?.seat_number),
+    );
+    const isSelected = (seat) => selectedIds.has(seat?._id);
+    const isEmpty = (seat) =>
+      getSeatStatus(seat) === "available" && !isSelected(seat);
+    const isRegularSeat = (seat) => getSeatType(seat) !== "couple";
+
+    if (sortedSeats.length >= 2) {
+      const firstSeat = sortedSeats[0];
+      const secondSeat = sortedSeats[1];
+      const lastSeat = sortedSeats[sortedSeats.length - 1];
+      const penultimateSeat = sortedSeats[sortedSeats.length - 2];
+
+      const leavesLeftEdgeSeat =
+        isRegularSeat(firstSeat) &&
+        isRegularSeat(secondSeat) &&
+        isEmpty(firstSeat) &&
+        isSelected(secondSeat);
+      const leavesRightEdgeSeat =
+        isRegularSeat(lastSeat) &&
+        isRegularSeat(penultimateSeat) &&
+        isEmpty(lastSeat) &&
+        isSelected(penultimateSeat);
+
+      if (leavesLeftEdgeSeat || leavesRightEdgeSeat) {
+        return "Không được để trống một ghế lẻ ở ngoài cùng của hàng.";
+      }
+    }
+
+    for (let index = 0; index <= sortedSeats.length - 3; index += 1) {
+      const leftSeat = sortedSeats[index];
+      const middleSeat = sortedSeats[index + 1];
+      const rightSeat = sortedSeats[index + 2];
+
+      if (
+        isRegularSeat(leftSeat) &&
+        isRegularSeat(middleSeat) &&
+        isRegularSeat(rightSeat) &&
+        isSelected(leftSeat) &&
+        isEmpty(middleSeat) &&
+        isSelected(rightSeat)
+      ) {
+        return "Không được chọn hai ghế cách nhau đúng một ghế trống.";
+      }
+    }
+  }
+
+  return "";
+}
+
+function validateSingleSeatType(nextSelectedSeats) {
+  const selectedTypes = new Set(nextSelectedSeats.map((seat) => getSeatType(seat)));
+
+  if (selectedTypes.size > 1) {
+    return "Không được chọn nhiều loại ghế khác nhau trong cùng một lần đặt vé.";
+  }
+
+  return "";
+}
+
 function resolveImageUrl(image) {
   if (!image) return "";
   if (/^https?:\/\//i.test(image)) return image;
@@ -535,6 +608,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     if (exists) {
       const releaseIds = selectedSeatsInGroup.map((item) => item._id);
+      const nextSelectedSeats = selectedSeats.filter(
+        (item) => !releaseIds.includes(item._id),
+      );
+      const selectionError =
+        validateSingleSeatType(nextSelectedSeats) ||
+        validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+      if (selectionError) {
+        setSeatError(selectionError);
+        return;
+      }
+
       try {
         await releaseShowtimeSeats(releaseIds);
       } catch (requestError) {
@@ -566,6 +650,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
 
     const newSeats = seatsToToggle.filter((item) => !selectedSeatIds.has(item._id));
+    const nextSelectedSeats = [...selectedSeats, ...newSeats];
+    const selectionError =
+      validateSingleSeatType(nextSelectedSeats) ||
+      validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+    if (selectionError) {
+      setSeatError(selectionError);
+      return;
+    }
 
     try {
       const response = await holdShowtimeSeats(getShowtimeId(selectedShowtime), [
