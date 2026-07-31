@@ -5,20 +5,17 @@ import { getMovieById } from '../services/movieService'
 import { getShowtimesByMovie } from '../services/showtimeService'
 import { getTrailersByMovie } from '../services/trailerService'
 import BookingModal from '../components/BookingModal'
+import {
+  formatDayOfMonth,
+  formatDisplayDate,
+  formatMonthNumber,
+  formatShowtimeTime,
+  formatWeekdayShort,
+  getDateKey,
+} from '../utils/dateTime'
 
 const fallbackPoster =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22230%22 fill=%22white%22 font-family=%22Arial%22 font-size=%2220%22 text-anchor=%22middle%22%3EAura Cinema%3C/text%3E%3C/svg%3E'
-
-function dateKey(value) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function formatDate(value) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Đang cập nhật' : date.toLocaleDateString('vi-VN')
-}
 
 function youtubeEmbed(url) {
   if (!url) return ''
@@ -70,17 +67,17 @@ export default function MovieDetailPage() {
   const dates = useMemo(() => {
     const unique = new Map()
     showtimes.forEach((item) => {
-      const key = dateKey(item.start_time)
-      if (key && !unique.has(key)) unique.set(key, new Date(item.start_time))
+      const key = getDateKey(item.start_time)
+      if (key && !unique.has(key)) unique.set(key, item.start_time)
     })
-    return [...unique.entries()].sort((a, b) => a[1] - b[1])
+    return [...unique.entries()].sort((a, b) => new Date(a[1]) - new Date(b[1]))
   }, [showtimes])
 
   useEffect(() => {
     if (dates.length && !selectedDate) setSelectedDate(dates[0][0])
   }, [dates, selectedDate])
 
-  const visibleShowtimes = showtimes.filter((item) => dateKey(item.start_time) === selectedDate)
+  const visibleShowtimes = showtimes.filter((item) => getDateKey(item.start_time) === selectedDate)
   const backdrop = movie?.banner || movie?.banners?.[0] || movie?.poster
   const embedUrl = youtubeEmbed(trailer?.youtube_url)
 
@@ -112,7 +109,7 @@ export default function MovieDetailPage() {
             </div>
             <div className="mt-6 flex flex-wrap gap-3 text-sm font-semibold text-slate-200">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.07] px-4 py-2"><HiOutlineClock className="text-lg text-[#ff7180]" /> {movie.duration ? `${movie.duration} phút` : 'Đang cập nhật'}</span>
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.07] px-4 py-2"><HiOutlineCalendarDays className="text-lg text-[#ff7180]" /> {formatDate(movie.release_date || movie.releaseDate)}</span>
+              <span className="inline-flex items-center gap-2 rounded-full bg-white/[0.07] px-4 py-2"><HiOutlineCalendarDays className="text-lg text-[#ff7180]" /> {formatDisplayDate(movie.release_date || movie.releaseDate)}</span>
             </div>
             <div className="mt-6 grid gap-3 border-y border-white/10 py-5 text-sm leading-6 text-slate-300">
               <p><strong className="mr-2 text-slate-100">Đạo diễn</strong>{movie.director || 'Đang cập nhật'}</p>
@@ -138,9 +135,9 @@ export default function MovieDetailPage() {
             <div className="mt-7 flex gap-3 overflow-x-auto border-b border-white/10 pb-5">
               {dates.map(([key, date]) => (
                 <button key={key} type="button" onClick={() => { setSelectedDate(key); setSelectedShowtime(null) }} className={`min-w-[104px] rounded-2xl border px-4 py-3.5 text-center transition ${selectedDate === key ? 'border-[#ff6070] bg-gradient-to-b from-[#ff6877] to-[#e93c50] text-white shadow-[0_12px_28px_rgba(255,83,100,.22)]' : 'border-white/10 bg-white/[0.035] text-slate-300 hover:border-[#ff6070]/60 hover:bg-white/[0.06]'}`}>
-                  <span className="block text-[11px] font-bold uppercase">{date.toLocaleDateString('vi-VN', { weekday: 'short' })}</span>
-                  <strong className="my-0.5 block text-2xl">{date.getDate()}</strong>
-                  <span className="text-[11px]">Tháng {date.getMonth() + 1}</span>
+                  <span className="block text-[11px] font-bold uppercase">{formatWeekdayShort(date)}</span>
+                  <strong className="my-0.5 block text-2xl">{formatDayOfMonth(date)}</strong>
+                  <span className="text-[11px]">Tháng {formatMonthNumber(date)}</span>
                 </button>
               ))}
             </div>
@@ -152,7 +149,7 @@ export default function MovieDetailPage() {
               <div className="flex flex-wrap gap-3">
                 {visibleShowtimes.map((showtime) => (
                   <button key={showtime.id || showtime._id} type="button" onClick={() => setSelectedShowtime(showtime)} className={`group min-w-[145px] rounded-xl border px-6 py-3 text-left transition hover:-translate-y-0.5 hover:border-[#ff6070] hover:bg-[#ff5364]/10 ${String(selectedShowtime?.id || selectedShowtime?._id) === String(showtime.id || showtime._id) ? 'border-[#ff6070] bg-[#ff5364]/10' : 'border-white/10 bg-[#121a25]'}`}>
-                    <strong className="block text-lg text-white group-hover:text-[#ff7180]">{showtime.startTime || new Date(showtime.start_time).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</strong>
+                    <strong className="block text-lg text-white group-hover:text-[#ff7180]">{showtime.startTime || formatShowtimeTime(showtime.start_time)}</strong>
                     <span className="mt-0.5 block text-[11px] font-medium text-slate-500">{showtime.roomName || 'Phòng chiếu'} · Chọn ghế</span>
                   </button>
                 ))}

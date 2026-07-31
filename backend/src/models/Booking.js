@@ -2,6 +2,13 @@ import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema(
   {
+    booking_code: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+      uppercase: true,
+    },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     showtime_id: { type: mongoose.Schema.Types.ObjectId, ref: "Showtime", required: true },
     showtime_seat_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: "ShowtimeSeat", required: true }],
@@ -28,7 +35,7 @@ const bookingSchema = new mongoose.Schema(
     subtotal_price: { type: Number, default: 0, min: 0 },
     discount_amount: { type: Number, default: 0, min: 0 },
     total_price: { type: Number, required: true, min: 0 },
-    status: { type: String, enum: ["confirmed", "cancelled"], default: "confirmed" },
+    status: { type: String, enum: ["pending", "confirmed", "cancelled"], default: "pending" },
     cancelled_by: {
       type: String,
       enum: ["cinema", "customer", "system", null],
@@ -38,9 +45,12 @@ const bookingSchema = new mongoose.Schema(
     cancelled_at: { type: Date, default: null },
     payment_status: {
       type: String,
-      enum: ["pending", "paid", "failed", "refunded"],
-      default: "paid",
+      enum: ["pending", "paid", "failed", "cancelled", "refunded"],
+      default: "pending",
     },
+    payment_provider: { type: String, default: "internal", trim: true },
+    payment_transaction_id: { type: String, default: "", trim: true },
+    paid_at: { type: Date, default: null },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } },
 );

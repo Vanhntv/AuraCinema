@@ -1,10 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getShowtimes } from "../services/showtimeService";
+import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
 
+function formatPrice(value) {
+  const price = Number(value);
+  return Number.isFinite(price)
+    ? `${price.toLocaleString("vi-VN")}đ`
+    : "Đang cập nhật";
 function buildDateOptions() {
   return Array.from({ length: 4 }, (_, index) => {
     const date = new Date();
@@ -69,7 +75,7 @@ function groupShowtimes(showtimes) {
 function MovieSchedule() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [dateOptions] = useState(buildDateOptions);
+  const [dateOptions] = useState(() => buildRelativeDateOptions(7));
   const dateQuery = searchParams.get("date");
   const [selectedDate, setSelectedDate] = useState(
     dateOptions.some((option) => option.value === dateQuery)
