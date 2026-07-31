@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
-import { createBooking, payBooking } from "../services/bookingService";
+import { cancelBooking, createBooking, payBooking } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
@@ -160,6 +160,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [seatError, setSeatError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
+  const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [bookingResult, setBookingResult] = useState(null);
   const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
@@ -785,6 +786,33 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   };
 
+  const cancelPendingBooking = async () => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    if (!bookingId || bookingIsPaid) return;
+
+    try {
+      setIsCancellingBooking(true);
+      setPaymentError("");
+      await cancelBooking(bookingId, { reason: "Khách hủy trước khi thanh toán" });
+      setBookingResult(null);
+      setConfirmedBookingSummary(null);
+      setSelectedSeats([]);
+      setHoldExpiresAt(null);
+      setRemainingSeconds(0);
+      setStep("select-seat");
+      const showtimeId = getShowtimeId(selectedShowtime);
+      if (showtimeId) {
+        const latestSeats = await getShowtimeSeats(showtimeId);
+        setShowtimeSeats(latestSeats?.data || []);
+      }
+      setSeatError("Đã hủy đơn chờ thanh toán. Bạn có thể chọn lại ghế.");
+    } catch (requestError) {
+      setPaymentError(requestError.response?.data?.message || "Không thể hủy đơn đặt vé.");
+    } finally {
+      setIsCancellingBooking(false);
+    }
+  };
+
   const submitBooking = async () => {
     if (!selectedSeats.length || !selectedShowtime) return;
 
@@ -900,6 +928,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 ) : (
                   <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={completePayment} disabled={isPaying}>
                     {isPaying ? "Đang thanh toán..." : "Thanh toán"}
+                  </button>
+                )}
+                {!bookingIsPaid && (
+                  <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+                    {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
                   </button>
                 )}
                 <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>

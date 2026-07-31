@@ -61,6 +61,40 @@ const statusBadgeClass = (status) => {
   return "status-badge status-ended";
 };
 
+const htmlToPlainText = (html = "") =>
+  String(html)
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<li>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const plainTextToHtml = (text = "") => {
+  const blocks = String(text)
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  return blocks.map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br />")}</p>`).join("\n");
+};
+
 const MarketingContentPage = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +157,7 @@ const MarketingContentPage = () => {
       published_at: toInputDate(item.published_at),
       start_date: toInputDate(item.start_date),
       end_date: toInputDate(item.end_date),
-      content_html: item.content_html || "",
+      content_html: htmlToPlainText(item.content_html || ""),
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -135,6 +169,7 @@ const MarketingContentPage = () => {
       setSubmitting(true);
       const payload = {
         ...formData,
+        content_html: plainTextToHtml(formData.content_html),
         start_date: formData.type === "promotion" ? formData.start_date : "",
         end_date: formData.type === "promotion" ? formData.end_date : "",
       };
@@ -208,7 +243,8 @@ const MarketingContentPage = () => {
           )}
         </div>
         <textarea className="form-input marketing-summary-input" value={formData.summary} onChange={(event) => handleChange("summary", event.target.value)} placeholder="Tóm tắt" />
-        <textarea className="form-input marketing-content-input" value={formData.content_html} onChange={(event) => handleChange("content_html", event.target.value)} placeholder="<p>Nội dung HTML...</p>" />
+        <label className="marketing-content-label">Nội dung bài viết</label>
+        <textarea className="form-input marketing-content-input" value={formData.content_html} onChange={(event) => handleChange("content_html", event.target.value)} placeholder="Nhập nội dung bài viết. Mỗi đoạn cách nhau bằng một dòng trống." />
         <button className="btn btn-primary" disabled={submitting} type="submit">
           <HiOutlinePlus />
           {submitting ? "Đang lưu..." : editingItem ? "Lưu thay đổi" : "Tạo nội dung"}

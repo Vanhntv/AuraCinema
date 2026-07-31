@@ -3043,10 +3043,21 @@
   resize: vertical;
 }
 
+.marketing-content-label {
+  display: block;
+  margin: 14px 0 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .marketing-content-input {
   min-height: 220px;
-  margin: 12px 0;
+  margin-bottom: 12px;
   resize: vertical;
+  line-height: 1.7;
 }
 
 .marketing-toolbar {
