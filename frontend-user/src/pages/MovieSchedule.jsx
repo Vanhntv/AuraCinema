@@ -140,7 +140,7 @@ function MovieSchedule() {
                       : "border-[#283241] bg-[#151b24] text-white hover:border-[#ff6070]"
                   }`}
                 >
-                  {option.label}
+                  {option.label || option.displayDate || option.fullLabel}
                 </button>
               );
             })}
