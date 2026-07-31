@@ -14,6 +14,30 @@ import {
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+const isTransactionUnsupportedError = (error) => {
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    message.includes("transaction numbers are only allowed") ||
+    message.includes("only servers in a sharded cluster can start a new transaction") ||
+    message.includes("replica set member or mongos")
+  );
+};
+
+const runBookingWrite = async (operation) => {
+  const session = await mongoose.startSession();
+  try {
+    return await session.withTransaction(() => operation(session));
+  } catch (error) {
+    if (process.env.NODE_ENV === "production" || !isTransactionUnsupportedError(error)) {
+      throw error;
+    }
+
+    return operation(null);
+  } finally {
+    await session.endSession();
+  }
+};
+
 const seatTypeName = (seat) => normalizeText(seat.seat_id?.seat_type_id?.name || "").trim();
 
 const isCoupleSeat = (seat) => {
@@ -163,7 +187,6 @@ const reserveComboStock = async ({ combos, session }) => {
 };
 
 export const createBooking = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
     const { showtime_id, showtime_seat_ids } = req.body;
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
@@ -173,7 +196,7 @@ export const createBooking = async (req, res) => {
     }
 
     let createdBooking;
-    await session.withTransaction(async () => {
+    await runBookingWrite(async (session) => {
       const [user, showtime, seats] = await Promise.all([
         User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session),
         Showtime.findOne({ _id: showtime_id, deleted_at: null }).session(session),
@@ -290,13 +313,10 @@ export const createBooking = async (req, res) => {
     return res.status(201).json({ success: true, message: "Đặt vé thành công", data: createdBooking });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
-  } finally {
-    await session.endSession();
   }
 };
 
 export const cancelBooking = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
     const { id } = req.params;
     const cancelledBy = ["cinema", "customer", "system"].includes(req.body?.cancelled_by)
@@ -307,7 +327,7 @@ export const cancelBooking = async (req, res) => {
     const refundVoucher = cancelledBy === "cinema" || req.body?.refund_voucher === true;
 
     let cancelledBooking;
-    await session.withTransaction(async () => {
+    await runBookingWrite(async (session) => {
       const booking = await Booking.findOne({
         _id: id,
         ...(req.user.role === "admin" ? {} : { user_id: req.user.id }),
@@ -364,8 +384,6 @@ export const cancelBooking = async (req, res) => {
     });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
-  } finally {
-    await session.endSession();
   }
 };
 

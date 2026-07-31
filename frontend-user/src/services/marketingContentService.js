@@ -5,7 +5,10 @@ export const getMarketingContent = async (params = {}) => {
   return response.data;
 };
 
-export const getMarketingContentBySlug = async (slug) => {
-  const response = await axiosClient.get(`/marketing-content/${slug}`);
+export const getMarketingContentBySlug = async (typeOrSlug, maybeSlug) => {
+  const path = maybeSlug
+    ? `/marketing-content/${typeOrSlug}/${maybeSlug}`
+    : `/marketing-content/${typeOrSlug}`;
+  const response = await axiosClient.get(path);
   return response.data;
 };
