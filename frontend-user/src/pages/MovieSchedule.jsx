@@ -2,37 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getShowtimes } from "../services/showtimeService";
 import { buildRelativeDateOptions, formatDate } from "../utils/dateTime";
-import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
-
-function formatPrice(value) {
-  const price = Number(value);
-  return Number.isFinite(price)
-    ? `${price.toLocaleString("vi-VN")}đ`
-    : "Đang cập nhật";
-function buildDateOptions() {
-  return Array.from({ length: 4 }, (_, index) => {
-    const date = new Date();
-    date.setDate(date.getDate() + index);
-    return {
-      value: date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }),
-      label: date.toLocaleDateString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }).replaceAll("/", "-"),
-    };
-  });
-}
-
-function formatDate(value) {
-  if (!value) return "Đang cập nhật";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Đang cập nhật";
-  return date.toLocaleDateString("vi-VN");
-}
 
 function formatRoomType(value) {
   return String(value || "2D").toUpperCase() === "3D" ? "3D" : "2D";
@@ -150,13 +122,18 @@ function MovieSchedule() {
         {isLoading && (
           <div className="grid grid-cols-2 gap-7 max-xl:grid-cols-1">
             {[1, 2, 3, 4].map((item) => (
-              <div key={item} className="h-[365px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
+              <div
+                key={item}
+                className="h-[365px] animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]"
+              />
             ))}
           </div>
         )}
 
         {!isLoading && error && (
-          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-6 py-14 text-center font-bold text-red-200">{error}</div>
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 px-6 py-14 text-center font-bold text-red-200">
+            {error}
+          </div>
         )}
 
         {!isLoading && !error && movies.length === 0 && (
@@ -169,7 +146,10 @@ function MovieSchedule() {
         {!isLoading && !error && movies.length > 0 && (
           <section className="grid grid-cols-2 items-start gap-x-7 gap-y-8 max-xl:grid-cols-1">
             {movies.map((movie) => (
-              <article key={movie._id} className="relative flex min-h-[365px] overflow-hidden rounded-2xl border border-[#344050] bg-[#10151d] max-sm:flex-col">
+              <article
+                key={movie._id}
+                className="relative flex min-h-[365px] overflow-hidden rounded-2xl border border-[#344050] bg-[#10151d] max-sm:flex-col"
+              >
                 <button
                   type="button"
                   className="w-[31%] shrink-0 overflow-hidden bg-slate-800 max-sm:aspect-[16/10] max-sm:w-full"
@@ -180,7 +160,9 @@ function MovieSchedule() {
                     src={movie.poster}
                     alt={movie.title}
                     className="h-full w-full object-cover transition duration-500 hover:scale-105"
-                    onError={(event) => { event.currentTarget.src = FALLBACK_POSTER; }}
+                    onError={(event) => {
+                      event.currentTarget.src = FALLBACK_POSTER;
+                    }}
                   />
                 </button>
 
@@ -190,7 +172,9 @@ function MovieSchedule() {
                     <span>{movie.duration ? `${movie.duration} phút` : "Đang cập nhật"}</span>
                   </div>
                   <button type="button" className="text-left" onClick={() => navigate(`/phim/${movie._id}`)}>
-                    <h2 className="text-[18px] font-black uppercase leading-[1.38] text-white transition hover:text-[#ff6070]">{movie.title}</h2>
+                    <h2 className="text-[18px] font-black uppercase leading-[1.38] text-white transition hover:text-[#ff6070]">
+                      {movie.title}
+                    </h2>
                   </button>
                   <div className="mt-1 space-y-0.5 text-[16px] leading-7 text-slate-100">
                     <p>Xuất xứ: {movie.country || "Đang cập nhật"}</p>

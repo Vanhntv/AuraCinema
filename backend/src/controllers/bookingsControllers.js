@@ -14,30 +14,6 @@ import {
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-const isTransactionUnsupportedError = (error) => {
-  const message = String(error?.message || "").toLowerCase();
-  return (
-    message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
-    message.includes("replica set member or mongos")
-  );
-};
-
-const runBookingWrite = async (operation) => {
-  const session = await mongoose.startSession();
-  try {
-    return await session.withTransaction(() => operation(session));
-  } catch (error) {
-    if (process.env.NODE_ENV === "production" || !isTransactionUnsupportedError(error)) {
-      throw error;
-    }
-
-    return operation(null);
-  } finally {
-    await session.endSession();
-  }
-};
-
 const seatTypeName = (seat) => normalizeText(seat.seat_id?.seat_type_id?.name || "").trim();
 
 const isCoupleSeat = (seat) => {
@@ -267,8 +243,6 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
     }
 
-    let createdBooking;
-    await runBookingWrite(async (session) => {
     const createdBooking = await runWithOptionalTransaction(async (session) => {
       const [user, showtime, seats] = await Promise.all([
         User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session),
@@ -491,8 +465,6 @@ export const cancelBooking = async (req, res) => {
     const cancelledBy = "customer";
     const refundVoucher = cancelledBy === "cinema" || req.body?.refund_voucher === true;
 
-    let cancelledBooking;
-    await runBookingWrite(async (session) => {
     const cancelledBooking = await runWithOptionalTransaction(async (session) => {
       const booking = await Booking.findOne({
         _id: id,
