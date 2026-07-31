@@ -1,7 +1,28 @@
 import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { newsArticles } from '../data/newsContent';
+import { getMarketingContent } from '../services/marketingContentService';
+import { mapCmsContentItem } from '../utils/marketingContent';
 
 function NewsPage() {
+  const [articles, setArticles] = useState(newsArticles);
+
+  useEffect(() => {
+    let active = true;
+    getMarketingContent({ type: 'news', limit: 100 })
+      .then((response) => {
+        const items = (response.data || []).map(mapCmsContentItem);
+        if (active && items.length) setArticles(items);
+      })
+      .catch(() => {
+        if (active) setArticles(newsArticles);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="w-full pb-24 pt-6 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-white">
       <div className="mx-auto w-[min(1760px,calc(100%_-_96px))] max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
@@ -13,7 +34,7 @@ function NewsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-          {newsArticles.map((article) => (
+          {articles.map((article) => (
             <Link
               key={article.slug}
               to={`/tin-tuc/${article.slug}`}

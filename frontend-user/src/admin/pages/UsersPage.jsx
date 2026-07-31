@@ -50,6 +50,7 @@ const paymentStatusLabels = {
   pending: "Đang chờ",
   paid: "Đã thanh toán",
   failed: "Thất bại",
+  cancelled: "Đã hủy",
   refunded: "Đã hoàn tiền",
 };
 

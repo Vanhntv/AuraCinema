@@ -5,11 +5,22 @@ const toDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+export const buildRelativeDateOptions = (length = 7) =>
+  Array.from({ length }, (_, index) => {
+export const APP_TIME_ZONE = "Asia/Ho_Chi_Minh";
+
+const toDate = (value) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const getDateKey = (value) => {
   const date = toDate(value);
   if (!date) return "";
   return date.toLocaleDateString("en-CA", { timeZone: APP_TIME_ZONE });
 };
+
+export const getShowtimeDateValue = (showtime) => getDateKey(showtime?.start_time);
 
 export const formatDisplayDate = (value, fallback = "Đang cập nhật") => {
   const date = toDate(value);
@@ -103,3 +114,19 @@ export const getShowtimeDateValue = (showtime) =>
   getDateKey(showtime?.date || showtime?.showtime_date || showtime?.start_time || showtime?.startTime);
 
 export const formatDate = formatDisplayDate;
+export const getShowtimeDateValue = (showtime) => {
+  const value = showtime?.date || showtime?.showtime_date || showtime?.start_time || showtime?.startTime;
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-CA", { timeZone: DEFAULT_TIME_ZONE });
+};
+      value: getDateKey(date),
+      day: formatWeekdayShort(date),
+      weekday: formatWeekdayLong(date),
+      date: formatDayMonth(date),
+      displayDate: formatDayMonth(date),
+      label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : "",
+      fullLabel: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : formatWeekdayLong(date),
+    };
+  });

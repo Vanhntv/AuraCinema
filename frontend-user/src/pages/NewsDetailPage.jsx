@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { getNewsArticleBySlug, newsArticles } from '../data/newsContent';
+import { getMarketingContent, getMarketingContentBySlug } from '../services/marketingContentService';
+import { mapCmsContentItem } from '../utils/marketingContent';
 
 function DetailSkeleton() {
   return (
@@ -32,18 +34,22 @@ function NewsDetailPage() {
   const { slug } = useParams();
   const [isLoading, setIsLoading] = useState(true);
   const [article, setArticle] = useState(null);
-
-  const relatedArticles = useMemo(
-    () => newsArticles.filter((item) => item.slug !== slug).slice(0, 3),
-    [slug]
+  const [relatedArticles, setRelatedArticles] = useState(() =>
+    newsArticles.filter((item) => item.slug !== slug).slice(0, 3),
   );
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
 
-    const timer = window.setTimeout(() => {
-      const found = getNewsArticleBySlug(slug);
+    const loadArticle = async () => {
+      let found = null;
+      try {
+        const response = await getMarketingContentBySlug('news', slug);
+        found = mapCmsContentItem(response.data);
+      } catch {
+        found = getNewsArticleBySlug(slug);
+      }
 
       if (!active) return;
 
@@ -57,8 +63,21 @@ function NewsDetailPage() {
         setArticle(null);
       }
 
+      try {
+        const relatedResponse = await getMarketingContent({ type: 'news', limit: 4 });
+        const relatedItems = (relatedResponse.data || [])
+          .map(mapCmsContentItem)
+          .filter((item) => item.slug !== slug)
+          .slice(0, 3);
+        if (active && relatedItems.length) setRelatedArticles(relatedItems);
+      } catch {
+        if (active) setRelatedArticles(newsArticles.filter((item) => item.slug !== slug).slice(0, 3));
+      }
+
       setIsLoading(false);
-    }, 450);
+    };
+
+    const timer = window.setTimeout(loadArticle, 150);
 
     return () => {
       active = false;
