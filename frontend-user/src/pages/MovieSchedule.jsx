@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getShowtimes } from "../services/showtimeService";
+import { buildRelativeDateOptions, formatDate } from "../utils/dateTime";
 import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
