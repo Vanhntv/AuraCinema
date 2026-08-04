@@ -62,6 +62,7 @@ const normalizeSeatTypeName = (value = "") =>
     .trim();
 const getSeatTypeTone = (seatType) => {
   const name = normalizeSeatTypeName(seatType?.name);
+  if (name.includes("hong") || name.includes("broken")) return "broken";
   if (name.includes("vip")) return "vip";
   if (name.includes("couple") || name.includes("doi")) return "couple";
   if (name.includes("wheelchair") || name.includes("xe lan")) return "wheelchair";
@@ -784,8 +785,13 @@ function RoomsPage() {
   const missingPresetSeatTypes = [
     {
       name: "Couple",
-      description: "Ghế đôi dành cho hai khách",
+      description: "Ghe doi danh cho hai khach",
       price_multiplier: 1.8,
+    },
+    {
+      name: "Ghe hong",
+      description: "Ghe khong the ban ve",
+      price_multiplier: 0,
     },
   ].filter(
     (preset) =>

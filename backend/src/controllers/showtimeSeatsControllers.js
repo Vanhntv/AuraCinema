@@ -8,6 +8,7 @@ import {
   updateShowtimeSeatService,
 } from "../services/showtimeSeatService.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
+import { isBrokenSeatType } from "../utils/seatTypes.js";
 
 const HOLD_DURATION_MS = 5 * 60 * 1000;
 
@@ -15,18 +16,28 @@ export const holdShowtimeSeats = async (req, res) => {
   try {
     const { showtime_id, showtime_seat_ids } = req.body;
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
-      return res.status(400).json({ success: false, message: "Vui lòng chọn ghế cần giữ" });
+      return res.status(400).json({ success: false, message: "Vui long chon ghe can giu" });
     }
     const now = new Date();
     await ShowtimeSeat.updateMany(
       { status: "held", hold_expires_at: { $lte: now } },
       { $set: { status: "available", held_by: null, hold_expires_at: null } },
     );
-    const seats = await ShowtimeSeat.find({ _id: { $in: showtime_seat_ids }, showtime_id, deleted_at: null });
+    let seatsQuery = ShowtimeSeat.find({ _id: { $in: showtime_seat_ids }, showtime_id, deleted_at: null });
+    if (typeof seatsQuery.populate === "function") {
+      seatsQuery = seatsQuery.populate({
+        path: "seat_id",
+        populate: { path: "seat_type_id", select: "name description price_multiplier" },
+      });
+    }
+    const seats = await seatsQuery;
+    if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
+      return res.status(409).json({ success: false, message: "Ghe hong khong the giu ve" });
+    }
     const canHold = seats.length === new Set(showtime_seat_ids.map(String)).size && seats.every((seat) =>
       seat.status === "available" || (seat.status === "held" && String(seat.held_by) === String(req.user.id)),
     );
-    if (!canHold) return res.status(409).json({ success: false, message: "Một hoặc nhiều ghế đang được người khác giữ" });
+    if (!canHold) return res.status(409).json({ success: false, message: "Mot hoac nhieu ghe dang duoc nguoi khac giu" });
     const expiresAt = new Date(Date.now() + HOLD_DURATION_MS);
     await ShowtimeSeat.updateMany(
       { _id: { $in: showtime_seat_ids } },

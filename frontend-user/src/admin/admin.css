@@ -3849,6 +3849,12 @@
   color: #fbcfe8;
 }
 
+.seat-type-chip.broken.active {
+  border-color: rgba(244, 63, 94, 0.55);
+  background: rgba(244, 63, 94, 0.16);
+  color: #fecdd3;
+}
+
 .seat-type-chip.add {
   border-style: dashed;
   color: var(--color-accent-light);
@@ -4035,6 +4041,18 @@
   border-color: rgba(59, 130, 246, 0.42);
   background: rgba(59, 130, 246, 0.14);
   color: #bfdbfe;
+}
+
+.room-seat.broken {
+  border-color: rgba(244, 63, 94, 0.48);
+  background:
+    linear-gradient(135deg, rgba(127, 29, 29, 0.88), rgba(153, 27, 27, 0.78));
+  color: #fecdd3;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.layout-editor-seat.broken {
+  opacity: 0.95;
 }
 
 .room-seat.selected {
