@@ -80,88 +80,81 @@ const updateTransactionLog = async (transaction, updates) => {
   await transaction.save();
 };
 
-export const receiveSepayWebhook = async (req, res) => {
-  const payload = req.body;
+const processSepayWebhook = async (payload) => {
+  const referenceCode = buildReferenceCode(payload);
+  const bookingCode = extractBookingCode(payload);
+  const transaction = await createTransactionLog({ payload, referenceCode, bookingCode });
 
-  try {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      return res.status(400).json({ success: false, message: "No data" });
-    }
+  if (transaction?.status === "processed") {
+    return;
+  }
 
-    const referenceCode = buildReferenceCode(payload);
-    const bookingCode = extractBookingCode(payload);
-    const transaction = await createTransactionLog({ payload, referenceCode, bookingCode });
-
-    if (transaction?.status === "processed") {
-      return res.json({ success: true, message: "Transaction already processed" });
-    }
-
-    if (normalizeString(payload.transferType).toLowerCase() !== "in") {
-      await updateTransactionLog(transaction, {
-        status: "ignored",
-        error_message: "Không phải giao dịch tiền vào",
-        processed_at: new Date(),
-      });
-      return res.json({ success: true, message: "Ignored non-incoming transaction" });
-    }
-
-    if (!bookingCode) {
-      await updateTransactionLog(transaction, {
-        status: "failed",
-        error_message: "Không tìm thấy mã booking trong nội dung giao dịch",
-        processed_at: new Date(),
-      });
-      return res.status(400).json({ success: false, message: "Không tìm thấy mã booking" });
-    }
-
-    const booking = await findBookingByCode(bookingCode);
-    if (!booking) {
-      await updateTransactionLog(transaction, {
-        status: "failed",
-        error_message: `Không tìm thấy booking ${bookingCode}`,
-        processed_at: new Date(),
-      });
-      return res.status(404).json({ success: false, message: "Không tìm thấy booking" });
-    }
-
-    const transferAmount = normalizeMoney(payload.transferAmount);
-    const bookingTotal = normalizeMoney(booking.total_price);
-    if (transferAmount !== bookingTotal) {
-      await updateTransactionLog(transaction, {
-        booking_id: booking._id,
-        status: "failed",
-        error_message: `Sai số tiền: nhận ${transferAmount}, cần ${bookingTotal}`,
-        processed_at: new Date(),
-      });
-      return res.status(400).json({ success: false, message: "Số tiền thanh toán không khớp" });
-    }
-
-    const paidBooking = await markBookingAsPaid({
-      booking,
-      provider: "sepay",
-      transactionId: referenceCode,
-    });
-
+  if (normalizeString(payload.transferType).toLowerCase() !== "in") {
     await updateTransactionLog(transaction, {
-      booking_id: paidBooking._id,
-      status: "processed",
-      error_message: "",
+      status: "ignored",
+      error_message: "Không phải giao dịch tiền vào",
       processed_at: new Date(),
     });
-
-    return res.json({
-      success: true,
-      message: "Thanh toán thành công",
-      data: {
-        booking_id: paidBooking._id,
-        booking_code: paidBooking.booking_code,
-        payment_status: paidBooking.payment_status,
-      },
-    });
-  } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message || "Internal Server Error",
-    });
+    return;
   }
+
+  if (!bookingCode) {
+    await updateTransactionLog(transaction, {
+      status: "failed",
+      error_message: "Không tìm thấy mã booking trong nội dung giao dịch",
+      processed_at: new Date(),
+    });
+    return;
+  }
+
+  const booking = await findBookingByCode(bookingCode);
+  if (!booking) {
+    await updateTransactionLog(transaction, {
+      status: "failed",
+      error_message: `Không tìm thấy booking ${bookingCode}`,
+      processed_at: new Date(),
+    });
+    return;
+  }
+
+  const transferAmount = normalizeMoney(payload.transferAmount);
+  const bookingTotal = normalizeMoney(booking.total_price);
+  if (transferAmount !== bookingTotal) {
+    await updateTransactionLog(transaction, {
+      booking_id: booking._id,
+      status: "failed",
+      error_message: `Sai số tiền: nhận ${transferAmount}, cần ${bookingTotal}`,
+      processed_at: new Date(),
+    });
+    return;
+  }
+
+  const paidBooking = await markBookingAsPaid({
+    booking,
+    provider: "sepay",
+    transactionId: referenceCode,
+  });
+
+  await updateTransactionLog(transaction, {
+    booking_id: paidBooking._id,
+    status: "processed",
+    error_message: "",
+    processed_at: new Date(),
+  });
+};
+
+export const receiveSepayWebhook = (req, res) => {
+  const payload = req.body;
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return res.status(400).json({ success: false, message: "No data" });
+  }
+
+  res.json({ success: true, message: "Webhook accepted" });
+
+  setImmediate(() => {
+    processSepayWebhook(payload).catch((error) => {
+      console.error("SePay webhook processing failed:", error);
+    });
+  });
 };

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { randomInt } from "crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
@@ -22,10 +23,9 @@ const isCoupleSeat = (seat) => {
 };
 
 const generateBookingCode = () => {
-  const timestampPart = Date.now().toString(36).toUpperCase();
-  const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const numericPart = String(randomInt(0, 1_000_000_000_000)).padStart(12, "0");
 
-  return `AURA-${timestampPart}-${randomPart}`;
+  return `AURA${numericPart}`;
 };
 
 const isDuplicateBookingCodeError = (error) =>

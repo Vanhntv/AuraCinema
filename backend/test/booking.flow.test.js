@@ -228,7 +228,7 @@ test("create booking reserves held seats and stores the computed total", async (
     assert.equal(res.body.data._id, bookingId);
     assert.deepEqual(updatedReservedSeats, seatIds);
     assert.equal(seatUpdate.$set.status, "reserved");
-    assert.match(createdPayload.booking_code, /^AURA-[A-Z0-9]+-[A-Z0-9]+$/);
+    assert.match(createdPayload.booking_code, /^AURA\d{12}$/);
     assert.equal(createdPayload.subtotal_price, 100000);
     assert.equal(createdPayload.discount_amount, 0);
     assert.equal(createdPayload.total_price, 100000);
@@ -343,8 +343,8 @@ test("create booking retries when generated booking_code collides", async () => 
 
     assert.equal(res.statusCode, 201);
     assert.equal(createPayloads.length, 2);
-    assert.match(createPayloads[0].booking_code, /^AURA-[A-Z0-9]+-[A-Z0-9]+$/);
-    assert.match(createPayloads[1].booking_code, /^AURA-[A-Z0-9]+-[A-Z0-9]+$/);
+    assert.match(createPayloads[0].booking_code, /^AURA\d{12}$/);
+    assert.match(createPayloads[1].booking_code, /^AURA\d{12}$/);
   });
 });
 
