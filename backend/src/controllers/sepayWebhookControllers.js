@@ -1,0 +1,149 @@
+import Booking from "../models/Booking.js";
+import SepayTransaction from "../models/SepayTransaction.js";
+import { markBookingAsPaid } from "./bookingsControllers.js";
+
+const BOOKING_CODE_PATTERN = /AURA-[A-Z0-9]+-[A-Z0-9]+/i;
+
+const normalizeString = (value = "") => String(value || "").trim();
+
+const normalizeMoney = (value) => Math.round(Number(value || 0));
+
+const buildReferenceCode = (payload = {}) => {
+  const referenceCode = normalizeString(payload.referenceCode);
+  if (referenceCode) return referenceCode;
+
+  const transactionDate = normalizeString(payload.transactionDate);
+  const amount = normalizeString(payload.transferAmount);
+  const content = normalizeString(payload.content);
+  return `${transactionDate}|${amount}|${content}`;
+};
+
+const extractBookingCode = (payload = {}) => {
+  const searchableText = [
+    payload.code,
+    payload.content,
+    payload.description,
+  ].map(normalizeString).join(" ");
+
+  const match = searchableText.match(BOOKING_CODE_PATTERN);
+  return match ? match[0].toUpperCase() : "";
+};
+
+const createTransactionLog = async ({ payload, referenceCode, bookingCode }) => {
+  try {
+    return await SepayTransaction.create({
+      reference_code: referenceCode,
+      booking_code: bookingCode,
+      gateway: normalizeString(payload.gateway),
+      transaction_date: payload.transactionDate ? new Date(payload.transactionDate) : null,
+      account_number: normalizeString(payload.accountNumber),
+      sub_account: normalizeString(payload.subAccount),
+      transfer_type: normalizeString(payload.transferType),
+      transfer_amount: normalizeMoney(payload.transferAmount),
+      accumulated: normalizeMoney(payload.accumulated),
+      code: normalizeString(payload.code),
+      content: normalizeString(payload.content),
+      description: normalizeString(payload.description),
+      raw_payload: payload,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return SepayTransaction.findOne({ reference_code: referenceCode });
+    }
+
+    throw error;
+  }
+};
+
+const updateTransactionLog = async (transaction, updates) => {
+  if (!transaction) return;
+
+  Object.assign(transaction, updates);
+  await transaction.save();
+};
+
+export const receiveSepayWebhook = async (req, res) => {
+  const payload = req.body;
+
+  try {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return res.status(400).json({ success: false, message: "No data" });
+    }
+
+    const referenceCode = buildReferenceCode(payload);
+    const bookingCode = extractBookingCode(payload);
+    const transaction = await createTransactionLog({ payload, referenceCode, bookingCode });
+
+    if (transaction?.status === "processed") {
+      return res.json({ success: true, message: "Transaction already processed" });
+    }
+
+    if (normalizeString(payload.transferType).toLowerCase() !== "in") {
+      await updateTransactionLog(transaction, {
+        status: "ignored",
+        error_message: "Không phải giao dịch tiền vào",
+        processed_at: new Date(),
+      });
+      return res.json({ success: true, message: "Ignored non-incoming transaction" });
+    }
+
+    if (!bookingCode) {
+      await updateTransactionLog(transaction, {
+        status: "failed",
+        error_message: "Không tìm thấy mã booking trong nội dung giao dịch",
+        processed_at: new Date(),
+      });
+      return res.status(400).json({ success: false, message: "Không tìm thấy mã booking" });
+    }
+
+    const booking = await Booking.findOne({ booking_code: bookingCode });
+    if (!booking) {
+      await updateTransactionLog(transaction, {
+        status: "failed",
+        error_message: `Không tìm thấy booking ${bookingCode}`,
+        processed_at: new Date(),
+      });
+      return res.status(404).json({ success: false, message: "Không tìm thấy booking" });
+    }
+
+    const transferAmount = normalizeMoney(payload.transferAmount);
+    const bookingTotal = normalizeMoney(booking.total_price);
+    if (transferAmount !== bookingTotal) {
+      await updateTransactionLog(transaction, {
+        booking_id: booking._id,
+        status: "failed",
+        error_message: `Sai số tiền: nhận ${transferAmount}, cần ${bookingTotal}`,
+        processed_at: new Date(),
+      });
+      return res.status(400).json({ success: false, message: "Số tiền thanh toán không khớp" });
+    }
+
+    const paidBooking = await markBookingAsPaid({
+      booking,
+      provider: "sepay",
+      transactionId: referenceCode,
+    });
+
+    await updateTransactionLog(transaction, {
+      booking_id: paidBooking._id,
+      status: "processed",
+      error_message: "",
+      processed_at: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      message: "Thanh toán thành công",
+      data: {
+        booking_id: paidBooking._id,
+        booking_code: paidBooking.booking_code,
+        payment_status: paidBooking.payment_status,
+      },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};

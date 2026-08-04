@@ -17,7 +17,10 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const from = location.state?.from?.pathname || "/";
+  const fromState = location.state?.from;
+  const from = typeof fromState === "string"
+    ? fromState
+    : `${fromState?.pathname || "/"}${fromState?.search || ""}`;
 
   const handleChange = (event) => {
     const { name, value } = event.target;

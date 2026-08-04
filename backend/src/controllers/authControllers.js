@@ -13,9 +13,10 @@ const RESET_OTP_TTL_MS = 10 * 60 * 1000;
 const RESET_OTP_MAX_ATTEMPTS = 5;
 const loginAttempts = new Map();
 
-const resolveUserRole = (user) => {
-  return user.role === "admin" || user.role_id === 1 ? "admin" : DEFAULT_ROLE;
-};
+const resolveUserRole = (user) =>
+  String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1
+    ? "admin"
+    : DEFAULT_ROLE;
 
 const hashPassword = async (password) => {
   const salt = randomBytes(16).toString("hex");
