@@ -9,9 +9,10 @@ import { useAuth } from "../hooks/useAuth";
 import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
 
 const SEAT_TYPES = {
-  normal: { label: "Ghế thường", color: "bg-slate-600", selected: "bg-sky-500" },
-  vip: { label: "Ghế VIP", color: "bg-amber-500/70", selected: "bg-amber-500" },
-  couple: { label: "Ghế đôi", color: "bg-fuchsia-500/70", selected: "bg-fuchsia-500" },
+  normal: { label: "Ghe thuong", color: "bg-slate-600", selected: "bg-sky-500" },
+  vip: { label: "Ghe VIP", color: "bg-amber-500/70", selected: "bg-amber-500" },
+  couple: { label: "Ghe doi", color: "bg-fuchsia-500/70", selected: "bg-fuchsia-500" },
+  broken: { label: "Ghe hong", color: "bg-rose-950/80", selected: "bg-rose-800" },
 };
 
 function normalizeText(value = "") {
@@ -20,6 +21,7 @@ function normalizeText(value = "") {
 
 function getSeatType(seat) {
   const name = normalizeText(seat?.seat_id?.seat_type_id?.name);
+  if (name.includes("hong") || name.includes("broken")) return "broken";
   if (name.includes("vip")) return "vip";
   if (name.includes("doi") || name.includes("couple") || name.includes("double")) return "couple";
   return "normal";
@@ -1063,7 +1065,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 {!isEmbeddedVariant && (
                   <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-[#ff6070]" type="button" onClick={async () => { await releaseHeldSeats(); setStep("select-showtime"); setSelectedSeats([]); setSeatError(""); }}>← Chọn suất khác</button>
                 )}
-                <div className="flex flex-wrap gap-4 text-xs text-slate-300">{Object.entries(SEAT_TYPES).map(([type, config]) => <span key={type} className="flex items-center gap-2"><i className={`h-4 w-5 rounded ${config.color}`} />{config.label}</span>)}<span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff5364]" />Ghế đang chọn</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff8a96]/60" />Đang được giữ</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-slate-800 opacity-50" />Đã đặt</span></div>
+                <div className="flex flex-wrap gap-4 text-xs text-slate-300">{Object.entries(SEAT_TYPES).filter(([type]) => type !== "broken").map(([type, config]) => <span key={type} className="flex items-center gap-2"><i className={`h-4 w-5 rounded ${config.color}`} />{config.label}</span>)}<span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff5364]" />Ghế đang chọn</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-[#ff8a96]/60" />Đang được giữ</span><span className="flex items-center gap-2"><i className="h-4 w-5 rounded bg-slate-800 opacity-50" />Đã đặt</span></div>
                 {seatPriceNotes.length > 0 && (
                   <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300">
                     {seatPriceNotes.map((item) => (
@@ -1080,7 +1082,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   {isLoadingSeats && <p className="py-8 text-center text-sm text-slate-400">Đang tải sơ đồ ghế...</p>}
                   {!isLoadingSeats && !showtimeSeats.length && <p className="py-8 text-center text-sm text-slate-400">Chưa có dữ liệu ghế cho suất chiếu.</p>}
                   <div className="grid min-w-[520px] gap-3">{seatsByRow.map(([row, seats]) => <div key={row} className="flex items-center justify-center gap-3"><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${seatColumnCount}, 40px)` }}>{seats.map((seat, seatIndex) => {
-                    const type = getSeatType(seat); const config = SEAT_TYPES[type]; const status = getSeatStatus(seat); const selected = selectedSeats.some((item) => item._id === seat._id); const seatHolderId = getSeatHolderId(seat); const heldByOther = isHeldSeat(seat) && (!currentUserId || !seatHolderId || seatHolderId !== currentUserId); const booked = isBookedSeat(seat); const unavailable = status !== "available" && !selected;
+                    const type = getSeatType(seat); const config = SEAT_TYPES[type]; const status = getSeatStatus(seat); const selected = selectedSeats.some((item) => item._id === seat._id); const seatHolderId = getSeatHolderId(seat); const heldByOther = isHeldSeat(seat) && (!currentUserId || !seatHolderId || seatHolderId !== currentUserId); const booked = isBookedSeat(seat); const unavailable = (status !== "available" && !selected) || type === "broken";
                     return <button key={seat._id} type="button" disabled={unavailable} onClick={() => toggleSeat(seat)} title={`${config.label} - ${Number(seat.price).toLocaleString("vi-VN")}đ`} className={`h-9 w-10 rounded-lg text-[11px] font-black text-white transition ${getCoupleSeatClass({ type, seats, seatIndex })} ${selected ? "bg-[#ff5364] shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_22px_rgba(255,83,100,0.25)]" : heldByOther ? "cursor-not-allowed bg-[#ff8a96]/60 text-white/80 shadow-[0_0_0_1px_rgba(255,138,150,0.28)]" : booked ? "cursor-not-allowed bg-slate-800 opacity-40" : unavailable ? "cursor-not-allowed bg-slate-700/70 opacity-60" : `${config.color} hover:brightness-125`}`}>{row}{seat.seat_id?.seat_number}</button>;
                   })}</div><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span></div>)}</div>
                 </div>

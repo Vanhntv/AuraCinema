@@ -121,6 +121,47 @@ test("hold seats releases expired holds before validating a new hold", async () 
   });
 });
 
+test("create booking rejects broken seats", async () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  const showtimeId = new mongoose.Types.ObjectId().toString();
+  const seatId = new mongoose.Types.ObjectId().toString();
+  let updateCalled = false;
+
+  await withPatched([
+    [mongoose, "startSession", async () => makeFakeSession()],
+    [User, "findOne", () => sessionResult({
+      _id: userId,
+      full_name: "Test User",
+      email: "test@example.com",
+      phone: "0900000000",
+    })],
+    [Showtime, "findOne", () => sessionResult({
+      _id: showtimeId,
+      movie_id: new mongoose.Types.ObjectId(),
+    })],
+    [ShowtimeSeat, "find", () => populateSessionResult([
+      makeSeat({ id: seatId, typeName: "Ghe hong", number: 1, heldBy: userId }),
+    ])],
+    [ShowtimeSeat, "updateMany", async () => {
+      updateCalled = true;
+      return { modifiedCount: 1 };
+    }],
+  ], async () => {
+    const req = {
+      user: { id: userId, role: "user" },
+      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId] },
+    };
+    const res = makeResponse();
+
+    await createBooking(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.success, false);
+    assert.match(res.body.message, /ghe hong/i);
+    assert.equal(updateCalled, false);
+  });
+});
+
 test("create booking allows multiple seat types in one booking", async () => {
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();

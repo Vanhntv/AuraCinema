@@ -1,7 +1,9 @@
 import SeatType from "../models/SeatType.js";
+import { ensureCoreSeatTypes } from "../utils/seatTypes.js";
 
 export const getAllSeatTypes = async (req, res) => {
   try {
+    await ensureCoreSeatTypes();
     const seatTypes = await SeatType.find().sort({ created_at: -1 });
 
     res.status(200).json({

@@ -3,6 +3,7 @@ import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
+import { isBrokenSeatType } from "../utils/seatTypes.js";
 import {
   bulkUpsertShowtimeSeats,
   createManyShowtimeSeats,
@@ -45,6 +46,8 @@ const buildShowtimeSeatFilter = (query = {}) => {
 
   return { filter, q: q?.trim() ?? "" };
 };
+
+const isSeatSellable = (seat) => !isBrokenSeatType(seat?.seat_id?.seat_type_id);
 
 const resolveDefaultPrice = async ({ showtime, seat, price }) => {
   if (!isMissing(price)) {
@@ -134,6 +137,8 @@ export const listShowtimeSeats = async (query = {}) => {
     sort: { created_at: -1 },
   });
 
+  showtimeSeats = showtimeSeats.filter((item) => isSeatSellable(item));
+
   if (q) {
     const keyword = q.toLowerCase();
 
@@ -185,6 +190,12 @@ export const createShowtimeSeatService = async (payload) => {
   if (!seat) {
     const error = new Error("Khong tim thay seat");
     error.statusCode = 404;
+    throw error;
+  }
+
+  if (!isSeatSellable(seat)) {
+    const error = new Error("Ghe hong khong the duoc tao cho showtime");
+    error.statusCode = 409;
     throw error;
   }
 
@@ -275,6 +286,12 @@ export const createShowtimeSeatsService = async (payloads = []) => {
       throw error;
     }
 
+    if (!isSeatSellable(seat)) {
+      const error = new Error("Ghe hong khong the duoc tao cho showtime");
+      error.statusCode = 409;
+      throw error;
+    }
+
     assertShowtimeAndSeatAreCompatible(showtime, seat);
     payload.price = await resolveDefaultPrice({
       showtime,
@@ -328,17 +345,18 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
   })
     .populate("seat_type_id", "name description price_multiplier")
     .select("_id room_id seat_type_id");
+  const sellableSeats = seats.filter(isSeatSellable);
 
   await ShowtimeSeat.updateMany(
     {
       showtime_id: showtime._id,
       deleted_at: null,
-      seat_id: { $nin: seats.map((seat) => seat._id) },
+      seat_id: { $nin: sellableSeats.map((seat) => seat._id) },
     },
     { $set: { deleted_at: new Date() } },
   );
 
-  if (!seats.length) {
+  if (!sellableSeats.length) {
     return {
       upsertedCount: 0,
       matchedCount: 0,
@@ -347,7 +365,7 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
   }
 
   const operations = await Promise.all(
-    seats.map(async (seat) => {
+    sellableSeats.map(async (seat) => {
       const price = await resolveDefaultPrice({
         showtime,
         seat,
@@ -387,11 +405,9 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
 };
 
 export const countShowtimeSeatsForShowtimeService = async (showtimeId) => {
-  const seats = await findShowtimeSeatsByShowtimeId(showtimeId, {
-    populate: false,
-  });
+  const seats = await findShowtimeSeatsByShowtimeId(showtimeId);
 
-  return seats.length;
+  return seats.filter((seat) => !isBrokenSeatType(seat?.seat_id?.seat_type_id)).length;
 };
 
 export const updateShowtimeSeatService = async (id, payload) => {
@@ -437,6 +453,12 @@ export const updateShowtimeSeatService = async (id, payload) => {
   if (!seat) {
     const error = new Error("Khong tim thay seat");
     error.statusCode = 404;
+    throw error;
+  }
+
+  if (!isSeatSellable(seat)) {
+    const error = new Error("Ghe hong khong the duoc tao cho showtime");
+    error.statusCode = 409;
     throw error;
   }
 

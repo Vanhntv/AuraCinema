@@ -10,6 +10,7 @@ import {
   reserveVoucherUsageForPayment,
   verifyVoucherService,
 } from "../services/voucherService.js";
+import { isBrokenSeatType } from "../utils/seatTypes.js";
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -261,6 +262,10 @@ export const createBooking = async (req, res) => {
       if (!showtime) throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
       if (seats.length !== new Set(showtime_seat_ids.map(String)).size) {
         throw Object.assign(new Error("Một hoặc nhiều ghế đã được đặt"), { statusCode: 409 });
+      }
+
+      if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
+        throw Object.assign(new Error("Ghe hong khong the dat ve"), { statusCode: 409 });
       }
 
       const reservedCombos = await reserveComboStock({ combos, session });

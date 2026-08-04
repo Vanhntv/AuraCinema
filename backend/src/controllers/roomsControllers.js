@@ -5,6 +5,11 @@ import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 import mongoose from "mongoose";
+import {
+  ensureCoreSeatTypes,
+  isBrokenSeatType,
+  normalizeSeatTypeName,
+} from "../utils/seatTypes.js";
 
 const ROOM_STATUSES = ["active", "maintenance", "inactive"];
 const ROOM_TYPES = ["2D", "3D"];
@@ -68,14 +73,8 @@ const normalizeRoomStatus = (value, fallback = "active") => {
   return status;
 };
 
-const normalizeSeatTypeName = (value = "") =>
-  String(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-
-const resolveDefaultSeatType = async () => {
+const resolveSellableDefaultSeatType = async () => {
+  await ensureCoreSeatTypes();
   const seatTypes = await SeatType.find();
   const defaultSeatType = seatTypes.find((seatType) => {
     const name = normalizeSeatTypeName(seatType.name);
@@ -133,6 +132,15 @@ const buildSeatDocuments = ({
 
   return seats;
 };
+
+const countSellableSeats = (seats = [], brokenSeatTypeIds = new Set()) =>
+  seats.reduce((total, seat) => {
+    if (brokenSeatTypeIds.has(String(seat.seat_type_id))) {
+      return total;
+    }
+
+    return total + 1;
+  }, 0);
 
 const populateRoom = async (room) => {
   await room.populate("cinema_id", "name city address");
@@ -489,9 +497,21 @@ export const createRoom = async (req, res) => {
       name: normalizedName,
     });
 
-    const defaultSeatType = await resolveDefaultSeatType();
+    const defaultSeatType = await resolveSellableDefaultSeatType();
     await assertSeatTypesExist(seat_layout);
     const seatTypeByCode = normalizeSeatLayout(seat_layout);
+    await ensureCoreSeatTypes();
+    const allSeatTypes = await SeatType.find().select("_id name");
+    const brokenSeatTypeIds = new Set(
+      allSeatTypes.filter((seatType) => isBrokenSeatType(seatType)).map((seatType) => String(seatType._id)),
+    );
+    const seatDocuments = buildSeatDocuments({
+      roomId: createdRoom?._id || new mongoose.Types.ObjectId(),
+      rowCount,
+      columnCount,
+      seatTypeId: defaultSeatType._id,
+      seatTypeByCode,
+    });
 
     createdRoom = await Room.create({
       cinema_id,
@@ -499,21 +519,15 @@ export const createRoom = async (req, res) => {
       room_type: normalizedRoomType,
       row_count: rowCount,
       column_count: columnCount,
-      capacity:
-        capacity !== undefined && capacity !== null && capacity !== ""
-          ? Number(capacity)
-          : seatCapacity,
+      capacity: countSellableSeats(seatDocuments, brokenSeatTypeIds),
       status: normalizedStatus,
     });
 
     await Seat.insertMany(
-      buildSeatDocuments({
-        roomId: createdRoom._id,
-        rowCount,
-        columnCount,
-        seatTypeId: defaultSeatType._id,
-        seatTypeByCode,
-      }),
+      seatDocuments.map((seat) => ({
+        ...seat,
+        room_id: createdRoom._id,
+      })),
     );
 
     await populateRoom(createdRoom);
@@ -668,23 +682,27 @@ export const updateRoom = async (req, res) => {
     }
 
     if (isSeatMapChanging) {
-      const defaultSeatType = await resolveDefaultSeatType();
+      const defaultSeatType = await resolveSellableDefaultSeatType();
       await assertSeatTypesExist(seat_layout);
       const seatTypeByCode = normalizeSeatLayout(seat_layout);
+      await ensureCoreSeatTypes();
+      const allSeatTypes = await SeatType.find().select("_id name");
+      const brokenSeatTypeIds = new Set(
+        allSeatTypes.filter((seatType) => isBrokenSeatType(seatType)).map((seatType) => String(seatType._id)),
+      );
+      const seatDocuments = buildSeatDocuments({
+        roomId: room._id,
+        rowCount: nextRowCount,
+        columnCount: nextColumnCount,
+        seatTypeId: defaultSeatType._id,
+        seatTypeByCode,
+      });
       room.row_count = nextRowCount;
       room.column_count = nextColumnCount;
-      room.capacity = nextRowCount * nextColumnCount;
+      room.capacity = countSellableSeats(seatDocuments, brokenSeatTypeIds);
 
       await Seat.deleteMany({ room_id: room._id });
-      await Seat.insertMany(
-        buildSeatDocuments({
-          roomId: room._id,
-          rowCount: nextRowCount,
-          columnCount: nextColumnCount,
-          seatTypeId: defaultSeatType._id,
-          seatTypeByCode,
-        }),
-      );
+      await Seat.insertMany(seatDocuments);
     } else if (capacity !== undefined) {
       room.capacity =
         capacity !== null && capacity !== "" ? Number(capacity) : null;
