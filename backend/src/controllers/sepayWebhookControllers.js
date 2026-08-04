@@ -2,7 +2,7 @@ import Booking from "../models/Booking.js";
 import SepayTransaction from "../models/SepayTransaction.js";
 import { markBookingAsPaid } from "./bookingsControllers.js";
 
-const BOOKING_CODE_PATTERN = /AURA-[A-Z0-9]+-[A-Z0-9]+/i;
+const BOOKING_CODE_PATTERN = /AURA[-A-Z0-9]*/ig;
 
 const normalizeString = (value = "") => String(value || "").trim();
 
@@ -25,8 +25,26 @@ const extractBookingCode = (payload = {}) => {
     payload.description,
   ].map(normalizeString).join(" ");
 
-  const match = searchableText.match(BOOKING_CODE_PATTERN);
-  return match ? match[0].toUpperCase() : "";
+  const matches = searchableText.match(BOOKING_CODE_PATTERN) || [];
+  const bookingCode = matches.find((match) => match.replace(/[^A-Z0-9]/gi, "").length > 8);
+  return bookingCode ? bookingCode.toUpperCase() : "";
+};
+
+const compactBookingCode = (bookingCode = "") =>
+  normalizeString(bookingCode).replace(/[^A-Z0-9]/gi, "").toUpperCase();
+
+const findBookingByCode = async (bookingCode) => {
+  const normalizedBookingCode = normalizeString(bookingCode).toUpperCase();
+  const compactCode = compactBookingCode(normalizedBookingCode);
+
+  const exactBooking = await Booking.findOne({ booking_code: normalizedBookingCode });
+  if (exactBooking || !compactCode) return exactBooking;
+
+  const candidates = await Booking.find({
+    booking_code: new RegExp(`^${normalizedBookingCode.slice(0, 4)}`, "i"),
+  }).limit(100);
+
+  return candidates.find((booking) => compactBookingCode(booking.booking_code) === compactCode) || null;
 };
 
 const createTransactionLog = async ({ payload, referenceCode, bookingCode }) => {
@@ -96,7 +114,7 @@ export const receiveSepayWebhook = async (req, res) => {
       return res.status(400).json({ success: false, message: "Không tìm thấy mã booking" });
     }
 
-    const booking = await Booking.findOne({ booking_code: bookingCode });
+    const booking = await findBookingByCode(bookingCode);
     if (!booking) {
       await updateTransactionLog(transaction, {
         status: "failed",
