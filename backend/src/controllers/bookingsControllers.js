@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { randomInt } from "crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import Showtime from "../models/Showtime.js";
@@ -23,10 +24,9 @@ const isCoupleSeat = (seat) => {
 };
 
 const generateBookingCode = () => {
-  const timestampPart = Date.now().toString(36).toUpperCase();
-  const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const numericPart = String(randomInt(0, 1_000_000_000_000)).padStart(12, "0");
 
-  return `AURA-${timestampPart}-${randomPart}`;
+  return `AURA${numericPart}`;
 };
 
 const isDuplicateBookingCodeError = (error) =>
@@ -71,6 +71,105 @@ const runWithOptionalTransaction = async (work) => {
   } finally {
     await session.endSession();
   }
+};
+
+export const markBookingAsPaid = async ({
+  booking,
+  provider = "internal",
+  transactionId = "",
+  session = null,
+}) => {
+  if (booking.status === "cancelled") {
+    throw Object.assign(new Error("Đơn vé đã bị hủy"), { statusCode: 409 });
+  }
+
+  if (booking.payment_status === "paid") {
+    return booking;
+  }
+
+  if (booking.payment_status !== "pending" || booking.status !== "pending") {
+    throw Object.assign(new Error("Đơn vé không ở trạng thái chờ thanh toán"), { statusCode: 409 });
+  }
+
+  const showtime = await Showtime.findOne({ _id: booking.showtime_id, deleted_at: null }).session(session);
+  if (!showtime) {
+    throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
+  }
+
+  const seatIds = booking.showtime_seat_ids.map((seatId) => seatId);
+  const updateResult = await ShowtimeSeat.updateMany(
+    {
+      _id: { $in: seatIds },
+      status: "reserved",
+      held_by: booking.user_id,
+    },
+    { $set: { status: "booked", held_by: null, hold_expires_at: null } },
+    { session },
+  );
+
+  if (updateResult.modifiedCount !== seatIds.length) {
+    throw Object.assign(new Error("Ghế trong đơn không còn ở trạng thái chờ thanh toán"), { statusCode: 409 });
+  }
+
+  const comboTotalPrice = (booking.combos || []).reduce(
+    (total, item) => total + Number(item.subtotal || 0),
+    0,
+  );
+  const seatTotalPrice = Math.max(Number(booking.subtotal_price || 0) - comboTotalPrice, 0);
+
+  if (booking.voucher?.voucher_id && booking.voucher?.code) {
+    const voucherResult = await verifyVoucherService({
+      code: booking.voucher.code,
+      order_amount: booking.subtotal_price,
+      ticket_amount: seatTotalPrice,
+      concession_amount: comboTotalPrice,
+      movie_id: showtime.movie_id,
+      user_id: booking.user_id,
+      session,
+    });
+
+    if (!voucherResult.valid) {
+      throw Object.assign(new Error(voucherResult.message), { statusCode: 400 });
+    }
+
+    await reserveVoucherUsageForPayment({
+      voucherId: voucherResult.voucher.id,
+      userId: booking.user_id,
+      usageLimitPerUser: voucherResult.voucher.usage_limit_per_user,
+      quantity: 1,
+      session,
+    });
+
+    await VoucherUsage.create([{
+      voucher_id: voucherResult.voucher.id,
+      booking_id: booking._id,
+      user_id: booking.user_id,
+      code: voucherResult.voucher.code,
+      discount_type: voucherResult.voucher.discount_type,
+      discount_value: Number(voucherResult.voucher.discount_value || 0),
+      apply_scope: voucherResult.voucher.apply_scope,
+      subtotal_price: Number(booking.subtotal_price || 0),
+      eligible_amount: Number(voucherResult.eligible_amount || 0),
+      discount_amount: Number(voucherResult.discount_amount || 0),
+      final_price: Math.max(Number(booking.subtotal_price || 0) - Number(voucherResult.discount_amount || 0), 0),
+      status: "used",
+      payment_status: "paid",
+      used_at: new Date(),
+    }], { session });
+
+    booking.voucher.discount_amount = Number(voucherResult.discount_amount || 0);
+    booking.discount_amount = Number(voucherResult.discount_amount || 0);
+    booking.total_price = Math.max(Number(booking.subtotal_price || 0) - booking.discount_amount, 0);
+  }
+
+  booking.status = "confirmed";
+  booking.payment_status = "paid";
+  booking.payment_provider = provider || "internal";
+  booking.payment_transaction_id = transactionId;
+  booking.paid_at = new Date();
+  await booking.save({ session });
+
+  return booking;
 };
 
 const calculateBookingTotalPrice = (seats = []) => {
@@ -343,7 +442,15 @@ export const createBooking = async (req, res) => {
       return booking;
     });
 
-    return res.status(201).json({ success: true, message: "Đã tạo đơn chờ thanh toán", data: createdBooking });
+    const bookingData = typeof createdBooking.toObject === "function"
+      ? createdBooking.toObject()
+      : createdBooking;
+
+    return res.status(201).json({
+      success: true,
+      message: "Đã tạo đơn chờ thanh toán",
+      data: bookingData,
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
@@ -365,100 +472,39 @@ export const confirmBookingPayment = async (req, res) => {
         throw Object.assign(new Error("Không tìm thấy đơn vé"), { statusCode: 404 });
       }
 
-      if (booking.status === "cancelled") {
-        throw Object.assign(new Error("Đơn vé đã bị hủy"), { statusCode: 409 });
-      }
-
-      if (booking.payment_status === "paid") {
-        return booking;
-      }
-
-      if (booking.payment_status !== "pending" || booking.status !== "pending") {
-        throw Object.assign(new Error("Đơn vé không ở trạng thái chờ thanh toán"), { statusCode: 409 });
-      }
-
-      const showtime = await Showtime.findOne({ _id: booking.showtime_id, deleted_at: null }).session(session);
-      if (!showtime) {
-        throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
-      }
-
-      const seatIds = booking.showtime_seat_ids.map((seatId) => seatId);
-      const updateResult = await ShowtimeSeat.updateMany(
-        {
-          _id: { $in: seatIds },
-          status: "reserved",
-          held_by: req.user.id,
-        },
-        { $set: { status: "booked", held_by: null, hold_expires_at: null } },
-        { session },
-      );
-
-      if (updateResult.modifiedCount !== seatIds.length) {
-        throw Object.assign(new Error("Ghế trong đơn không còn ở trạng thái chờ thanh toán"), { statusCode: 409 });
-      }
-
-      const comboTotalPrice = (booking.combos || []).reduce(
-        (total, item) => total + Number(item.subtotal || 0),
-        0,
-      );
-      const seatTotalPrice = Math.max(Number(booking.subtotal_price || 0) - comboTotalPrice, 0);
-
-      if (booking.voucher?.voucher_id && booking.voucher?.code) {
-        const voucherResult = await verifyVoucherService({
-          code: booking.voucher.code,
-          order_amount: booking.subtotal_price,
-          ticket_amount: seatTotalPrice,
-          concession_amount: comboTotalPrice,
-          movie_id: showtime.movie_id,
-          user_id: booking.user_id,
-          session,
-        });
-
-        if (!voucherResult.valid) {
-          throw Object.assign(new Error(voucherResult.message), { statusCode: 400 });
-        }
-
-        await reserveVoucherUsageForPayment({
-          voucherId: voucherResult.voucher.id,
-          userId: booking.user_id,
-          usageLimitPerUser: voucherResult.voucher.usage_limit_per_user,
-          quantity: 1,
-          session,
-        });
-
-        await VoucherUsage.create([{
-          voucher_id: voucherResult.voucher.id,
-          booking_id: booking._id,
-          user_id: booking.user_id,
-          code: voucherResult.voucher.code,
-          discount_type: voucherResult.voucher.discount_type,
-          discount_value: Number(voucherResult.voucher.discount_value || 0),
-          apply_scope: voucherResult.voucher.apply_scope,
-          subtotal_price: Number(booking.subtotal_price || 0),
-          eligible_amount: Number(voucherResult.eligible_amount || 0),
-          discount_amount: Number(voucherResult.discount_amount || 0),
-          final_price: Math.max(Number(booking.subtotal_price || 0) - Number(voucherResult.discount_amount || 0), 0),
-          status: "used",
-          payment_status: "paid",
-          used_at: new Date(),
-        }], { session });
-
-        booking.voucher.discount_amount = Number(voucherResult.discount_amount || 0);
-        booking.discount_amount = Number(voucherResult.discount_amount || 0);
-        booking.total_price = Math.max(Number(booking.subtotal_price || 0) - booking.discount_amount, 0);
-      }
-
-      booking.status = "confirmed";
-      booking.payment_status = "paid";
-      booking.payment_provider = provider || "internal";
-      booking.payment_transaction_id = transactionId;
-      booking.paid_at = new Date();
-      await booking.save({ session });
-
-      return booking;
+      return markBookingAsPaid({ booking, provider, transactionId, session });
     });
 
     return res.json({ success: true, message: "Thanh toán thành công", data: paidBooking });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+export const getBookingPaymentStatus = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user_id: req.user.id,
+    }).select("_id booking_code status payment_status payment_provider payment_transaction_id paid_at total_price");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        booking_id: booking._id,
+        booking_code: booking.booking_code,
+        status: booking.status,
+        payment_status: booking.payment_status,
+        payment_provider: booking.payment_provider,
+        payment_transaction_id: booking.payment_transaction_id,
+        paid_at: booking.paid_at,
+        total_price: booking.total_price,
+      },
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }

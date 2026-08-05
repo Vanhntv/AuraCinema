@@ -17,7 +17,11 @@ function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const from = location.state?.from?.pathname || "/";
+  const fromState = location.state?.from;
+  const from = typeof fromState === "string"
+    ? fromState
+    : `${fromState?.pathname || "/"}${fromState?.search || ""}`;
+  const isAdminRedirect = from.startsWith("/admin");
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -40,7 +44,7 @@ function LoginPage() {
         return;
       }
 
-      navigate(from, { replace: true });
+      navigate(isAdminRedirect ? "/tai-khoan" : from, { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại."

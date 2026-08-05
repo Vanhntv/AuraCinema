@@ -23,12 +23,20 @@ import settingsRoute from "./router/settingsRouters.js";
 import combosRoute from "./router/combosRouters.js";
 import marketingContentRoute from "./router/marketingContentRouters.js";
 import adminMarketingContentRoute from "./router/adminMarketingContentRouters.js";
+import paymentsRoute from "./router/paymentsRouters.js";
+import sepayWebhookRoute from "./router/sepayWebhookRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors());
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  }),
+);
 app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.use("/api/genres", genresRoute);
@@ -53,6 +61,8 @@ app.use("/api/settings", settingsRoute);
 app.use("/api/combos", combosRoute);
 app.use("/api/marketing-content", marketingContentRoute);
 app.use("/api/admin/marketing-content", adminMarketingContentRoute);
+app.use("/api/payments", paymentsRoute);
+app.use("/api/sepay", sepayWebhookRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

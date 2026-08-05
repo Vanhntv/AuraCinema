@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
-import { cancelBooking, createBooking, payBooking } from "../services/bookingService";
+import {
+  cancelBooking,
+  createBooking,
+  createSepayPgCheckout,
+  createVnpayPaymentUrl,
+  getBookingPaymentStatus,
+} from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
@@ -219,9 +225,28 @@ function isBookedSeat(seat) {
   return getSeatStatus(seat) === "booked";
 }
 
+function submitPaymentForm({ checkoutUrl, fields }) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = checkoutUrl;
+  form.style.display = "none";
+
+  Object.entries(fields || {}).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = String(value ?? "");
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
 function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal" }) {
   const navigate = useNavigate();
-  const { user, isAuthenticated, login, logout } = useAuth();
+  const location = useLocation();
+  const { user, isAuthenticated, logout } = useAuth();
   const [dateOptions] = useState(() => buildRelativeDateOptions(4));
   const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
   const [showtimes, setShowtimes] = useState([]);
@@ -237,6 +262,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isPaying, setIsPaying] = useState(false);
   const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("sepay");
   const [bookingResult, setBookingResult] = useState(null);
   const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState(null);
@@ -250,10 +276,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [voucherError, setVoucherError] = useState("");
   const [voucherMessage, setVoucherMessage] = useState("");
-  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
-  const [authForm, setAuthForm] = useState({ email: "", password: "" });
-  const [authError, setAuthError] = useState("");
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [showLoginNotice, setShowLoginNotice] = useState(false);
   const initialShowtimeId = getShowtimeId(initialShowtime);
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
@@ -266,6 +289,30 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   useEffect(() => {
     bookingResultRef.current = bookingResult;
   }, [bookingResult]);
+
+  useEffect(() => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    const isPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
+
+    if (!bookingId || isPaid) return undefined;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await getBookingPaymentStatus(bookingId);
+        const statusData = response.data || {};
+
+        if (statusData.payment_status === "paid") {
+          setBookingResult((current) => current ? { ...current, ...statusData } : current);
+          setConfirmedBookingSummary((current) => current ? { ...current, paymentStatus: "paid" } : current);
+          setPaymentError("");
+        }
+      } catch {
+        // Polling should stay quiet; the user can still refresh or use account history.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [bookingResult?._id, bookingResult?.payment_status, confirmedBookingSummary?.bookingId, confirmedBookingSummary?.paymentStatus]);
 
   const releaseHeldSeats = useCallback(async ({ resetState = true } = {}) => {
     const seatIds = selectedSeatsRef.current.map((seat) => seat._id);
@@ -316,9 +363,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setAppliedVoucher(null);
     setVoucherError("");
     setVoucherMessage("");
-    setShowAuthPrompt(false);
-    setAuthForm({ email: "", password: "" });
-    setAuthError("");
   }, [movie?._id, initialShowtimeId]);
 
   useEffect(() => {
@@ -425,9 +469,24 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    setShowAuthPrompt(false);
-    setAuthError("");
+    setShowLoginNotice(false);
   }, [isAuthenticated]);
+
+  const redirectToLogin = useCallback(() => {
+    navigate("/dang-nhap", {
+      state: {
+        from: {
+          pathname: location.pathname,
+          search: location.search,
+        },
+        message: "Vui lòng đăng nhập để tiếp tục đặt vé.",
+      },
+    });
+  }, [location.pathname, location.search, navigate]);
+
+  const requestLoginNotice = useCallback(() => {
+    setShowLoginNotice(true);
+  }, []);
 
   useEffect(() => {
     const showtimeId = getShowtimeId(selectedShowtime);
@@ -588,9 +647,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const toggleSeat = async (seat) => {
     if (!isAuthenticated) {
-      setShowAuthPrompt(true);
-      setAuthError("");
-      setSeatError("Vui lòng đăng nhập trước khi chọn ghế.");
+      requestLoginNotice();
       return;
     }
 
@@ -626,9 +683,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       } catch (requestError) {
         if (requestError.response?.status === 401) {
           logout();
-          setShowAuthPrompt(true);
-          setAuthError("");
-          setSeatError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+          requestLoginNotice();
         } else {
           setSeatError("Không thể bỏ giữ ghế lúc này.");
         }
@@ -678,9 +733,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     } catch (requestError) {
       if (requestError.response?.status === 401) {
         logout();
-        setShowAuthPrompt(true);
-        setAuthError("");
-        setSeatError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi chọn ghế.");
+        requestLoginNotice();
         return;
       }
 
@@ -696,9 +749,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const applyVoucher = async () => {
     if (!isAuthenticated) {
-      setShowAuthPrompt(true);
-      setAuthError("");
-      setVoucherError("Vui lòng đăng nhập để áp dụng mã giảm giá.");
+      requestLoginNotice();
       return;
     }
 
@@ -830,13 +881,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         })),
         voucher_code: appliedVoucher?.voucher?.code || undefined,
       });
-      setBookingResult(response.data);
-      setConfirmedBookingSummary({
+      const nextBookingSummary = {
         ...bookingSummary,
         bookingCode: response.data?.booking_code || response.data?._id,
         bookingId: response.data?._id,
         paymentStatus: response.data?.payment_status || "pending",
-      });
+      };
       setShowtimeSeats((current) => current.map((seat) =>
         selectedSeats.some((selected) => selected._id === seat._id)
           ? { ...seat, status: "reserved", held_by: currentUserId }
@@ -849,6 +899,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setVoucherError("");
       setVoucherMessage("");
       setPaymentError("");
+      navigate(`/payment/${response.data?._id}`, {
+        state: { bookingSummary: nextBookingSummary },
+      });
     } catch (requestError) {
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
@@ -856,25 +909,53 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   };
 
-  const completePayment = async () => {
+  const completeSepayPgPayment = async () => {
     const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
     if (!bookingId) return;
 
     try {
       setIsPaying(true);
       setPaymentError("");
-      const response = await payBooking(bookingId, { payment_provider: "internal" });
-      setBookingResult(response.data);
-      setConfirmedBookingSummary((current) => ({
-        ...current,
-        bookingCode: response.data?.booking_code || current?.bookingCode,
-        bookingId: response.data?._id || current?.bookingId,
-        discountAmount: Number(response.data?.discount_amount ?? current?.discountAmount ?? 0),
-        finalTotal: Number(response.data?.total_price ?? current?.finalTotal ?? 0),
-        paymentStatus: response.data?.payment_status || "paid",
-      }));
+      const response = await createSepayPgCheckout({
+        booking_id: bookingId,
+        amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+      });
+      const checkoutUrl = response.data?.checkoutUrl;
+      const fields = response.data?.fields;
+
+      if (!checkoutUrl || !fields) {
+        setPaymentError("Backend chưa trả về form thanh toán SePay.");
+        return;
+      }
+
+      submitPaymentForm({ checkoutUrl, fields });
     } catch (requestError) {
-      setPaymentError(requestError.response?.data?.message || "Thanh toán không thành công.");
+      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán SePay.");
+      setIsPaying(false);
+    }
+  };
+
+  const completeVnpayPayment = async () => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    if (!bookingId) return;
+
+    try {
+      setIsPaying(true);
+      setPaymentError("");
+      const response = await createVnpayPaymentUrl({
+        booking_id: bookingId,
+        amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+      });
+      const paymentUrl = response.data?.paymentUrl;
+
+      if (!paymentUrl) {
+        setPaymentError("Backend chưa trả về URL thanh toán VNPay.");
+        return;
+      }
+
+      window.location.href = paymentUrl;
+    } catch (requestError) {
+      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán VNPay.");
     } finally {
       setIsPaying(false);
     }
@@ -911,38 +992,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     if (!selectedSeats.length || !selectedShowtime) return;
 
     if (!isAuthenticated) {
-      setShowAuthPrompt(true);
-      setAuthError("");
-      setSeatError("");
+      requestLoginNotice();
       return;
     }
 
     await finalizeBooking();
-  };
-
-  const handleAuthChange = (event) => {
-    const { name, value } = event.target;
-    setAuthForm((current) => ({ ...current, [name]: value }));
-    setAuthError("");
-  };
-
-  const handleAuthSubmit = async (event) => {
-    event.preventDefault();
-    setAuthError("");
-    setIsAuthenticating(true);
-
-    try {
-      await login(authForm);
-      setShowAuthPrompt(false);
-      setAuthForm({ email: "", password: "" });
-      if (selectedSeats.length && selectedShowtime) {
-        await finalizeBooking();
-      }
-    } catch (requestError) {
-      setAuthError(requestError.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại.");
-    } finally {
-      setIsAuthenticating(false);
-    }
   };
 
   const isPageVariant = variant === "page";
@@ -965,7 +1019,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const viewMyTickets = () => {
     navigate("/tai-khoan?tab=tickets");
   };
+  const completeSelectedPayment = () => {
+    if (selectedPaymentMethod === "sepay") {
+      void completeSepayPgPayment();
+      return;
+    }
+
+    void completeVnpayPayment();
+  };
   const bookingIsPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
+  const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
+  const selectedPaymentLoadingText = selectedPaymentMethod === "sepay" ? "Đang mở SePay..." : "Đang mở VNPay...";
 
   return (
     <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
@@ -976,7 +1040,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         </div>
 
         {bookingResult && confirmedBookingSummary ? (
-          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="mt-8">
             <section className={`rounded-3xl border p-7 ${bookingIsPaid ? "border-emerald-400/20 bg-emerald-400/10" : "border-amber-400/20 bg-amber-400/10"}`}>
               <div className="flex flex-wrap items-start justify-between gap-5">
                 <div>
@@ -1012,43 +1076,89 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 </div>
               )}
 
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+                <div className="grid gap-4 text-sm text-slate-300 md:grid-cols-2">
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Trạng thái</span><strong className={bookingIsPaid ? "text-emerald-200" : "text-amber-200"}>{bookingIsPaid ? "Đã thanh toán" : "Chờ thanh toán"}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Tiền vé</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.seatTotal)}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Bắp nước</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.concessionTotal)}</strong></p>
+                  {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
+                  {bookingIsPaid && <div className="border-t border-white/10 pt-4 md:col-span-2">
+                    <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                  </div>}
+                </div>
+
+                {!bookingIsPaid && (
+                  <div className="mt-6 border-t border-white/10 pt-5">
+                    <p className="text-sm font-black text-white">Chọn phương thức thanh toán</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <button
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod("sepay")}
+                      >
+                        <span className="grid place-items-center gap-2">
+                          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-xs font-black text-[#2f73df]">SePay</span>
+                          <span>
+                            <span className="block text-sm font-black text-white">SePay</span>
+                            <span className="mt-1 block text-xs text-slate-400">Cổng thanh toán SePay</span>
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod("vnpay")}
+                      >
+                        <span className="grid place-items-center gap-2">
+                          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-[11px] font-black text-[#075ea8]"><span><span className="text-[#ed1c24]">VN</span>PAY</span></span>
+                          <span>
+                            <span className="block text-sm font-black text-white">VNPay</span>
+                            <span className="mt-1 block text-xs text-slate-400">Thẻ ATM hoặc QR code</span>
+                          </span>
+                        </span>
+                      </button>
+                    </div>
+
+                    <div className="mt-5 border-t border-white/10 pt-4">
+                      <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {paymentError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                {bookingIsPaid ? (
-                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
-                    Xem vé của tôi
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-3">
+                  {bookingIsPaid ? (
+                    <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
+                      Xem vé của tôi
+                    </button>
+                  ) : null}
+                  {!bookingIsPaid && (
+                    <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+                      {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
+                    </button>
+                  )}
+                  <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>
+                    Đóng
                   </button>
-                ) : (
-                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={completePayment} disabled={isPaying}>
-                    {isPaying ? "Đang thanh toán..." : "Thanh toán"}
-                  </button>
-                )}
+                </div>
                 {!bookingIsPaid && (
-                  <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
-                    {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
+                  <button
+                    className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={completeSelectedPayment}
+                    disabled={isPaying || isCancellingBooking}
+                  >
+                    {isPaying ? selectedPaymentLoadingText : selectedPaymentButtonText}
                   </button>
                 )}
-                <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>
-                  Đóng
-                </button>
               </div>
             </section>
 
-            <aside className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-              <h3 className="text-lg font-black text-white">Thanh toán</h3>
-              <div className="mt-5 grid gap-4 text-sm text-slate-300">
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Trạng thái</span><strong className={bookingIsPaid ? "text-emerald-200" : "text-amber-200"}>{bookingIsPaid ? "Đã thanh toán" : "Chờ thanh toán"}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Tiền vé</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.seatTotal)}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Bắp nước</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.concessionTotal)}</strong></p>
-                {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
-                <div className="border-t border-white/10 pt-4">
-                  <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
-                </div>
-              </div>
-            </aside>
           </div>
         ) : (
         <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -1230,44 +1340,54 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
               <p className="font-bold text-white">Thông tin người đặt</p>
               {isAuthenticated ? <><p className="text-slate-300">{user?.full_name}</p><p className="text-slate-400">{user?.email}</p><p className="text-slate-400">{user?.phone || "Chưa cập nhật số điện thoại"}</p></> : <p className="text-amber-200">Bạn cần đăng nhập trước khi đặt vé.</p>}
             </div>
-            {!isAuthenticated && showAuthPrompt && (
-              <form className="mt-4 grid gap-3 rounded-xl border border-[#ff6070]/20 bg-[#ff6070]/10 p-4" onSubmit={handleAuthSubmit}>
-                <div>
-                  <p className="text-sm font-black text-white">Đăng nhập để tiếp tục</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-300">Ghế đã chọn vẫn được giữ trong khi bạn đăng nhập.</p>
-                </div>
-                {authError && <p className="rounded-lg bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">{authError}</p>}
-                <input
-                  autoComplete="email"
-                  className="h-10 rounded-full border border-white/10 bg-black/20 px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
-                  name="email"
-                  onChange={handleAuthChange}
-                  placeholder="Email"
-                  required
-                  type="email"
-                  value={authForm.email}
-                />
-                <input
-                  autoComplete="current-password"
-                  className="h-10 rounded-full border border-white/10 bg-black/20 px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
-                  minLength={6}
-                  name="password"
-                  onChange={handleAuthChange}
-                  placeholder="Mật khẩu"
-                  required
-                  type="password"
-                  value={authForm.password}
-                />
-                <button className="h-10 rounded-full bg-white text-sm font-black text-[#111827] disabled:cursor-not-allowed disabled:opacity-60" disabled={isAuthenticating || isSubmitting} type="submit">
-                  {isAuthenticating ? "Đang đăng nhập..." : "Đăng nhập và tiếp tục"}
-                </button>
-              </form>
+            {!isAuthenticated && (
+              <button
+                className="mt-4 h-11 w-full rounded-full border border-[#ff6070]/30 bg-[#ff6070]/10 text-sm font-extrabold text-white hover:bg-[#ff6070]/20"
+                type="button"
+                onClick={requestLoginNotice}
+              >
+                Đăng nhập để đặt vé
+              </button>
             )}
-            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting || isAuthenticating}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
 	        </div>
         )}
       </div>
+      {showLoginNotice && (
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/70 px-4 backdrop-blur-sm">
+          <section className="relative w-[min(420px,100%)] rounded-2xl border border-white/10 bg-[#151b26] p-6 text-white shadow-[0_28px_90px_rgba(0,0,0,0.45)]">
+            <button
+              aria-label="Đóng thông báo"
+              className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-xl font-black text-slate-300 hover:border-[#ff6070] hover:text-white"
+              type="button"
+              onClick={() => setShowLoginNotice(false)}
+            >
+              ×
+            </button>
+            <p className="pr-10 text-lg font-black text-white">Cần đăng nhập để đặt vé</p>
+            <p className="mt-3 text-sm leading-6 text-slate-300">
+              Vui lòng quay về trang đăng nhập để tiếp tục đặt vé. Sau khi đăng nhập, hệ thống sẽ đưa bạn trở lại trang đặt vé hiện tại.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                className="h-11 rounded-full border border-white/10 bg-white/5 px-5 text-sm font-extrabold text-white hover:border-[#ff6070]"
+                type="button"
+                onClick={() => setShowLoginNotice(false)}
+              >
+                Hủy
+              </button>
+              <button
+                className="h-11 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-6 text-sm font-extrabold text-white"
+                type="button"
+                onClick={redirectToLogin}
+              >
+                Quay về trang đăng nhập
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

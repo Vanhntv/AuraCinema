@@ -18,6 +18,10 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import AccountPage from './pages/AccountPage';
 import SupportInfoPage from './pages/SupportInfoPage';
 import MovieDetailPage from './pages/MovieDetailPage';
+import VnpayReturnPage from './pages/VnpayReturnPage';
+import SepayPgReturnPage from './pages/SepayPgReturnPage';
+import PaymentPage from './pages/PaymentPage';
+import BookingResultPage from './pages/BookingResultPage';
 import ProtectedRoute from './routes/ProtectedRoute';
 
 const AdminLayout = lazy(() => import('./admin/components/layout/AdminLayout'));
@@ -86,6 +90,18 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/payment/vnpay-return" element={<VnpayReturnPage />} />
+        <Route path="/payment/sepay-pg-return" element={<SepayPgReturnPage />} />
+        <Route
+          path="/payment/:bookingId"
+          element={
+            <ProtectedRoute>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/booking/success/:bookingId" element={<BookingResultPage result="success" />} />
+        <Route path="/booking/failed" element={<BookingResultPage result="failed" />} />
         <Route
           path="/tai-khoan"
           element={

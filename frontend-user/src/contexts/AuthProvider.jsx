@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { login as loginApi, register as registerApi, getProfile } from "../api/authApi";
-import { ACCESS_TOKEN_KEY } from "../api/axiosClient";
+import { ACCESS_TOKEN_KEY, AUTH_FORBIDDEN_EVENT } from "../api/axiosClient";
 import { AuthContext } from "./AuthContext";
 
-const isAdminUser = (user) => user?.role === "admin" || user?.role_id === 1;
+const isAdminUser = (user) =>
+  String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1;
 
 function AuthProvider({ children }) {
+  const navigate = useNavigate();
   const [token, setToken] = useState(() => localStorage.getItem(ACCESS_TOKEN_KEY));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(() =>
@@ -27,6 +30,25 @@ function AuthProvider({ children }) {
     setUser(null);
     setLoading(false);
   }, [saveToken]);
+
+  useEffect(() => {
+    const handleForbidden = (event) => {
+      logout();
+      navigate("/dang-nhap", {
+        replace: true,
+        state: {
+          from: "/admin/dashboard",
+          message: event.detail?.message || "Vui lòng đăng nhập lại bằng tài khoản quản trị.",
+        },
+      });
+    };
+
+    window.addEventListener(AUTH_FORBIDDEN_EVENT, handleForbidden);
+
+    return () => {
+      window.removeEventListener(AUTH_FORBIDDEN_EVENT, handleForbidden);
+    };
+  }, [logout, navigate]);
 
   const refreshProfile = useCallback(async () => {
     const response = await getProfile();

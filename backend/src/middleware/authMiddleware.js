@@ -1,6 +1,10 @@
 import { verifyJwt } from "../utils/jwt.js";
 import User from "../models/User.js";
 
+const isAdminUser = (user) =>
+  String(user?.role || "").trim().toLowerCase() === "admin" ||
+  Number(user?.role_id) === 1;
+
 export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -52,7 +56,7 @@ export const authMiddleware = async (req, res, next) => {
     req.user = {
       id: user._id.toString(),
       role_id: user.role_id,
-      role: user.role === "admin" || user.role_id === 1 ? "admin" : "user",
+      role: isAdminUser(user) ? "admin" : "user",
       iat: payload.iat,
       exp: payload.exp,
     };
@@ -91,7 +95,7 @@ export const optionalAuthMiddleware = async (req, res, next) => {
       req.user = {
         id: user._id.toString(),
         role_id: user.role_id,
-        role: user.role === "admin" || user.role_id === 1 ? "admin" : "user",
+        role: isAdminUser(user) ? "admin" : "user",
         iat: payload.iat,
         exp: payload.exp,
       };

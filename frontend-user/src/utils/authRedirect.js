@@ -1,1 +1,2 @@
-export const isAdminUser = (user) => user?.role === "admin" || user?.role_id === 1;
+export const isAdminUser = (user) =>
+  String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1;
