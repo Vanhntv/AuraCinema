@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
-import { cancelBooking, createBooking, createVnpayPaymentUrl } from "../services/bookingService";
+import {
+  cancelBooking,
+  createBooking,
+  createVnpayPaymentUrl,
+  getBookingPaymentStatus,
+} from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
@@ -102,6 +107,29 @@ function getShowtimeId(showtime) {
 
 function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
+}
+
+const SEPAY_BANK_CODE = import.meta.env.VITE_SEPAY_BANK_CODE || "ICB";
+const SEPAY_ACCOUNT_NUMBER = import.meta.env.VITE_SEPAY_ACCOUNT_NUMBER || "";
+const SEPAY_ACCOUNT_NAME = import.meta.env.VITE_SEPAY_ACCOUNT_NAME || "DOAN TRUNG KIEN";
+const SEPAY_STORE_NAME = import.meta.env.VITE_SEPAY_STORE_NAME || "AuraCinema";
+
+function buildSepayQrUrl({ amount, code }) {
+  if (!SEPAY_ACCOUNT_NUMBER || !code) return "";
+
+  const params = new URLSearchParams({
+    bank: SEPAY_BANK_CODE,
+    acc: SEPAY_ACCOUNT_NUMBER,
+    template: "",
+    amount: String(Math.round(Number(amount || 0))),
+    des: `SEVQR TKPAUR Thanh toan don hang ${code}`,
+    showinfo: "true",
+    fullacc: "true",
+    holder: SEPAY_ACCOUNT_NAME,
+    store: SEPAY_STORE_NAME,
+  });
+
+  return `https://vietqr.app/img?${params.toString()}`;
 }
 
 function getUserId(user) {
@@ -236,6 +264,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isPaying, setIsPaying] = useState(false);
   const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [qrPaymentSecondsLeft, setQrPaymentSecondsLeft] = useState(15 * 60);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("sepay");
   const [bookingResult, setBookingResult] = useState(null);
   const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState(null);
@@ -262,6 +292,44 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   useEffect(() => {
     bookingResultRef.current = bookingResult;
   }, [bookingResult]);
+
+  useEffect(() => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    const isPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
+
+    if (!bookingId || isPaid) return undefined;
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await getBookingPaymentStatus(bookingId);
+        const statusData = response.data || {};
+
+        if (statusData.payment_status === "paid") {
+          setBookingResult((current) => current ? { ...current, ...statusData } : current);
+          setConfirmedBookingSummary((current) => current ? { ...current, paymentStatus: "paid" } : current);
+          setPaymentError("");
+        }
+      } catch {
+        // Polling should stay quiet; the user can still refresh or use account history.
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [bookingResult?._id, bookingResult?.payment_status, confirmedBookingSummary?.bookingId, confirmedBookingSummary?.paymentStatus]);
+
+  useEffect(() => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    const isPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
+
+    if (!bookingId || isPaid) return undefined;
+
+    setQrPaymentSecondsLeft(15 * 60);
+    const intervalId = window.setInterval(() => {
+      setQrPaymentSecondsLeft((current) => Math.max(current - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [bookingResult?._id, confirmedBookingSummary?.bookingId, bookingResult?.payment_status, confirmedBookingSummary?.paymentStatus]);
 
   const releaseHeldSeats = useCallback(async ({ resetState = true } = {}) => {
     const seatIds = selectedSeatsRef.current.map((seat) => seat._id);
@@ -941,6 +1009,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     navigate("/tai-khoan?tab=tickets");
   };
   const bookingIsPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
+  const sepayQrUrl = buildSepayQrUrl({
+    amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+    code: confirmedBookingSummary?.bookingCode || bookingResult?.booking_code,
+  });
+  const qrMinutesLeft = String(Math.floor(qrPaymentSecondsLeft / 60)).padStart(2, "0");
+  const qrSecondsLeft = String(qrPaymentSecondsLeft % 60).padStart(2, "0");
 
   return (
     <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
@@ -951,7 +1025,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         </div>
 
         {bookingResult && confirmedBookingSummary ? (
-          <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="mt-8">
             <section className={`rounded-3xl border p-7 ${bookingIsPaid ? "border-emerald-400/20 bg-emerald-400/10" : "border-amber-400/20 bg-amber-400/10"}`}>
               <div className="flex flex-wrap items-start justify-between gap-5">
                 <div>
@@ -987,6 +1061,84 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 </div>
               )}
 
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+                <div className="grid gap-4 text-sm text-slate-300 md:grid-cols-2">
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Trạng thái</span><strong className={bookingIsPaid ? "text-emerald-200" : "text-amber-200"}>{bookingIsPaid ? "Đã thanh toán" : "Chờ thanh toán"}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Tiền vé</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.seatTotal)}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Bắp nước</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.concessionTotal)}</strong></p>
+                  {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
+                  <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
+                  <div className="border-t border-white/10 pt-4 md:col-span-2">
+                    <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                  </div>
+                </div>
+
+                {!bookingIsPaid && (
+                  <div className="mt-6 border-t border-white/10 pt-5">
+                    <p className="text-sm font-black text-white">Chọn phương thức thanh toán</p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <button
+                        className={`min-h-[78px] rounded-2xl border p-3 text-left transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod("sepay")}
+                      >
+                        <span className="block text-sm font-black text-white">SePay QR</span>
+                        <span className="mt-1 block text-xs text-slate-400">Chuyển khoản tự xác nhận</span>
+                      </button>
+                      <button
+                        className={`min-h-[78px] rounded-2xl border p-3 text-left transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod("vnpay")}
+                      >
+                        <span className="block text-sm font-black text-white">VNPay</span>
+                        <span className="mt-1 block text-xs text-slate-400">Thẻ ATM hoặc QR code</span>
+                      </button>
+                    </div>
+
+                    {selectedPaymentMethod === "sepay" ? (
+                      <div className="mt-5 grid gap-5 rounded-2xl border border-white/10 bg-black/25 p-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                        <div className="rounded-2xl bg-white p-3">
+                          {sepayQrUrl ? (
+                            <img className="aspect-square w-full rounded-xl object-contain" src={sepayQrUrl} alt="QR thanh toán SePay" />
+                          ) : (
+                            <div className="grid aspect-square place-items-center rounded-xl bg-slate-100 p-4 text-center text-sm font-bold text-slate-700">
+                              Thiếu số tài khoản SePay
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xl font-black text-white">{formatCurrency(confirmedBookingSummary.finalTotal)}</h4>
+                          <div className="mt-4 grid gap-2 text-sm text-slate-300">
+                            <p className="flex justify-between gap-4"><span className="text-slate-500">Ngân hàng</span><strong className="text-white">{SEPAY_BANK_CODE}</strong></p>
+                            <p className="flex justify-between gap-4"><span className="text-slate-500">Chủ tài khoản</span><strong className="text-right text-white">{SEPAY_ACCOUNT_NAME}</strong></p>
+                            <p className="flex justify-between gap-4"><span className="text-slate-500">Số tài khoản</span><strong className="text-white">{SEPAY_ACCOUNT_NUMBER || "Chưa cấu hình"}</strong></p>
+                            <p className="flex justify-between gap-4"><span className="text-slate-500">Nội dung</span><strong className="text-right text-[#ff9aa5]">{confirmedBookingSummary.bookingCode}</strong></p>
+                          </div>
+                          <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
+                            Đang chờ thanh toán · {qrMinutesLeft}:{qrSecondsLeft}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
+                        <div className="grid aspect-[16/9] place-items-center rounded-2xl bg-white p-6">
+                          <strong className="text-4xl font-black text-[#075ea8]"><span className="text-[#ed1c24]">VN</span>PAY</strong>
+                        </div>
+                        <button
+                          className="mt-4 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          onClick={completePayment}
+                          disabled={isPaying || isCancellingBooking}
+                        >
+                          {isPaying ? "Đang mở VNPay..." : "Thanh toán qua VNPay"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {paymentError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
 
               <div className="mt-6 flex flex-wrap gap-3">
@@ -994,16 +1146,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
                     Xem vé của tôi
                   </button>
-                ) : (
-                  <button
-                    className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    type="button"
-                    onClick={completePayment}
-                    disabled={isPaying || isCancellingBooking}
-                  >
-                    {isPaying ? "Đang mở VNPay..." : "Thanh toán VNPay"}
-                  </button>
-                )}
+                ) : null}
                 {!bookingIsPaid && (
                   <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
                     {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
@@ -1015,20 +1158,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
               </div>
             </section>
 
-            <aside className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-              <h3 className="text-lg font-black text-white">Thanh toán</h3>
-              <div className="mt-5 grid gap-4 text-sm text-slate-300">
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Trạng thái</span><strong className={bookingIsPaid ? "text-emerald-200" : "text-amber-200"}>{bookingIsPaid ? "Đã thanh toán" : "Chờ thanh toán"}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Tiền vé</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.seatTotal)}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Bắp nước</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.concessionTotal)}</strong></p>
-                {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
-                <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
-                <div className="border-t border-white/10 pt-4">
-                  <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
-                </div>
-              </div>
-            </aside>
           </div>
         ) : (
         <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">

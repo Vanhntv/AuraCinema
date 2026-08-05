@@ -476,6 +476,35 @@ export const confirmBookingPayment = async (req, res) => {
   }
 };
 
+export const getBookingPaymentStatus = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user_id: req.user.id,
+    }).select("_id booking_code status payment_status payment_provider payment_transaction_id paid_at total_price");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        booking_id: booking._id,
+        booking_code: booking.booking_code,
+        status: booking.status,
+        payment_status: booking.payment_status,
+        payment_provider: booking.payment_provider,
+        payment_transaction_id: booking.payment_transaction_id,
+        paid_at: booking.paid_at,
+        total_price: booking.total_price,
+      },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
 export const cancelBooking = async (req, res) => {
   try {
     const { id } = req.params;
