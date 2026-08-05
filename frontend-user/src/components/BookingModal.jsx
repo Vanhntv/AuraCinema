@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
-import { cancelBooking, createBooking, payBooking } from "../services/bookingService";
+import { cancelBooking, createBooking, createVnpayPaymentUrl } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
@@ -863,18 +863,20 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     try {
       setIsPaying(true);
       setPaymentError("");
-      const response = await payBooking(bookingId, { payment_provider: "internal" });
-      setBookingResult(response.data);
-      setConfirmedBookingSummary((current) => ({
-        ...current,
-        bookingCode: response.data?.booking_code || current?.bookingCode,
-        bookingId: response.data?._id || current?.bookingId,
-        discountAmount: Number(response.data?.discount_amount ?? current?.discountAmount ?? 0),
-        finalTotal: Number(response.data?.total_price ?? current?.finalTotal ?? 0),
-        paymentStatus: response.data?.payment_status || "paid",
-      }));
+      const response = await createVnpayPaymentUrl({
+        booking_id: bookingId,
+        amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+      });
+      const paymentUrl = response.data?.paymentUrl;
+
+      if (!paymentUrl) {
+        setPaymentError("Backend chưa trả về URL thanh toán VNPay.");
+        return;
+      }
+
+      window.location.href = paymentUrl;
     } catch (requestError) {
-      setPaymentError(requestError.response?.data?.message || "Thanh toán không thành công.");
+      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán VNPay.");
     } finally {
       setIsPaying(false);
     }
@@ -993,8 +995,13 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                     Xem vé của tôi
                   </button>
                 ) : (
-                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={completePayment} disabled={isPaying}>
-                    {isPaying ? "Đang thanh toán..." : "Thanh toán"}
+                  <button
+                    className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={completePayment}
+                    disabled={isPaying || isCancellingBooking}
+                  >
+                    {isPaying ? "Đang mở VNPay..." : "Thanh toán VNPay"}
                   </button>
                 )}
                 {!bookingIsPaid && (

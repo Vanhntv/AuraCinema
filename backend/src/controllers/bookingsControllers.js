@@ -437,7 +437,15 @@ export const createBooking = async (req, res) => {
       return booking;
     });
 
-    return res.status(201).json({ success: true, message: "Đã tạo đơn chờ thanh toán", data: createdBooking });
+    const bookingData = typeof createdBooking.toObject === "function"
+      ? createdBooking.toObject()
+      : createdBooking;
+
+    return res.status(201).json({
+      success: true,
+      message: "Đã tạo đơn chờ thanh toán",
+      data: bookingData,
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }

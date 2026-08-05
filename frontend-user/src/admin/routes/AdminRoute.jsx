@@ -14,7 +14,16 @@ function AdminRoute({ children }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/dang-nhap" replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to="/dang-nhap"
+        replace
+        state={{
+          from: location,
+          message: "Vui lòng đăng nhập bằng tài khoản quản trị để vào trang admin.",
+        }}
+      />
+    );
   }
 
   return children;
