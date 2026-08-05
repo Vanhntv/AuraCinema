@@ -15,6 +15,11 @@ export const createVnpayPaymentUrl = async (payload) => {
   return response.data;
 };
 
+export const createSepayPgCheckout = async (payload) => {
+  const response = await axiosClient.post("/payments/sepay-pg/create-checkout", payload);
+  return response.data;
+};
+
 export const getBookingPaymentStatus = async (bookingId) => {
   const response = await axiosClient.get(`/bookings/${bookingId}/status`);
   return response.data;
@@ -22,6 +27,11 @@ export const getBookingPaymentStatus = async (bookingId) => {
 
 export const verifyVnpayReturn = async (queryString) => {
   const response = await axiosClient.get(`/payments/vnpay/return${queryString}`);
+  return response.data;
+};
+
+export const verifySepayPgReturn = async (queryString) => {
+  const response = await axiosClient.get(`/payments/sepay-pg/return${queryString}`);
   return response.data;
 };
 

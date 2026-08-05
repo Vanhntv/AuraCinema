@@ -5,6 +5,7 @@ import { getShowtimesByMovie } from "../services/showtimeService";
 import {
   cancelBooking,
   createBooking,
+  createSepayPgCheckout,
   createVnpayPaymentUrl,
   getBookingPaymentStatus,
 } from "../services/bookingService";
@@ -107,29 +108,6 @@ function getShowtimeId(showtime) {
 
 function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
-}
-
-const SEPAY_BANK_CODE = import.meta.env.VITE_SEPAY_BANK_CODE || "ICB";
-const SEPAY_ACCOUNT_NUMBER = import.meta.env.VITE_SEPAY_ACCOUNT_NUMBER || "";
-const SEPAY_ACCOUNT_NAME = import.meta.env.VITE_SEPAY_ACCOUNT_NAME || "DOAN TRUNG KIEN";
-const SEPAY_STORE_NAME = import.meta.env.VITE_SEPAY_STORE_NAME || "AuraCinema";
-
-function buildSepayQrUrl({ amount, code }) {
-  if (!SEPAY_ACCOUNT_NUMBER || !code) return "";
-
-  const params = new URLSearchParams({
-    bank: SEPAY_BANK_CODE,
-    acc: SEPAY_ACCOUNT_NUMBER,
-    template: "",
-    amount: String(Math.round(Number(amount || 0))),
-    des: `SEVQR TKPAUR Thanh toan don hang ${code}`,
-    showinfo: "true",
-    fullacc: "true",
-    holder: SEPAY_ACCOUNT_NAME,
-    store: SEPAY_STORE_NAME,
-  });
-
-  return `https://vietqr.app/img?${params.toString()}`;
 }
 
 function getUserId(user) {
@@ -245,6 +223,24 @@ function isBookedSeat(seat) {
   return getSeatStatus(seat) === "booked";
 }
 
+function submitPaymentForm({ checkoutUrl, fields }) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = checkoutUrl;
+  form.style.display = "none";
+
+  Object.entries(fields || {}).forEach(([name, value]) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = String(value ?? "");
+    form.appendChild(input);
+  });
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
 function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal" }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -264,7 +260,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isPaying, setIsPaying] = useState(false);
   const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
-  const [qrPaymentSecondsLeft, setQrPaymentSecondsLeft] = useState(15 * 60);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("sepay");
   const [bookingResult, setBookingResult] = useState(null);
   const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
@@ -316,20 +311,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     return () => window.clearInterval(intervalId);
   }, [bookingResult?._id, bookingResult?.payment_status, confirmedBookingSummary?.bookingId, confirmedBookingSummary?.paymentStatus]);
-
-  useEffect(() => {
-    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
-    const isPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
-
-    if (!bookingId || isPaid) return undefined;
-
-    setQrPaymentSecondsLeft(15 * 60);
-    const intervalId = window.setInterval(() => {
-      setQrPaymentSecondsLeft((current) => Math.max(current - 1, 0));
-    }, 1000);
-
-    return () => window.clearInterval(intervalId);
-  }, [bookingResult?._id, confirmedBookingSummary?.bookingId, bookingResult?.payment_status, confirmedBookingSummary?.paymentStatus]);
 
   const releaseHeldSeats = useCallback(async ({ resetState = true } = {}) => {
     const seatIds = selectedSeatsRef.current.map((seat) => seat._id);
@@ -898,13 +879,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         })),
         voucher_code: appliedVoucher?.voucher?.code || undefined,
       });
-      setBookingResult(response.data);
-      setConfirmedBookingSummary({
+      const nextBookingSummary = {
         ...bookingSummary,
         bookingCode: response.data?.booking_code || response.data?._id,
         bookingId: response.data?._id,
         paymentStatus: response.data?.payment_status || "pending",
-      });
+      };
       setShowtimeSeats((current) => current.map((seat) =>
         selectedSeats.some((selected) => selected._id === seat._id)
           ? { ...seat, status: "reserved", held_by: currentUserId }
@@ -917,6 +897,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setVoucherError("");
       setVoucherMessage("");
       setPaymentError("");
+      navigate(`/payment/${response.data?._id}`, {
+        state: { bookingSummary: nextBookingSummary },
+      });
     } catch (requestError) {
       setSeatError(requestError.response?.data?.message || "Đặt vé không thành công.");
     } finally {
@@ -924,7 +907,33 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   };
 
-  const completePayment = async () => {
+  const completeSepayPgPayment = async () => {
+    const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
+    if (!bookingId) return;
+
+    try {
+      setIsPaying(true);
+      setPaymentError("");
+      const response = await createSepayPgCheckout({
+        booking_id: bookingId,
+        amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+      });
+      const checkoutUrl = response.data?.checkoutUrl;
+      const fields = response.data?.fields;
+
+      if (!checkoutUrl || !fields) {
+        setPaymentError("Backend chưa trả về form thanh toán SePay.");
+        return;
+      }
+
+      submitPaymentForm({ checkoutUrl, fields });
+    } catch (requestError) {
+      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán SePay.");
+      setIsPaying(false);
+    }
+  };
+
+  const completeVnpayPayment = async () => {
     const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
     if (!bookingId) return;
 
@@ -1008,13 +1017,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const viewMyTickets = () => {
     navigate("/tai-khoan?tab=tickets");
   };
+  const completeSelectedPayment = () => {
+    if (selectedPaymentMethod === "sepay") {
+      void completeSepayPgPayment();
+      return;
+    }
+
+    void completeVnpayPayment();
+  };
   const bookingIsPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
-  const sepayQrUrl = buildSepayQrUrl({
-    amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
-    code: confirmedBookingSummary?.bookingCode || bookingResult?.booking_code,
-  });
-  const qrMinutesLeft = String(Math.floor(qrPaymentSecondsLeft / 60)).padStart(2, "0");
-  const qrSecondsLeft = String(qrPaymentSecondsLeft % 60).padStart(2, "0");
+  const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
+  const selectedPaymentLoadingText = selectedPaymentMethod === "sepay" ? "Đang mở SePay..." : "Đang mở VNPay...";
 
   return (
     <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
@@ -1069,9 +1082,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   {confirmedBookingSummary.voucherCode && <p className="flex justify-between gap-4"><span className="text-slate-500">Voucher</span><strong className="text-emerald-200">{confirmedBookingSummary.voucherCode}</strong></p>}
                   <p className="flex justify-between gap-4"><span className="text-slate-500">Tạm tính</span><strong className="text-white">{formatCurrency(confirmedBookingSummary.totalPrice)}</strong></p>
                   <p className="flex justify-between gap-4"><span className="text-slate-500">Giảm giá</span><strong className="text-emerald-200">-{formatCurrency(confirmedBookingSummary.discountAmount)}</strong></p>
-                  <div className="border-t border-white/10 pt-4 md:col-span-2">
+                  {bookingIsPaid && <div className="border-t border-white/10 pt-4 md:col-span-2">
                     <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
-                  </div>
+                  </div>}
                 </div>
 
                 {!bookingIsPaid && (
@@ -1079,82 +1092,68 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                     <p className="text-sm font-black text-white">Chọn phương thức thanh toán</p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <button
-                        className={`min-h-[78px] rounded-2xl border p-3 text-left transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
                         type="button"
                         onClick={() => setSelectedPaymentMethod("sepay")}
                       >
-                        <span className="block text-sm font-black text-white">SePay QR</span>
-                        <span className="mt-1 block text-xs text-slate-400">Chuyển khoản tự xác nhận</span>
+                        <span className="grid place-items-center gap-2">
+                          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-xs font-black text-[#2f73df]">SePay</span>
+                          <span>
+                            <span className="block text-sm font-black text-white">SePay</span>
+                            <span className="mt-1 block text-xs text-slate-400">Cổng thanh toán SePay</span>
+                          </span>
+                        </span>
                       </button>
                       <button
-                        className={`min-h-[78px] rounded-2xl border p-3 text-left transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
                         type="button"
                         onClick={() => setSelectedPaymentMethod("vnpay")}
                       >
-                        <span className="block text-sm font-black text-white">VNPay</span>
-                        <span className="mt-1 block text-xs text-slate-400">Thẻ ATM hoặc QR code</span>
+                        <span className="grid place-items-center gap-2">
+                          <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-[11px] font-black text-[#075ea8]"><span><span className="text-[#ed1c24]">VN</span>PAY</span></span>
+                          <span>
+                            <span className="block text-sm font-black text-white">VNPay</span>
+                            <span className="mt-1 block text-xs text-slate-400">Thẻ ATM hoặc QR code</span>
+                          </span>
+                        </span>
                       </button>
                     </div>
 
-                    {selectedPaymentMethod === "sepay" ? (
-                      <div className="mt-5 grid gap-5 rounded-2xl border border-white/10 bg-black/25 p-4 md:grid-cols-[220px_minmax(0,1fr)]">
-                        <div className="rounded-2xl bg-white p-3">
-                          {sepayQrUrl ? (
-                            <img className="aspect-square w-full rounded-xl object-contain" src={sepayQrUrl} alt="QR thanh toán SePay" />
-                          ) : (
-                            <div className="grid aspect-square place-items-center rounded-xl bg-slate-100 p-4 text-center text-sm font-bold text-slate-700">
-                              Thiếu số tài khoản SePay
-                            </div>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xl font-black text-white">{formatCurrency(confirmedBookingSummary.finalTotal)}</h4>
-                          <div className="mt-4 grid gap-2 text-sm text-slate-300">
-                            <p className="flex justify-between gap-4"><span className="text-slate-500">Ngân hàng</span><strong className="text-white">{SEPAY_BANK_CODE}</strong></p>
-                            <p className="flex justify-between gap-4"><span className="text-slate-500">Chủ tài khoản</span><strong className="text-right text-white">{SEPAY_ACCOUNT_NAME}</strong></p>
-                            <p className="flex justify-between gap-4"><span className="text-slate-500">Số tài khoản</span><strong className="text-white">{SEPAY_ACCOUNT_NUMBER || "Chưa cấu hình"}</strong></p>
-                            <p className="flex justify-between gap-4"><span className="text-slate-500">Nội dung</span><strong className="text-right text-[#ff9aa5]">{confirmedBookingSummary.bookingCode}</strong></p>
-                          </div>
-                          <p className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
-                            Đang chờ thanh toán · {qrMinutesLeft}:{qrSecondsLeft}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-                        <div className="grid aspect-[16/9] place-items-center rounded-2xl bg-white p-6">
-                          <strong className="text-4xl font-black text-[#075ea8]"><span className="text-[#ed1c24]">VN</span>PAY</strong>
-                        </div>
-                        <button
-                          className="mt-4 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          type="button"
-                          onClick={completePayment}
-                          disabled={isPaying || isCancellingBooking}
-                        >
-                          {isPaying ? "Đang mở VNPay..." : "Thanh toán qua VNPay"}
-                        </button>
-                      </div>
-                    )}
+                    <div className="mt-5 border-t border-white/10 pt-4">
+                      <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                    </div>
                   </div>
                 )}
               </div>
 
               {paymentError && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                {bookingIsPaid ? (
-                  <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
-                    Xem vé của tôi
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-3">
+                  {bookingIsPaid ? (
+                    <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
+                      Xem vé của tôi
+                    </button>
+                  ) : null}
+                  {!bookingIsPaid && (
+                    <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+                      {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
+                    </button>
+                  )}
+                  <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>
+                    Đóng
                   </button>
-                ) : null}
+                </div>
                 {!bookingIsPaid && (
-                  <button className="h-12 rounded-full border border-red-300/20 bg-red-500/10 px-7 text-sm font-extrabold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
-                    {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
+                  <button
+                    className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    type="button"
+                    onClick={completeSelectedPayment}
+                    disabled={isPaying || isCancellingBooking}
+                  >
+                    {isPaying ? selectedPaymentLoadingText : selectedPaymentButtonText}
                   </button>
                 )}
-                <button className="h-12 rounded-full border border-white/10 bg-white/[0.06] px-7 text-sm font-extrabold text-white hover:border-[#ff6070]" type="button" onClick={handleClose}>
-                  Đóng
-                </button>
               </div>
             </section>
 
