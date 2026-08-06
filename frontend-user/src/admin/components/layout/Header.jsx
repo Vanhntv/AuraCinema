@@ -17,6 +17,7 @@ const pageTitles = {
   "/admin/rooms": "Phòng chiếu",
   "/admin/showtimes": "Suất chiếu",
   "/admin/ticket-scanner": "Quét vé QR",
+  "/admin/ticket-scan-history": "Lịch sử quét QR",
   "/admin/users": "Người dùng",
 };
 

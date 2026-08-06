@@ -15,6 +15,7 @@ export const TICKET_SCAN_RESULTS = [
   "EXPIRED",
   "WRONG_SHOWTIME",
   "PAYMENT_NOT_COMPLETED",
+  "NOT_CHECKED_IN",
 ];
 
 const ticketScanLogSchema = new mongoose.Schema(

@@ -38,6 +38,7 @@ const AdminUsersPage = lazy(() => import('./admin/pages/UsersPage'));
 const AdminConcessionsPage = lazy(() => import('./admin/pages/ConcessionsPage'));
 const AdminVouchersPage = lazy(() => import('./admin/pages/VouchersPage'));
 const AdminTicketScannerPage = lazy(() => import('./admin/pages/TicketScannerPage'));
+const AdminTicketScanHistoryPage = lazy(() => import('./admin/pages/TicketScanHistoryPage'));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -135,6 +136,7 @@ function App() {
           <Route path="showtimes" element={<AdminShowtimesPage />} />
           <Route path="bookings" element={<AdminBookingsPage />} />
           <Route path="ticket-scanner" element={<AdminTicketScannerPage />} />
+          <Route path="ticket-scan-history" element={<AdminTicketScanHistoryPage />} />
           <Route path="concessions" element={<AdminConcessionsPage />} />
           <Route path="vouchers" element={<AdminVouchersPage />} />
           <Route path="marketing" element={<AdminMarketingContentPage />} />

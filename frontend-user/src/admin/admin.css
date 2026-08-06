@@ -4553,3 +4553,74 @@
     width: 100%;
   }
 }
+
+/* ============================================
+   Ticket Scan History
+   ============================================ */
+.ticket-scan-history-page {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ticket-scan-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.ticket-scan-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+}
+
+.ticket-scan-filters .filter-search {
+  min-width: 0;
+}
+
+.ticket-scan-table-container {
+  margin-top: 0;
+}
+
+.ticket-scan-table {
+  min-width: 1120px;
+}
+
+.ticket-scan-table th,
+.ticket-scan-table td {
+  vertical-align: middle;
+}
+
+.ticket-scan-empty-cell {
+  height: 150px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.ticket-scan-empty-cell svg {
+  display: block;
+  width: 38px;
+  height: 38px;
+  margin: 0 auto 8px;
+  opacity: 0.55;
+}
+
+@media (max-width: 1280px) {
+  .ticket-scan-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .ticket-scan-filters {
+    grid-template-columns: 1fr;
+  }
+}
