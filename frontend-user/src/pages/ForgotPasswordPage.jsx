@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { forgotPassword, resetPassword } from "../api/authApi";
+import { getApiErrorMessage, showToast } from "../utils/toast";
 
 function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -43,10 +44,14 @@ function ForgotPasswordPage() {
 
     try {
       const response = await forgotPassword({ email: formData.email });
-      setMessage(response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message);
+      const successMessage = response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message;
+      setMessage(successMessage);
+      showToast("success", successMessage);
       setStep("reset");
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể gửi OTP. Vui lòng thử lại.");
+      const message = getApiErrorMessage(err, "Không thể gửi OTP. Vui lòng thử lại.");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSubmitting(false);
     }
@@ -60,6 +65,7 @@ function ForgotPasswordPage() {
     const validationError = validatePassword();
     if (validationError) {
       setError(validationError);
+      showToast("error", validationError);
       return;
     }
 
@@ -72,7 +78,9 @@ function ForgotPasswordPage() {
         state: { message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập." },
       });
     } catch (err) {
-      setError(err.response?.data?.message || "Không thể đặt lại mật khẩu. Vui lòng thử lại.");
+      const message = getApiErrorMessage(err, "Không thể đặt lại mật khẩu. Vui lòng thử lại.");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSubmitting(false);
     }

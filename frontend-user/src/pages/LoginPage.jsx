@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../utils/authRedirect";
+import { getApiErrorMessage, showToast } from "../utils/toast";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -22,6 +23,10 @@ function LoginPage() {
     ? fromState
     : `${fromState?.pathname || "/"}${fromState?.search || ""}`;
   const isAdminRedirect = from.startsWith("/admin");
+
+  useEffect(() => {
+    if (successMessage) showToast("success", successMessage);
+  }, [successMessage]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -46,9 +51,9 @@ function LoginPage() {
 
       navigate(isAdminRedirect ? "/tai-khoan" : from, { replace: true });
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Đăng nhập thất bại. Vui lòng thử lại."
-      );
+      const message = getApiErrorMessage(err, "Đăng nhập thất bại. Vui lòng thử lại.");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSubmitting(false);
     }

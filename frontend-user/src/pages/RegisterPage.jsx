@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
+import { getApiErrorMessage, showToast } from "../utils/toast";
 
 function RegisterPage() {
   const navigate = useNavigate();
@@ -31,12 +32,16 @@ function RegisterPage() {
     setError("");
 
     if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
-      setError("Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.");
+      const message = "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
+      setError(message);
+      showToast("error", message);
       return;
     }
 
     if (formData.password !== formData.confirm_password) {
-      setError("Mật khẩu xác nhận không khớp.");
+      const message = "Mật khẩu xác nhận không khớp.";
+      setError(message);
+      showToast("error", message);
       return;
     }
 
@@ -55,9 +60,9 @@ function RegisterPage() {
         state: { message: "Đăng ký thành công. Vui lòng đăng nhập." },
       });
     } catch (err) {
-      setError(
-        err.response?.data?.message || "Đăng ký thất bại. Vui lòng thử lại."
-      );
+      const message = getApiErrorMessage(err, "Đăng ký thất bại. Vui lòng thử lại.");
+      setError(message);
+      showToast("error", message);
     } finally {
       setSubmitting(false);
     }

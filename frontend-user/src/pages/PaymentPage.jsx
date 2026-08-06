@@ -6,6 +6,7 @@ import {
   createVnpayPaymentUrl,
   getBookingPaymentStatus,
 } from "../services/bookingService";
+import { getApiErrorMessage, showToast } from "../utils/toast";
 
 function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
@@ -93,8 +94,11 @@ function PaymentPage() {
           total_price: data.total_price || current?.total_price || 0,
           paymentStatus: data.payment_status || current?.paymentStatus || "pending",
         }));
-      } catch {
-        if (isActive) setPaymentError("Không thể tải trạng thái thanh toán.");
+      } catch (error) {
+        if (isActive) {
+          const message = getApiErrorMessage(error, "Không thể tải trạng thái thanh toán.");
+          setPaymentError(message);
+        }
       }
     };
 
@@ -124,14 +128,18 @@ function PaymentPage() {
       const fields = response.data?.fields;
 
       if (!checkoutUrl || !fields) {
-        setPaymentError("Backend chưa trả về form thanh toán SePay.");
+        const message = "Backend chưa trả về form thanh toán SePay.";
+        setPaymentError(message);
+        showToast("error", message);
         setIsPaying(false);
         return;
       }
 
       submitPaymentForm({ checkoutUrl, fields });
     } catch (requestError) {
-      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán SePay.");
+      const message = getApiErrorMessage(requestError, "Không thể mở thanh toán SePay.");
+      setPaymentError(message);
+      showToast("error", message);
       setIsPaying(false);
     }
   };
@@ -146,14 +154,18 @@ function PaymentPage() {
       const paymentUrl = response.data?.paymentUrl;
 
       if (!paymentUrl) {
-        setPaymentError("Backend chưa trả về URL thanh toán VNPay.");
+        const message = "Backend chưa trả về URL thanh toán VNPay.";
+        setPaymentError(message);
+        showToast("error", message);
         setIsPaying(false);
         return;
       }
 
       window.location.href = paymentUrl;
     } catch (requestError) {
-      setPaymentError(requestError.response?.data?.message || "Không thể mở thanh toán VNPay.");
+      const message = getApiErrorMessage(requestError, "Không thể mở thanh toán VNPay.");
+      setPaymentError(message);
+      showToast("error", message);
       setIsPaying(false);
     }
   };
@@ -179,7 +191,9 @@ function PaymentPage() {
         state: { message: "Đã hủy đơn thanh toán. Bạn có thể chọn lại ghế." },
       });
     } catch (requestError) {
-      setPaymentError(requestError.response?.data?.message || "Không thể hủy đơn đặt vé.");
+      const message = getApiErrorMessage(requestError, "Không thể hủy đơn đặt vé.");
+      setPaymentError(message);
+      showToast("error", message);
     } finally {
       setIsCancellingBooking(false);
     }

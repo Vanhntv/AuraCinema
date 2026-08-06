@@ -12,10 +12,13 @@ const QR_PAYLOAD_PREFIX = "AURA_TICKET:";
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
+const MAX_QR_TOKEN_LENGTH = 512;
 
 const normalizeQrToken = (value = "") => {
-  const rawValue = String(value || "").trim();
-  if (!rawValue) return "";
+  if (typeof value !== "string") return "";
+
+  const rawValue = value.trim();
+  if (!rawValue || rawValue.length > MAX_QR_TOKEN_LENGTH) return "";
 
   return rawValue.startsWith(QR_PAYLOAD_PREFIX)
     ? rawValue.slice(QR_PAYLOAD_PREFIX.length).trim()
@@ -211,11 +214,15 @@ const formatScanLogRow = (log) => ({
   action: log.action,
   result: log.result,
   errorNote: log.errorNote || "",
+  ipAddress: log.ipAddress || "",
+  userAgent: log.userAgent || "",
+  createdAt: log.createdAt,
+  updatedAt: log.updatedAt,
 });
 
 const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
-  const [errorResult, successScanResult] = await Promise.all([
+  const [errorResult, successScanResult, verifyScanResult, successfulCheckInResult] = await Promise.all([
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
       { $match: { result: { $ne: "SUCCESS" } } },
@@ -224,6 +231,16 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
       { $match: { result: "SUCCESS" } },
+      { $count: "count" },
+    ]),
+    TicketScanLog.aggregate([
+      ...buildScanLogAggregation(query),
+      { $match: { action: "VERIFY" } },
+      { $count: "count" },
+    ]),
+    TicketScanLog.aggregate([
+      ...buildScanLogAggregation(query),
+      { $match: { action: "CHECK_IN", result: "SUCCESS" } },
       { $count: "count" },
     ]),
   ]);
@@ -238,6 +255,8 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
       expiredTickets: null,
       errorScans: errorResult[0]?.count || 0,
       successScans: successScanResult[0]?.count || 0,
+      verifyScans: verifyScanResult[0]?.count || 0,
+      successfulCheckIns: successfulCheckInResult[0]?.count || 0,
       totalScans: totalFiltered,
     };
   }
@@ -259,6 +278,8 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
     expiredTickets,
     errorScans: errorResult[0]?.count || 0,
     successScans: successScanResult[0]?.count || 0,
+    verifyScans: verifyScanResult[0]?.count || 0,
+    successfulCheckIns: successfulCheckInResult[0]?.count || 0,
     checkInRate: totalTicketsOfShowtime > 0 ? Math.round((checkedInTickets / totalTicketsOfShowtime) * 100) : 0,
     totalScans: totalFiltered,
   };
@@ -362,6 +383,15 @@ const getCheckInWindow = (showtime) => {
   };
 };
 
+const formatVietnamDateTime = (value) =>
+  new Date(value).toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
 const evaluateTicketBase = (ticket) => {
   if (!ticket) {
     return {
@@ -434,7 +464,7 @@ const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
       allowed: false,
       result: "WRONG_SHOWTIME",
       statusCode: 409,
-      message: "Chưa đến thời gian check-in.",
+      message: `Chưa đến thời gian check-in. Thời gian bắt đầu check-in là: ${formatVietnamDateTime(checkInWindow.opensAt)}.`,
       checkInWindow,
     };
   }

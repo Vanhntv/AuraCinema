@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiOutlineClipboardList,
+  HiOutlineEye,
   HiOutlineRefresh,
   HiOutlineSearch,
 } from "react-icons/hi";
 import { getTicketScanLogs } from "../services/ticketAdminService";
+import { getApiErrorMessage, showToast } from "../../utils/toast";
 
 const PAGE_SIZE = 10;
 
@@ -46,13 +48,7 @@ const resultBadgeClass = (result) => {
 
 const initialFilters = {
   q: "",
-  dateFrom: "",
-  dateTo: "",
-  action: "",
   result: "",
-  movie: "",
-  showtimeId: "",
-  room: "",
 };
 
 const TicketScanHistoryPage = () => {
@@ -65,6 +61,7 @@ const TicketScanHistoryPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [selectedLog, setSelectedLog] = useState(null);
 
   const requestParams = useMemo(() => {
     const params = {
@@ -91,20 +88,21 @@ const TicketScanHistoryPage = () => {
       setTotalPages(response.pagination?.totalPages || 1);
       setTotalItems(response.pagination?.totalItems || 0);
     } catch (fetchError) {
-      setError(fetchError.response?.data?.message || "Không thể tải lịch sử quét vé.");
+      const message = getApiErrorMessage(fetchError, "Không thể tải lịch sử quét vé.");
+      setError(message);
+      showToast("error", message);
     } finally {
       setLoading(false);
     }
   }, [currentPage, requestParams]);
 
   useEffect(() => {
-    fetchLogs();
+    const timer = window.setTimeout(fetchLogs, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchLogs]);
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    setCurrentPage(1);
-    setAppliedFilters(filters);
   };
 
   const handleReset = () => {
@@ -116,6 +114,15 @@ const TicketScanHistoryPage = () => {
   const updateFilter = (key, value) => {
     setFilters((current) => ({ ...current, [key]: value }));
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setCurrentPage(1);
+      setAppliedFilters(filters);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [filters]);
 
   return (
     <div className="ticket-scan-history-page">
@@ -134,39 +141,28 @@ const TicketScanHistoryPage = () => {
 
       <div className="ticket-scan-stats-grid">
         <StatCard label="Tổng lượt quét" value={stats?.totalScans ?? totalItems} />
+        <StatCard label="Lượt xác minh" value={stats?.verifyScans ?? "-"} />
+        <StatCard label="Check-in thành công" value={stats?.successfulCheckIns ?? "-"} />
         <StatCard label="Lượt quét lỗi" value={stats?.errorScans ?? 0} />
-        <StatCard label="Lượt quét thành công" value={stats?.successScans ?? "-"} />
         <StatCard label="Vé đã check-in" value={stats?.checkedInTickets ?? "-"} />
       </div>
 
-      <form className="ticket-scan-filters" onSubmit={handleSubmit}>
+      <form className="ticket-scan-filters compact" onSubmit={handleSubmit}>
         <div className="filter-search">
           <HiOutlineSearch />
           <input
             className="form-input"
             onChange={(event) => updateFilter("q", event.target.value)}
-            placeholder="Tìm mã vé hoặc ghế"
+            placeholder="Tìm mã vé, ghế..."
             value={filters.q}
           />
         </div>
-        <input className="form-input" type="date" value={filters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} />
-        <input className="form-input" type="date" value={filters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} />
-        <select className="form-input" value={filters.action} onChange={(event) => updateFilter("action", event.target.value)}>
-          <option value="">Tất cả hành động</option>
-          {Object.entries(actionLabels).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
         <select className="form-input" value={filters.result} onChange={(event) => updateFilter("result", event.target.value)}>
-          <option value="">Tất cả kết quả</option>
+          <option value="">Tất cả trạng thái</option>
           {Object.entries(resultLabels).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
-        <input className="form-input" placeholder="Tên phim" value={filters.movie} onChange={(event) => updateFilter("movie", event.target.value)} />
-        <input className="form-input" placeholder="ID suất chiếu" value={filters.showtimeId} onChange={(event) => updateFilter("showtimeId", event.target.value)} />
-        <input className="form-input" placeholder="Phòng chiếu" value={filters.room} onChange={(event) => updateFilter("room", event.target.value)} />
-        <button className="btn btn-primary" disabled={loading} type="submit">Lọc</button>
         <button className="btn btn-secondary" disabled={loading} onClick={handleReset} type="button">Xóa lọc</button>
       </form>
 
@@ -185,20 +181,17 @@ const TicketScanHistoryPage = () => {
                 <th>Mã vé</th>
                 <th>Phim</th>
                 <th>Suất chiếu</th>
-                <th>Phòng</th>
                 <th>Ghế</th>
-                <th>Admin</th>
+                <th>Trạng thái</th>
                 <th>Hành động</th>
-                <th>Kết quả</th>
-                <th>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10" className="ticket-scan-empty-cell">Đang tải lịch sử quét...</td></tr>
+                <tr><td colSpan="7" className="ticket-scan-empty-cell">Đang tải lịch sử quét...</td></tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan="10" className="ticket-scan-empty-cell">
+                  <td colSpan="7" className="ticket-scan-empty-cell">
                     <HiOutlineClipboardList />
                     <span>Không có dữ liệu quét phù hợp.</span>
                   </td>
@@ -206,19 +199,37 @@ const TicketScanHistoryPage = () => {
               ) : (
                 logs.map((log) => (
                   <tr key={log.id}>
-                    <td>{formatDateTime(log.scannedAt)}</td>
-                    <td><strong className="booking-code-text">{log.ticketCode || "-"}</strong></td>
-                    <td>{log.movie?.title || "-"}</td>
-                    <td>{formatDateTime(log.showtime?.startTime)}</td>
-                    <td>{log.room?.name || "-"}</td>
-                    <td>{log.seatLabel || "-"}</td>
+                    <td className="ticket-scan-time">{formatDateTime(log.scannedAt)}</td>
                     <td>
-                      <span className="booking-cell-main">{log.admin?.name || "-"}</span>
-                      <span className="table-muted booking-cell-sub">{log.admin?.email || ""}</span>
+                      <strong className="ticket-scan-code" title={log.ticketCode || "-"}>
+                        {log.ticketCode || "-"}
+                      </strong>
                     </td>
-                    <td>{actionLabels[log.action] || log.action}</td>
-                    <td><span className={resultBadgeClass(log.result)}>{resultLabels[log.result] || log.result}</span></td>
-                    <td>{log.errorNote || "-"}</td>
+                    <td>
+                      <span className="ticket-scan-title" title={log.movie?.title || "-"}>
+                        {log.movie?.title || "-"}
+                      </span>
+                    </td>
+                    <td className="ticket-scan-showtime">{formatDateTime(log.showtime?.startTime)}</td>
+                    <td><strong className="ticket-scan-seat">{log.seatLabel || "-"}</strong></td>
+                    <td>
+                      <div className="ticket-scan-status-cell">
+                        <span>{actionLabels[log.action] || log.action}</span>
+                        <span className={resultBadgeClass(log.result)}>{resultLabels[log.result] || log.result}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="ticket-scan-row-actions">
+                        <button
+                          className="btn btn-secondary btn-sm ticket-scan-detail-btn"
+                          onClick={() => setSelectedLog(log)}
+                          type="button"
+                        >
+                          <HiOutlineEye />
+                          Chi tiết
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -236,6 +247,13 @@ const TicketScanHistoryPage = () => {
           Sau
         </button>
       </div>
+
+      {selectedLog && (
+        <ScanLogDetailModal
+          log={selectedLog}
+          onClose={() => setSelectedLog(null)}
+        />
+      )}
     </div>
   );
 };
@@ -249,6 +267,50 @@ const StatCard = ({ label, value }) => (
       <div className="stat-card-value">{value}</div>
       <div className="stat-card-label">{label}</div>
     </div>
+  </div>
+);
+
+const ScanLogDetailModal = ({ log, onClose }) => (
+  <div className="modal-overlay" onClick={onClose}>
+    <div className="modal modal-large ticket-scan-detail-modal" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-header">
+        <div>
+          <h2 className="modal-title">Chi tiết lượt quét</h2>
+          <p className="modal-subtitle">{log.ticketCode || "Không có mã vé"}</p>
+        </div>
+        <button className="modal-close" onClick={onClose} type="button">×</button>
+      </div>
+
+      <div className="modal-body">
+        <div className="ticket-scan-detail-grid">
+          <DetailField label="Thời gian quét" value={formatDateTime(log.scannedAt)} />
+          <DetailField label="Mã vé" value={log.ticketCode || "-"} />
+          <DetailField label="Trạng thái vé" value={log.ticketStatus || "-"} />
+          <DetailField label="Phim" value={log.movie?.title || "-"} />
+          <DetailField label="Suất chiếu" value={formatDateTime(log.showtime?.startTime)} />
+          <DetailField label="Phòng" value={log.room?.name || "-"} />
+          <DetailField label="Ghế" value={log.seatLabel || "-"} />
+          <DetailField label="Admin" value={log.admin?.name || "-"} />
+          <DetailField label="Email admin" value={log.admin?.email || "-"} />
+          <DetailField label="Hành động" value={actionLabels[log.action] || log.action || "-"} />
+          <DetailField label="Kết quả" value={resultLabels[log.result] || log.result || "-"} />
+          <DetailField label="IP" value={log.ipAddress || "-"} />
+          <DetailField label="User-agent" value={log.userAgent || "-"} wide />
+          <DetailField label="Ghi chú" value={log.errorNote || "-"} wide />
+        </div>
+      </div>
+
+      <div className="modal-footer">
+        <button className="btn btn-secondary" onClick={onClose} type="button">Đóng</button>
+      </div>
+    </div>
+  </div>
+);
+
+const DetailField = ({ label, value, wide = false }) => (
+  <div className={`ticket-scan-detail-field ${wide ? "wide" : ""}`}>
+    <span>{label}</span>
+    <strong>{value}</strong>
   </div>
 );
 

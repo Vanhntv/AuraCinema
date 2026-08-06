@@ -4582,8 +4582,17 @@
   background: var(--color-bg-card);
 }
 
+.ticket-scan-filters.compact {
+  grid-template-columns: minmax(0, 1fr) 190px auto;
+  padding: 16px;
+}
+
 .ticket-scan-filters .filter-search {
   min-width: 0;
+}
+
+.ticket-scan-filters.compact .btn {
+  min-height: 42px;
 }
 
 .ticket-scan-table-container {
@@ -4591,12 +4600,151 @@
 }
 
 .ticket-scan-table {
-  min-width: 1120px;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 .ticket-scan-table th,
 .ticket-scan-table td {
   vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ticket-scan-table th:nth-child(1),
+.ticket-scan-table td:nth-child(1) {
+  width: 132px;
+}
+
+.ticket-scan-table th:nth-child(2),
+.ticket-scan-table td:nth-child(2) {
+  width: 210px;
+}
+
+.ticket-scan-table th:nth-child(3),
+.ticket-scan-table td:nth-child(3) {
+  width: 190px;
+}
+
+.ticket-scan-table th:nth-child(4),
+.ticket-scan-table td:nth-child(4) {
+  width: 135px;
+}
+
+.ticket-scan-table th:nth-child(5),
+.ticket-scan-table td:nth-child(5) {
+  width: 70px;
+}
+
+.ticket-scan-table th:nth-child(6),
+.ticket-scan-table td:nth-child(6) {
+  width: 170px;
+}
+
+.ticket-scan-table th:nth-child(7),
+.ticket-scan-table td:nth-child(7) {
+  width: 128px;
+  text-align: right;
+}
+
+.ticket-scan-time,
+.ticket-scan-showtime {
+  color: var(--color-text-muted);
+  line-height: 1.45;
+}
+
+.ticket-scan-code,
+.ticket-scan-title {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ticket-scan-code {
+  color: var(--color-text-primary);
+}
+
+.ticket-scan-title {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.ticket-scan-seat {
+  color: var(--color-text-primary);
+}
+
+.ticket-scan-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ticket-scan-status-cell > span:first-child {
+  max-width: 100%;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ticket-scan-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ticket-scan-detail-btn {
+  gap: 6px;
+  min-width: 88px;
+  justify-content: center;
+}
+
+.ticket-scan-detail-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ticket-scan-detail-modal {
+  max-width: 780px;
+}
+
+.ticket-scan-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ticket-scan-detail-field {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card);
+}
+
+.ticket-scan-detail-field.wide {
+  grid-column: 1 / -1;
+}
+
+.ticket-scan-detail-field span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.ticket-scan-detail-field strong {
+  display: block;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .ticket-scan-empty-cell {
@@ -4614,7 +4762,7 @@
 }
 
 @media (max-width: 1280px) {
-  .ticket-scan-filters {
+  .ticket-scan-filters:not(.compact) {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -4622,5 +4770,42 @@
 @media (max-width: 760px) {
   .ticket-scan-filters {
     grid-template-columns: 1fr;
+  }
+
+  .ticket-scan-filters.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-scan-table th:nth-child(4),
+  .ticket-scan-table td:nth-child(4) {
+    display: none;
+  }
+
+  .ticket-scan-table th:nth-child(1),
+  .ticket-scan-table td:nth-child(1) {
+    width: 96px;
+  }
+
+  .ticket-scan-table th:nth-child(2),
+  .ticket-scan-table td:nth-child(2) {
+    width: 145px;
+  }
+
+  .ticket-scan-table th:nth-child(5),
+  .ticket-scan-table td:nth-child(5) {
+    width: 54px;
+  }
+
+  .ticket-scan-table th:nth-child(7),
+  .ticket-scan-table td:nth-child(7) {
+    width: 86px;
+  }
+
+  .ticket-scan-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-scan-detail-field.wide {
+    grid-column: auto;
   }
 }

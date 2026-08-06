@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
@@ -69,6 +70,30 @@ function App() {
 
   return (
     <main className="min-h-screen bg-[#0f141c] text-white">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3600,
+          style: {
+            background: '#151b26',
+            border: '1px solid rgba(255,255,255,0.1)',
+            color: '#f8fafc',
+            fontWeight: 700,
+          },
+          success: {
+            iconTheme: {
+              primary: '#34d399',
+              secondary: '#0f172a',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#fb7185',
+              secondary: '#0f172a',
+            },
+          },
+        }}
+      />
       <ScrollToTop />
       {!isAdminRoute && <Header />}
       <Routes>

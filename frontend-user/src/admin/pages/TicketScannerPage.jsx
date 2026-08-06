@@ -10,6 +10,7 @@ import {
   HiOutlineXCircle,
 } from "react-icons/hi";
 import { checkInTicketQr, verifyTicketQr } from "../services/ticketAdminService";
+import { showToast } from "../../utils/toast";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
 
@@ -58,6 +59,7 @@ const TicketScannerPage = () => {
   const scannerRef = useRef(null);
   const mountedRef = useRef(false);
   const handlingQrRef = useRef(false);
+  const checkingInRef = useRef(false);
   const lastQrTokenRef = useRef("");
   const fileInputRef = useRef(null);
 
@@ -72,6 +74,7 @@ const TicketScannerPage = () => {
   const ticket = verifyResult?.data || checkInResult?.data || null;
   const actionResult = checkInResult;
   const canCheckIn = Boolean(verifyResult?.data?.verification?.canCheckIn && !checkingIn);
+  const isAlreadyCheckedInResult = ticket?.verification?.result === "ALREADY_CHECKED_IN";
 
   const scannerConfig = useMemo(
     () => ({
@@ -129,14 +132,17 @@ const TicketScannerPage = () => {
       if (!mountedRef.current) return;
       setVerifyResult(response);
       setCameraMessage(response.message || "Đã xác minh vé.");
+      showToast(response.success ? "success" : "error", response.message || "Đã xác minh vé.");
     } catch (error) {
+      const message = getApiMessage(error, "Không thể xác minh mã QR.");
       if (!mountedRef.current) return;
       setVerifyResult({
         success: false,
-        message: getApiMessage(error, "Không thể xác minh mã QR."),
+        message,
         data: error?.response?.data?.data || null,
       });
-      setCameraMessage(getApiMessage(error, "Không thể xác minh mã QR."));
+      setCameraMessage(message);
+      showToast("error", message);
     } finally {
       handlingQrRef.current = false;
       if (mountedRef.current) setProcessing(false);
@@ -165,34 +171,39 @@ const TicketScannerPage = () => {
         setCameraActive(true);
         setCameraMessage("Đưa mã QR vé vào khung camera để xác minh.");
       }
-    } catch (error) {
+    } catch {
       if (!mountedRef.current) return;
       setCameraActive(false);
       scannerRef.current = null;
-      setCameraMessage(
-        "Không thể bật camera. Hãy kiểm tra quyền camera của trình duyệt hoặc thử tải ảnh QR.",
-      );
+      const message = "Không thể bật camera. Hãy kiểm tra quyền camera của trình duyệt hoặc thử tải ảnh QR.";
+      setCameraMessage(message);
+      showToast("error", message);
     }
   }, [handleQrToken, processing, scannerConfig]);
 
   const handleCheckIn = async () => {
-    if (!currentQrToken || checkingIn || !canCheckIn) return;
+    if (!currentQrToken || checkingIn || checkingInRef.current || !canCheckIn) return;
 
     try {
+      checkingInRef.current = true;
       setCheckingIn(true);
       setCheckInResult(null);
       const response = await checkInTicketQr(currentQrToken);
       setCheckInResult(response);
       setVerifyResult(response);
       setCameraMessage(response.message || "Check-in vé thành công.");
+      showToast("success", response.message || "Check-in vé thành công.");
     } catch (error) {
+      const message = getApiMessage(error, "Không thể check-in vé.");
       setCheckInResult({
         success: false,
-        message: getApiMessage(error, "Không thể check-in vé."),
+        message,
         data: error?.response?.data?.data || ticket,
       });
-      setCameraMessage(getApiMessage(error, "Không thể check-in vé."));
+      setCameraMessage(message);
+      showToast("error", message);
     } finally {
+      checkingInRef.current = false;
       setCheckingIn(false);
     }
   };
@@ -219,13 +230,15 @@ const TicketScannerPage = () => {
       const decodedText = await scanner.scanFile(file, true);
       await scanner.clear();
       await handleQrToken(decodedText);
-    } catch (error) {
-      setCameraMessage("Không đọc được mã QR từ ảnh đã chọn.");
+    } catch {
+      const message = "Không đọc được mã QR từ ảnh đã chọn.";
+      setCameraMessage(message);
       setVerifyResult({
         success: false,
-        message: "Không đọc được mã QR từ ảnh đã chọn.",
+        message,
         data: null,
       });
+      showToast("error", message);
     } finally {
       event.target.value = "";
     }
@@ -373,7 +386,7 @@ const TicketScannerPage = () => {
             </button>
           )}
 
-          {ticket?.status === "CHECKED_IN" && (
+          {isAlreadyCheckedInResult && (
             <div className="ticket-checkin-feedback error">
               Vé này đã được check-in trước đó.
             </div>

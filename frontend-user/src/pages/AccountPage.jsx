@@ -17,6 +17,7 @@ import { getMyTicketDetail, getMyTicketQr, getMyTickets } from "../services/tick
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import { mapCmsContentItem } from "../utils/marketingContent";
+import { getApiErrorMessage, showToast } from "../utils/toast";
 
 const tierTargets = {
   member: { label: "Member", next: "VIP", target: 3000000 },
@@ -45,7 +46,7 @@ const tabs = [
   { id: "promotions", label: "Chương trình khuyến mãi", icon: HiOutlineGift },
 ];
 
-const TICKETS_PER_PAGE = 5;
+const TICKETS_PER_PAGE = 10;
 
 const formatDateInput = (value) => {
   if (!value) return "";
@@ -100,89 +101,6 @@ const normalizeFilterText = (value = "") =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
-
-const getBookingMovieTitle = (booking) =>
-  booking.showtime_id?.movie_id?.title || booking.showtime_id?.movieTitle || "Vé xem phim";
-
-const getBookingSeatCount = (booking) => booking.showtime_seat_ids?.length || 0;
-
-const getBookingCode = (booking) => booking.booking_code || booking.bookingCode || booking._id || "-";
-
-const getBookingCinemaName = (booking) =>
-  booking.showtime_id?.room_id?.cinema_id?.name ||
-  booking.showtime_id?.cinemaName ||
-  "Rạp đang cập nhật";
-
-const getBookingRoomName = (booking) =>
-  booking.showtime_id?.room_id?.name ||
-  booking.showtime_id?.roomName ||
-  "Phòng đang cập nhật";
-
-const getBookingShowtime = (booking) => formatDateTime(booking.showtime_id?.start_time);
-
-const getBookingSeatLabels = (booking) => {
-  const labels = (booking.showtime_seat_ids || [])
-    .map((item) => {
-      const seat = item.seat_id || item;
-      const row = seat.seat_row || seat.row || "";
-      const number = seat.seat_number || seat.number || "";
-      return row || number ? `${row}${number}` : "";
-    })
-    .filter(Boolean);
-
-  return labels.length ? labels.join(", ") : "-";
-};
-
-const getBookingComboText = (booking) => {
-  const combos = (booking.combos || [])
-    .map((item) => {
-      const name = item.name || item.combo_id?.name;
-      const quantity = Number(item.quantity || 0);
-      if (!name || quantity <= 0) return "";
-      return `${name} x${quantity}`;
-    })
-    .filter(Boolean);
-
-  return combos.length ? combos.join(", ") : "Không có";
-};
-
-const getBookingVoucherText = (booking) => {
-  const code = booking.voucher?.code || booking.voucher?.voucher_id?.code;
-  const discount = Number(booking.discount_amount || booking.voucher?.discount_amount || 0);
-
-  if (!code && discount <= 0) return "Không có";
-  if (!code) return `Giảm ${currencyFormatter.format(discount)}`;
-  return discount > 0 ? `${code} · -${currencyFormatter.format(discount)}` : code;
-};
-
-const getBookingComboTotal = (booking) =>
-  (booking.combos || []).reduce((total, item) => total + Number(item.subtotal || 0), 0);
-
-const getBookingTicketTotal = (booking) =>
-  Math.max(Number(booking.subtotal_price || 0) - getBookingComboTotal(booking), 0);
-
-const getBookingPaymentProvider = (booking) => {
-  const provider = String(booking.payment_provider || "").toLowerCase();
-  if (provider.includes("sepay")) return "SePay";
-  if (provider.includes("vnpay")) return "VNPay";
-  return booking.payment_provider || "-";
-};
-
-const getBookingStatusLabel = (booking) => {
-  if (booking.payment_status === "paid" && booking.status !== "cancelled") return "Đã thanh toán";
-  return "Đã hủy";
-};
-
-const getBookingStatusTone = (booking) => {
-  if (booking.payment_status === "paid" && booking.status !== "cancelled") return "success";
-  return "danger";
-};
-
-const getBookingStatusClassName = (booking) => {
-  const tone = getBookingStatusTone(booking);
-  if (tone === "success") return "bg-emerald-400/10 text-emerald-200";
-  return "bg-red-500/10 text-red-200";
-};
 
 const ticketStatusMeta = {
   VALID: {
@@ -386,13 +304,13 @@ function AccountPage() {
       try {
         setLoadingTickets(true);
         setTicketsError("");
-        const response = await getMyTickets({ page: 1, limit: 50 });
+        const response = await getMyTickets({ page: 1, limit: 100 });
         if (isActive) setTickets(response.data || []);
       } catch (error) {
         if (isActive) {
-          setTicketsError(
-            error.response?.data?.message || "Không thể tải vé của bạn.",
-          );
+          const message = getApiErrorMessage(error, "Không thể tải vé điện tử.");
+          setTicketsError(message);
+          showToast("error", message);
         }
       } finally {
         if (isActive) setLoadingTickets(false);
@@ -415,9 +333,8 @@ function AccountPage() {
       })
       .catch((error) => {
         if (isActive) {
-          setVouchersError(
-            error.response?.data?.message || "Không thể tải ví Voucher cá nhân.",
-          );
+          const message = getApiErrorMessage(error, "Không thể tải ví Voucher cá nhân.");
+          setVouchersError(message);
         }
       })
       .finally(() => {
@@ -490,12 +407,16 @@ function AccountPage() {
 
     const fullName = getFullName(profileForm);
     if (!fullName) {
-      setProfileError("Họ tên không được để trống.");
+      const message = "Họ tên không được để trống.";
+      setProfileError(message);
+      showToast("error", message);
       return;
     }
 
     if (profileForm.birth_date && new Date(profileForm.birth_date) > new Date()) {
-      setProfileError("Ngày sinh không thể lớn hơn ngày hiện tại.");
+      const message = "Ngày sinh không thể lớn hơn ngày hiện tại.";
+      setProfileError(message);
+      showToast("error", message);
       return;
     }
 
@@ -510,8 +431,11 @@ function AccountPage() {
       });
       await refreshProfile();
       setProfileMessage("Cập nhật thông tin thành công.");
+      showToast("success", "Cập nhật thông tin thành công.");
     } catch (error) {
-      setProfileError(error.response?.data?.message || "Cập nhật thông tin thất bại.");
+      const message = getApiErrorMessage(error, "Cập nhật thông tin thất bại.");
+      setProfileError(message);
+      showToast("error", message);
     } finally {
       setSavingProfile(false);
     }
@@ -527,12 +451,16 @@ function AccountPage() {
       !/[A-Z]/.test(passwordForm.password) ||
       !/\d/.test(passwordForm.password)
     ) {
-      setPasswordError("Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ hoa và số.");
+      const message = "Mật khẩu mới phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
+      setPasswordError(message);
+      showToast("error", message);
       return;
     }
 
     if (passwordForm.password !== passwordForm.confirm_password) {
-      setPasswordError("Mật khẩu xác nhận không khớp.");
+      const message = "Mật khẩu xác nhận không khớp.";
+      setPasswordError(message);
+      showToast("error", message);
       return;
     }
 
@@ -540,6 +468,7 @@ function AccountPage() {
       setSavingPassword(true);
       await changePassword(passwordForm);
       setPasswordMessage("Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+      showToast("success", "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
       setPasswordForm({
         current_password: "",
         password: "",
@@ -547,7 +476,9 @@ function AccountPage() {
       });
       window.setTimeout(logout, 1200);
     } catch (error) {
-      setPasswordError(error.response?.data?.message || "Đổi mật khẩu thất bại.");
+      const message = getApiErrorMessage(error, "Đổi mật khẩu thất bại.");
+      setPasswordError(message);
+      showToast("error", message);
     } finally {
       setSavingPassword(false);
     }
@@ -765,7 +696,58 @@ function AccountPage() {
 
       setTicketQrDataUrl(dataUrl);
     } catch (error) {
-      setTicketQrError(error.response?.data?.message || error.message || "Không thể tải mã QR.");
+      const message = getApiErrorMessage(error, "Không thể tải mã QR.");
+      setTicketQrError(message);
+      showToast("error", message);
+    } finally {
+      setLoadingTicketQr(false);
+    }
+  };
+
+  const downloadTicketQr = (ticket, dataUrl = ticketQrDataUrl) => {
+    if (!ticket || !dataUrl) return;
+
+    const safeCode = String(ticket.ticketCode || "ve-qr").replace(/[^\w-]+/g, "-");
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = `${safeCode}-qr.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const downloadTicketQrDirectly = async (ticket) => {
+    setSelectedTicketDetail(ticket);
+    setTicketQrDataUrl("");
+    setTicketQrError("");
+
+    try {
+      setLoadingTicketQr(true);
+      setLoadingTicketDetail(false);
+      const response = await getMyTicketQr(ticket.id);
+      const payload = response.data?.qrPayload;
+
+      if (!payload) {
+        throw new Error("Không có dữ liệu QR cho vé này.");
+      }
+
+      const dataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 260,
+        color: {
+          dark: "#101010",
+          light: "#ffffff",
+        },
+      });
+
+      setTicketQrDataUrl(dataUrl);
+      downloadTicketQr(ticket, dataUrl);
+      showToast("success", "Đã tải mã QR của vé.");
+    } catch (error) {
+      const message = getApiErrorMessage(error, "Không thể tải mã QR.");
+      setTicketQrError(message);
+      showToast("error", message);
     } finally {
       setLoadingTicketQr(false);
     }
@@ -781,7 +763,9 @@ function AccountPage() {
       const response = await getMyTicketDetail(ticket.id);
       setSelectedTicketDetail(response.data || ticket);
     } catch (error) {
-      setTicketQrError(error.response?.data?.message || "Không thể tải chi tiết vé.");
+      const message = getApiErrorMessage(error, "Không thể tải chi tiết vé.");
+      setTicketQrError(message);
+      showToast("error", message);
     } finally {
       setLoadingTicketDetail(false);
     }
@@ -828,11 +812,11 @@ function AccountPage() {
           </div>
           <div className="flex flex-wrap justify-end gap-3 border-t border-white/10 pt-4">
             <button
-              className="h-10 rounded-full border border-[#ff6070]/40 bg-[#ff5364]/10 px-4 text-sm font-black text-[#ffb1ba] hover:bg-[#ff5364]/20"
+              className="h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
               type="button"
-              onClick={() => openTicketDetail(ticket, { qrOnly: true })}
+              onClick={() => downloadTicketQrDirectly(ticket)}
             >
-              Xem mã QR
+              Tải QR
             </button>
             <button
               className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
@@ -887,7 +871,7 @@ function AccountPage() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-white">Vé của tôi</h2>
-          <p className="mt-1 text-sm text-slate-400">Mỗi ghế là một vé điện tử riêng để xuất trình tại cửa phòng chiếu.</p>
+          <p className="mt-1 text-sm text-slate-400">Mỗi vé điện tử có một mã QR riêng để xuất trình tại cửa phòng chiếu.</p>
         </div>
         <button
           className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-5 text-sm font-black text-white hover:border-[#ff6070]"
@@ -924,57 +908,68 @@ function AccountPage() {
           Xóa lọc
         </button>
       </div>
-      {loadingTickets ? (
-        <EmptyState>Đang tải vé của bạn...</EmptyState>
-      ) : tickets.length ? (
-        <>
-          {filteredTickets.length ? (
-            <div className="grid gap-5 xl:grid-cols-2">
-              {paginatedTickets.map(renderTicketCard)}
-            </div>
-          ) : (
-            <EmptyState>Không có vé phù hợp.</EmptyState>
-          )}
-          {filteredTickets.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-400">
-              <span>
-                Hiển thị {(normalizedTicketPage - 1) * TICKETS_PER_PAGE + 1}-
-                {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} / {filteredTickets.length} vé
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  type="button"
-                  onClick={() => setTicketPage((current) => Math.max(current - 1, 1))}
-                  disabled={normalizedTicketPage <= 1}
-                >
-                  Trước
-                </button>
-                {Array.from({ length: ticketTotalPages }, (_, index) => index + 1).map((page) => (
-                <button
-                  className={`h-9 min-w-9 rounded-xl border px-3 font-black ${page === normalizedTicketPage ? "border-[#ff6070] bg-[#ff5364] text-white" : "border-white/10 bg-white/[0.05] text-slate-300 hover:border-[#ff6070]/70"}`}
-                  type="button"
-                  key={page}
-                  onClick={() => setTicketPage(page)}
-                >
-                  {page}
-                </button>
-              ))}
-              <button
-                className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                type="button"
-                onClick={() => setTicketPage((current) => Math.min(current + 1, ticketTotalPages))}
-                disabled={normalizedTicketPage >= ticketTotalPages}
-              >
-                Sau
-              </button>
-            </div>
+      <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-black text-white">Lịch sử đặt vé</h3>
+            <p className="mt-1 text-xs text-slate-500">Danh sách vé hiện tại, mỗi ghế là một vé QR riêng.</p>
           </div>
+          <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-black text-slate-300">
+            {tickets.length} vé
+          </span>
+        </div>
+        {loadingTickets ? (
+          <EmptyState>Đang tải vé điện tử...</EmptyState>
+        ) : tickets.length ? (
+          <>
+            {filteredTickets.length ? (
+              <div className="grid gap-5 xl:grid-cols-2">
+                {paginatedTickets.map(renderTicketCard)}
+              </div>
+            ) : (
+              <EmptyState>Không có vé phù hợp.</EmptyState>
+            )}
+            {filteredTickets.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-400">
+                <span>
+                  Hiển thị {(normalizedTicketPage - 1) * TICKETS_PER_PAGE + 1}-
+                  {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} / {filteredTickets.length} vé
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setTicketPage((current) => Math.max(current - 1, 1))}
+                    disabled={normalizedTicketPage <= 1}
+                  >
+                    Trước
+                  </button>
+                  {Array.from({ length: ticketTotalPages }, (_, index) => index + 1).map((page) => (
+                    <button
+                      className={`h-9 min-w-9 rounded-xl border px-3 font-black ${page === normalizedTicketPage ? "border-[#ff6070] bg-[#ff5364] text-white" : "border-white/10 bg-white/[0.05] text-slate-300 hover:border-[#ff6070]/70"}`}
+                      type="button"
+                      key={page}
+                      onClick={() => setTicketPage(page)}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                    type="button"
+                    onClick={() => setTicketPage((current) => Math.min(current + 1, ticketTotalPages))}
+                    disabled={normalizedTicketPage >= ticketTotalPages}
+                  >
+                    Sau
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState>Bạn chưa có vé điện tử QR nào.</EmptyState>
         )}
-        </>
-      ) : (
-        <EmptyState>Bạn chưa có vé điện tử nào.</EmptyState>
-      )}
+      </div>
     </section>
   );
 
@@ -1037,7 +1032,16 @@ function AccountPage() {
                       {ticketQrError}
                     </div>
                   ) : ticketQrDataUrl ? (
-                    <img className="mx-auto h-48 w-48 object-contain" src={ticketQrDataUrl} alt={`QR vé ${ticket.ticketCode}`} />
+                    <>
+                      <img className="mx-auto h-48 w-48 object-contain" src={ticketQrDataUrl} alt={`QR vé ${ticket.ticketCode}`} />
+                      <button
+                        className="mt-4 rounded-full bg-[#ff5364] px-5 py-2 text-sm font-black text-white hover:bg-[#ff6b78]"
+                        type="button"
+                        onClick={() => downloadTicketQr(ticket)}
+                      >
+                        Tải mã QR
+                      </button>
+                    </>
                   ) : null}
                   <p className="mt-3 text-xs font-black text-black">Vui lòng xuất trình mã QR tại cửa phòng chiếu</p>
                 </div>
