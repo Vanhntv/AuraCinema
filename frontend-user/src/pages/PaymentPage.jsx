@@ -176,7 +176,7 @@ function PaymentPage() {
       await cancelBooking(bookingId, { reason: "Khách hủy trước khi thanh toán" });
       navigate("/lich-chieu", {
         replace: true,
-        state: { message: "Đã hủy đơn chờ thanh toán. Bạn có thể chọn lại ghế." },
+        state: { message: "Đã hủy đơn thanh toán. Bạn có thể chọn lại ghế." },
       });
     } catch (requestError) {
       setPaymentError(requestError.response?.data?.message || "Không thể hủy đơn đặt vé.");
@@ -203,7 +203,7 @@ function PaymentPage() {
 
           <div className="mt-7 grid gap-3 border-t border-white/5 pt-5">
             <DetailRow label="Mã đơn" value={summary?.bookingCode || bookingId} strong />
-            <DetailRow label="Trạng thái" value="Chờ thanh toán" strong />
+            <DetailRow label="Trạng thái" value="Đang thanh toán" strong />
             <DetailRow label="Tiền vé" value={formatCurrency(summary?.seatTotal || amount)} />
             <DetailRow label="Tiền bắp nước" value={formatCurrency(summary?.concessionTotal)} />
             <DetailRow label="Giảm giá" value={`- ${formatCurrency(summary?.discountAmount)}`} />
@@ -250,8 +250,8 @@ function PaymentPage() {
             <button className="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-xs font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
               {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
             </button>
-            <button className="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-xs font-bold text-white hover:border-white/30" type="button" onClick={() => navigate("/")}>
-              Đóng
+            <button className="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-xs font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+              {isCancellingBooking ? "Đang hủy..." : "Đóng"}
             </button>
           </div>
           <button

@@ -91,6 +91,13 @@ const splitFullName = (fullName = "") => {
 const getFullName = (form) =>
   [form.first_name, form.last_name].map((item) => item.trim()).filter(Boolean).join(" ");
 
+const normalizeFilterText = (value = "") =>
+  String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
 const getBookingMovieTitle = (booking) =>
   booking.showtime_id?.movie_id?.title || booking.showtime_id?.movieTitle || "Vé xem phim";
 
@@ -145,11 +152,33 @@ const getBookingVoucherText = (booking) => {
   return discount > 0 ? `${code} · -${currencyFormatter.format(discount)}` : code;
 };
 
+const getBookingComboTotal = (booking) =>
+  (booking.combos || []).reduce((total, item) => total + Number(item.subtotal || 0), 0);
+
+const getBookingTicketTotal = (booking) =>
+  Math.max(Number(booking.subtotal_price || 0) - getBookingComboTotal(booking), 0);
+
+const getBookingPaymentProvider = (booking) => {
+  const provider = String(booking.payment_provider || "").toLowerCase();
+  if (provider.includes("sepay")) return "SePay";
+  if (provider.includes("vnpay")) return "VNPay";
+  return booking.payment_provider || "-";
+};
+
 const getBookingStatusLabel = (booking) => {
-  if (booking.status === "cancelled") return "Đã hủy";
-  if (booking.payment_status === "pending") return "Chờ thanh toán";
-  if (booking.payment_status === "failed") return "Thanh toán lỗi";
-  return "Hoàn tất";
+  if (booking.payment_status === "paid" && booking.status !== "cancelled") return "Đã thanh toán";
+  return "Đã hủy";
+};
+
+const getBookingStatusTone = (booking) => {
+  if (booking.payment_status === "paid" && booking.status !== "cancelled") return "success";
+  return "danger";
+};
+
+const getBookingStatusClassName = (booking) => {
+  const tone = getBookingStatusTone(booking);
+  if (tone === "success") return "bg-emerald-400/10 text-emerald-200";
+  return "bg-red-500/10 text-red-200";
 };
 
 function EmptyState({ children = "Không có dữ liệu" }) {
@@ -270,6 +299,12 @@ function AccountPage() {
   const [loadingVouchers, setLoadingVouchers] = useState(true);
   const [voucherFilter, setVoucherFilter] = useState("available");
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
+  const [selectedBookingDetail, setSelectedBookingDetail] = useState(null);
+  const [ticketFilters, setTicketFilters] = useState({
+    query: "",
+    seatCount: "",
+    status: "",
+  });
 
   useEffect(() => {
     const nextTab = getTabFromParam(searchParams.get("tab"));
@@ -652,61 +687,49 @@ function AccountPage() {
     </section>
   );
 
-  const renderTicketCard = (booking) => (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-5" key={booking._id}>
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã đơn</p>
-          <h3 className="mt-1 text-lg font-black text-white">{getBookingCode(booking)}</h3>
-        </div>
-        <span
-          className={`rounded-full px-3 py-1.5 text-xs font-black ${
-            booking.status === "cancelled"
-              ? "bg-red-500/10 text-red-200"
-              : "bg-emerald-400/10 text-emerald-200"
-          }`}
-        >
-          {getBookingStatusLabel(booking)}
-        </span>
-      </div>
-
-      <div className="mt-5 grid gap-4 text-sm text-slate-300 md:grid-cols-2 xl:grid-cols-3">
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Phim</span>
-          <strong className="mt-1 block text-white">{getBookingMovieTitle(booking)}</strong>
-        </div>
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Rạp</span>
-          <strong className="mt-1 block text-white">{getBookingCinemaName(booking)}</strong>
-        </div>
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Phòng</span>
-          <strong className="mt-1 block text-white">{getBookingRoomName(booking)}</strong>
-        </div>
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Suất</span>
-          <strong className="mt-1 block text-white">{getBookingShowtime(booking)}</strong>
-        </div>
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Ghế</span>
-          <strong className="mt-1 block text-white">{getBookingSeatLabels(booking)}</strong>
-        </div>
-        <div>
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Tổng tiền</span>
-          <strong className="mt-1 block text-[#ff9aa5]">
-            {currencyFormatter.format(Number(booking.total_price || 0))}
-          </strong>
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-xl bg-black/15 p-4 text-sm text-slate-300 md:grid-cols-2">
-        <p><span className="text-slate-500">Combo:</span> {getBookingComboText(booking)}</p>
-        <p><span className="text-slate-500">Voucher:</span> {getBookingVoucherText(booking)}</p>
-        <p><span className="text-slate-500">Ngày đặt:</span> {formatDateTime(booking.created_at)}</p>
-        <p><span className="text-slate-500">Số vé:</span> {getBookingSeatCount(booking)}</p>
-      </div>
-    </article>
+  const renderTicketRow = (booking) => (
+    <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] items-center gap-3 border-b border-white/10 px-5 py-4 last:border-b-0" key={booking._id}>
+      <strong className="min-w-0 break-words text-sm font-black text-white">{getBookingCode(booking)}</strong>
+      <span className="line-clamp-1 min-w-0 text-sm font-bold text-slate-200">{getBookingMovieTitle(booking)}</span>
+      <span className="min-w-0 text-sm font-semibold text-slate-200">{getBookingShowtime(booking)}</span>
+      <span className="min-w-0 text-sm font-semibold text-white">{getBookingSeatCount(booking)} ghế</span>
+      <span className="min-w-0 text-sm text-slate-400">{formatDateTime(booking.created_at)}</span>
+      <span className={`inline-flex min-w-0 justify-center rounded-full px-3 py-1.5 text-xs font-black ${getBookingStatusClassName(booking)}`}>
+        {getBookingStatusLabel(booking)}
+      </span>
+      <button
+        className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-white hover:border-[#ff6070]"
+        type="button"
+        onClick={() => setSelectedBookingDetail(booking)}
+      >
+        Chi tiết
+      </button>
+    </div>
   );
+
+  const filteredBookings = bookings.filter((booking) => {
+    const query = normalizeFilterText(ticketFilters.query);
+    const seatCountFilter = ticketFilters.seatCount;
+    const statusFilter = ticketFilters.status;
+    const seatCount = getBookingSeatCount(booking);
+    const statusLabel = getBookingStatusLabel(booking);
+    const searchableText = normalizeFilterText([
+      getBookingCode(booking),
+      getBookingMovieTitle(booking),
+      getBookingShowtime(booking),
+      `${seatCount} ghế`,
+      formatDateTime(booking.created_at),
+      statusLabel,
+    ].join(" "));
+
+    if (query && !searchableText.includes(query)) return false;
+    if (seatCountFilter === "1" && seatCount !== 1) return false;
+    if (seatCountFilter === "2" && seatCount !== 2) return false;
+    if (seatCountFilter === "3plus" && seatCount < 3) return false;
+    if (statusFilter && statusLabel !== statusFilter) return false;
+
+    return true;
+  });
 
   const renderTicketsTab = () => (
     <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
@@ -715,15 +738,158 @@ function AccountPage() {
           {bookingsError}
         </div>
       )}
+      <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 lg:grid-cols-[minmax(0,1fr)_170px_180px_auto]">
+        <input
+          className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
+          type="search"
+          value={ticketFilters.query}
+          onChange={(event) => setTicketFilters((current) => ({ ...current, query: event.target.value }))}
+          placeholder="Tìm mã hóa đơn, phim, suất chiếu, ngày đặt..."
+        />
+        <select
+          className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none focus:border-[#ff6070]"
+          value={ticketFilters.seatCount}
+          onChange={(event) => setTicketFilters((current) => ({ ...current, seatCount: event.target.value }))}
+        >
+          <option value="">Tất cả số ghế</option>
+          <option value="1">1 ghế</option>
+          <option value="2">2 ghế</option>
+          <option value="3plus">Từ 3 ghế</option>
+        </select>
+        <select
+          className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none focus:border-[#ff6070]"
+          value={ticketFilters.status}
+          onChange={(event) => setTicketFilters((current) => ({ ...current, status: event.target.value }))}
+        >
+          <option value="">Tất cả trạng thái</option>
+          <option value="Đã thanh toán">Đã thanh toán</option>
+          <option value="Đã hủy">Đã hủy</option>
+        </select>
+        <button
+          className="h-11 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
+          type="button"
+          onClick={() => setTicketFilters({ query: "", seatCount: "", status: "" })}
+        >
+          Xóa lọc
+        </button>
+      </div>
       {loadingBookings ? (
         <EmptyState>Đang tải lịch sử mua vé...</EmptyState>
       ) : bookings.length ? (
-        <div className="grid gap-4">{bookings.map(renderTicketCard)}</div>
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+          <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+            <span>Mã hóa đơn</span>
+            <span>Phim</span>
+            <span>Suất chiếu</span>
+            <span>Ghế</span>
+            <span>Ngày đặt</span>
+            <span>Trạng thái</span>
+            <span>Hành động</span>
+          </div>
+          {filteredBookings.length ? (
+            <div>{filteredBookings.map(renderTicketRow)}</div>
+          ) : (
+            <EmptyState>Không có hóa đơn phù hợp.</EmptyState>
+          )}
+        </div>
       ) : (
         <EmptyState>Không có dữ liệu</EmptyState>
       )}
     </section>
   );
+
+  const renderTicketDetailModal = () => {
+    const booking = selectedBookingDetail;
+    if (!booking) return null;
+
+    const code = getBookingCode(booking);
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(code)}`;
+    const combos = booking.combos || [];
+    const seats = getBookingSeatLabels(booking);
+    const isPaid = booking.payment_status === "paid";
+
+    return (
+      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Chi tiết đơn ${code}`} onClick={() => setSelectedBookingDetail(null)}>
+        <div className="max-h-[90vh] w-[min(620px,100%)] overflow-y-auto rounded-2xl border border-white/10 bg-[#101010] shadow-[0_30px_90px_rgba(0,0,0,0.65)]" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff5364]">Chi tiết đơn vé</p>
+              <h2 className="mt-1 text-xl font-black text-white">{code}</h2>
+            </div>
+            <button className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364]" type="button" onClick={() => setSelectedBookingDetail(null)} aria-label="Đóng chi tiết">
+              ×
+            </button>
+          </div>
+
+          <div className="p-5 text-white">
+            <div className="text-center">
+              <div className={`mx-auto grid h-14 w-14 place-items-center rounded-full border text-3xl ${isPaid ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-300" : "border-red-400/30 bg-red-400/15 text-red-200"}`}>
+                {isPaid ? "✓" : "!"}
+              </div>
+              <h3 className="mt-3 text-2xl font-black">{isPaid ? "Đặt vé thành công!" : getBookingStatusLabel(booking)}</h3>
+              <p className="mt-2 text-sm text-slate-400">{isPaid ? "Đưa mã này cho nhân viên soát vé tại rạp." : "Đơn này chưa có vé hợp lệ để soát vé."}</p>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-[#171717]">
+              <div className="p-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff5364]">Vé xem phim</p>
+                <h4 className="mt-1 text-2xl font-black text-white">{getBookingMovieTitle(booking)}</h4>
+                <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+                  <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{getBookingCinemaName(booking)}</strong></p>
+                  <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{getBookingRoomName(booking)}</strong></p>
+                  <p><span className="text-slate-500">Suất:</span> <strong className="text-white">{getBookingShowtime(booking)}</strong></p>
+                  <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{seats}</strong></p>
+                  <p><span className="text-slate-500">Ngày đặt:</span> <strong className="text-white">{formatDateTime(booking.created_at)}</strong></p>
+                  <p><span className="text-slate-500">Thanh toán:</span> <strong className="text-white">{getBookingPaymentProvider(booking)}</strong></p>
+                </div>
+              </div>
+
+              <div className="border-t border-white/10 p-5">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Ghế đã đặt ({getBookingSeatCount(booking)})</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {seats.split(", ").filter(Boolean).map((seat) => (
+                    <span className="rounded-md border border-[#ff5364]/30 bg-[#ff5364]/15 px-3 py-1 text-xs font-black text-[#ff8f99]" key={seat}>{seat}</span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 border-t border-white/10 p-5 text-sm text-slate-300">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Dịch vụ đi kèm</p>
+                  {combos.length ? (
+                    <div className="mt-2 grid gap-2">
+                      {combos.map((item) => (
+                        <p className="flex justify-between gap-4" key={item._id || item.name}>
+                          <span>{item.name || item.combo_id?.name} x {item.quantity}</span>
+                          <strong className="text-slate-200">{currencyFormatter.format(Number(item.subtotal || 0))}</strong>
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-slate-500">Không có</p>
+                  )}
+                </div>
+                <p><span className="text-slate-500">Voucher:</span> {getBookingVoucherText(booking)}</p>
+              </div>
+
+              <div className="border-t border-white/10 p-5 text-sm">
+                <p className="flex justify-between gap-4 text-slate-400"><span>Tiền vé</span><strong className="text-slate-200">{currencyFormatter.format(getBookingTicketTotal(booking))}</strong></p>
+                <p className="mt-2 flex justify-between gap-4 text-slate-400"><span>Dịch vụ đi kèm</span><strong className="text-slate-200">{currencyFormatter.format(getBookingComboTotal(booking))}</strong></p>
+                <p className="mt-5 flex justify-between gap-4 text-base font-black text-white"><span>Tổng đã thanh toán</span><strong className="text-2xl text-[#ff5364]">{currencyFormatter.format(Number(booking.total_price || 0))}</strong></p>
+              </div>
+
+              {isPaid && (
+                <div className="bg-white p-5 text-center">
+                  <img className="mx-auto h-40 w-40 object-contain" src={qrUrl} alt={`QR vé ${code}`} />
+                  <p className="mt-2 text-xs font-black text-black">Đưa mã này cho nhân viên soát vé</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderPointsTab = () => (
     <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
@@ -903,6 +1069,7 @@ function AccountPage() {
       </nav>
 
       <div className="mt-5">{renderActiveTab()}</div>
+      {renderTicketDetailModal()}
     </main>
   );
 }
