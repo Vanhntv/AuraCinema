@@ -44,6 +44,8 @@ const tabs = [
   { id: "promotions", label: "Chương trình khuyến mãi", icon: HiOutlineGift },
 ];
 
+const TICKETS_PER_PAGE = 5;
+
 const formatDateInput = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -305,6 +307,7 @@ function AccountPage() {
     seatCount: "",
     status: "",
   });
+  const [ticketPage, setTicketPage] = useState(1);
 
   useEffect(() => {
     const nextTab = getTabFromParam(searchParams.get("tab"));
@@ -730,6 +733,16 @@ function AccountPage() {
 
     return true;
   });
+  const ticketTotalPages = Math.max(1, Math.ceil(filteredBookings.length / TICKETS_PER_PAGE));
+  const normalizedTicketPage = Math.min(ticketPage, ticketTotalPages);
+  const paginatedBookings = filteredBookings.slice(
+    (normalizedTicketPage - 1) * TICKETS_PER_PAGE,
+    normalizedTicketPage * TICKETS_PER_PAGE,
+  );
+
+  useEffect(() => {
+    setTicketPage(1);
+  }, [ticketFilters.query, ticketFilters.seatCount, ticketFilters.status]);
 
   const renderTicketsTab = () => (
     <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
@@ -776,22 +789,60 @@ function AccountPage() {
       {loadingBookings ? (
         <EmptyState>Đang tải lịch sử mua vé...</EmptyState>
       ) : bookings.length ? (
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
-          <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-            <span>Mã hóa đơn</span>
-            <span>Phim</span>
-            <span>Suất chiếu</span>
-            <span>Ghế</span>
-            <span>Ngày đặt</span>
-            <span>Trạng thái</span>
-            <span>Hành động</span>
+        <>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
+            <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+              <span>Mã hóa đơn</span>
+              <span>Phim</span>
+              <span>Suất chiếu</span>
+              <span>Ghế</span>
+              <span>Ngày đặt</span>
+              <span>Trạng thái</span>
+              <span>Hành động</span>
+            </div>
+            {filteredBookings.length ? (
+              <div>{paginatedBookings.map(renderTicketRow)}</div>
+            ) : (
+              <EmptyState>Không có hóa đơn phù hợp.</EmptyState>
+            )}
           </div>
-          {filteredBookings.length ? (
-            <div>{filteredBookings.map(renderTicketRow)}</div>
-          ) : (
-            <EmptyState>Không có hóa đơn phù hợp.</EmptyState>
-          )}
-        </div>
+          {filteredBookings.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-400">
+              <span>
+                Hiển thị {(normalizedTicketPage - 1) * TICKETS_PER_PAGE + 1}-
+                {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredBookings.length)} / {filteredBookings.length} vé
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  type="button"
+                  onClick={() => setTicketPage((current) => Math.max(current - 1, 1))}
+                  disabled={normalizedTicketPage <= 1}
+                >
+                  Trước
+                </button>
+                {Array.from({ length: ticketTotalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  className={`h-9 min-w-9 rounded-xl border px-3 font-black ${page === normalizedTicketPage ? "border-[#ff6070] bg-[#ff5364] text-white" : "border-white/10 bg-white/[0.05] text-slate-300 hover:border-[#ff6070]/70"}`}
+                  type="button"
+                  key={page}
+                  onClick={() => setTicketPage(page)}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                className="h-9 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                type="button"
+                onClick={() => setTicketPage((current) => Math.min(current + 1, ticketTotalPages))}
+                disabled={normalizedTicketPage >= ticketTotalPages}
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
+        </>
       ) : (
         <EmptyState>Không có dữ liệu</EmptyState>
       )}
