@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
-import TicketScanLog, { createTicketScanLogSafe } from "../models/TicketScanLog.js";
+import TicketScanLog, {
+  TICKET_SCAN_ACTIONS,
+  TICKET_SCAN_RESULTS,
+  createTicketScanLogSafe,
+} from "../models/TicketScanLog.js";
 import { ticketCheckInConfig } from "../config/ticketConfig.js";
 import { hashQrToken } from "../services/ticketService.js";
 
@@ -83,8 +87,13 @@ const buildScanLogAggregation = (query = {}) => {
   const scannedAtRange = parseDateRange(query);
 
   if (scannedAtRange) match.scannedAt = scannedAtRange;
-  if (query.action) match.action = String(query.action).trim();
-  if (query.result) match.result = String(query.result).trim();
+  if (TICKET_SCAN_ACTIONS.includes(String(query.action || "").trim())) {
+    match.action = String(query.action).trim();
+  }
+
+  if (TICKET_SCAN_RESULTS.includes(String(query.result || "").trim())) {
+    match.result = String(query.result).trim();
+  }
 
   const pipeline = [
     { $match: match },
@@ -206,37 +215,51 @@ const formatScanLogRow = (log) => ({
 
 const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
-  const errorScansPipeline = [
-    ...buildScanLogAggregation(query),
-    { $match: { result: { $ne: "SUCCESS" } } },
-    { $count: "count" },
-  ];
-  const [errorResult] = await TicketScanLog.aggregate(errorScansPipeline);
+  const [errorResult, successScanResult] = await Promise.all([
+    TicketScanLog.aggregate([
+      ...buildScanLogAggregation(query),
+      { $match: { result: { $ne: "SUCCESS" } } },
+      { $count: "count" },
+    ]),
+    TicketScanLog.aggregate([
+      ...buildScanLogAggregation(query),
+      { $match: { result: "SUCCESS" } },
+      { $count: "count" },
+    ]),
+  ]);
 
   if (!showtimeId) {
     return {
       totalTicketsOfShowtime: null,
+      validTickets: null,
       checkedInTickets: null,
       notCheckedInTickets: null,
-      checkedOutTickets: null,
-      errorScans: errorResult?.count || 0,
+      cancelledTickets: null,
+      expiredTickets: null,
+      errorScans: errorResult[0]?.count || 0,
+      successScans: successScanResult[0]?.count || 0,
       totalScans: totalFiltered,
     };
   }
 
-  const [totalTicketsOfShowtime, checkedInTickets, notCheckedInTickets, checkedOutTickets] = await Promise.all([
+  const [totalTicketsOfShowtime, validTickets, checkedInTickets, cancelledTickets, expiredTickets] = await Promise.all([
     Ticket.countDocuments({ showtimeId }),
-    Ticket.countDocuments({ showtimeId, status: "CHECKED_IN" }),
     Ticket.countDocuments({ showtimeId, status: "VALID" }),
-    Ticket.countDocuments({ showtimeId, status: "CHECKED_OUT" }),
+    Ticket.countDocuments({ showtimeId, status: "CHECKED_IN" }),
+    Ticket.countDocuments({ showtimeId, status: "CANCELLED" }),
+    Ticket.countDocuments({ showtimeId, status: "EXPIRED" }),
   ]);
 
   return {
     totalTicketsOfShowtime,
+    validTickets,
     checkedInTickets,
-    notCheckedInTickets,
-    checkedOutTickets,
-    errorScans: errorResult?.count || 0,
+    notCheckedInTickets: validTickets,
+    cancelledTickets,
+    expiredTickets,
+    errorScans: errorResult[0]?.count || 0,
+    successScans: successScanResult[0]?.count || 0,
+    checkInRate: totalTicketsOfShowtime > 0 ? Math.round((checkedInTickets / totalTicketsOfShowtime) * 100) : 0,
     totalScans: totalFiltered,
   };
 };
@@ -253,8 +276,7 @@ const populateTicketForAdmin = (query) =>
       select: "seat_row seat_number seat_code seat_type_id",
       populate: { path: "seat_type_id", select: "name" },
     })
-    .populate("checkedInBy", "full_name email")
-    .populate("checkedOutBy", "full_name email");
+    .populate("checkedInBy", "full_name email");
 
 const formatTicketForAdmin = (ticket, verification = {}) => {
   const booking = ticket.bookingId || {};
@@ -270,9 +292,7 @@ const formatTicketForAdmin = (ticket, verification = {}) => {
     seatLabel: ticket.seatLabel,
     price: ticket.price,
     checkedInAt: ticket.checkedInAt,
-    checkedOutAt: ticket.checkedOutAt,
     checkedInBy: ticket.checkedInBy || null,
-    checkedOutBy: ticket.checkedOutBy || null,
     booking: booking?._id
       ? {
         id: booking._id,
@@ -383,45 +403,6 @@ const evaluateTicketBase = (ticket) => {
   return null;
 };
 
-const evaluateTicketForCheckOut = (ticket) => {
-  const baseEvaluation = evaluateTicketBase(ticket);
-  if (baseEvaluation) return baseEvaluation;
-
-  if (ticket.status === "VALID") {
-    return {
-      allowed: false,
-      result: "NOT_CHECKED_IN",
-      statusCode: 409,
-      message: "Vé này chưa được check-in nên không thể check-out.",
-    };
-  }
-
-  if (ticket.status === "CHECKED_OUT") {
-    return {
-      allowed: false,
-      result: "ALREADY_CHECKED_OUT",
-      statusCode: 409,
-      message: "Vé này đã được check-out trước đó.",
-    };
-  }
-
-  if (ticket.status !== "CHECKED_IN") {
-    return {
-      allowed: false,
-      result: "INVALID_TOKEN",
-      statusCode: 409,
-      message: "Trạng thái vé không hợp lệ để check-out.",
-    };
-  }
-
-  return {
-    allowed: true,
-    result: "SUCCESS",
-    statusCode: 200,
-    message: "Vé hợp lệ, có thể check-out.",
-  };
-};
-
 const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
   const baseEvaluation = evaluateTicketBase(ticket);
   if (baseEvaluation) return baseEvaluation;
@@ -435,15 +416,6 @@ const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
         hour: "2-digit",
         minute: "2-digit",
       })}.`,
-    };
-  }
-
-  if (ticket.status === "CHECKED_OUT") {
-    return {
-      allowed: false,
-      result: "ALREADY_CHECKED_OUT",
-      statusCode: 409,
-      message: "Vé này đã được check-out.",
     };
   }
 
@@ -525,7 +497,6 @@ export const verifyAdminTicketQr = async (req, res) => {
       message: evaluation.message,
       data: formatTicketForAdmin(ticket, {
         canCheckIn: evaluation.allowed,
-        canCheckOut: evaluateTicketForCheckOut(ticket).allowed,
         result: evaluation.result,
         checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId),
       }),
@@ -619,13 +590,12 @@ export const checkInAdminTicketQr = async (req, res) => {
       return res.status(evaluation.statusCode).json({
         success: false,
         message: evaluation.message,
-      data: ticket
-        ? formatTicketForAdmin(ticket, {
-          canCheckIn: false,
-          canCheckOut: evaluateTicketForCheckOut(ticket).allowed,
-          result: evaluation.result,
-          checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId),
-        })
+        data: ticket
+          ? formatTicketForAdmin(ticket, {
+            canCheckIn: false,
+            result: evaluation.result,
+            checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId),
+          })
           : null,
       });
     }
@@ -664,7 +634,6 @@ export const checkInAdminTicketQr = async (req, res) => {
         data: latestTicket
           ? formatTicketForAdmin(latestTicket, {
             canCheckIn: false,
-            canCheckOut: evaluateTicketForCheckOut(latestTicket).allowed,
             result: latestEvaluation.result,
             checkInWindow: latestEvaluation.checkInWindow || getCheckInWindow(latestTicket.showtimeId),
           })
@@ -685,7 +654,6 @@ export const checkInAdminTicketQr = async (req, res) => {
       message: "Check-in vé thành công.",
       data: formatTicketForAdmin(populatedTicket, {
         canCheckIn: false,
-        canCheckOut: true,
         result: "SUCCESS",
         checkInWindow: evaluation.checkInWindow,
       }),
@@ -694,117 +662,6 @@ export const checkInAdminTicketQr = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Không thể check-in vé.",
-    });
-  }
-};
-
-export const checkOutAdminTicketQr = async (req, res) => {
-  const qrToken = normalizeQrToken(req.body?.qrToken);
-
-  if (!qrToken) {
-    await writeScanLog(req, {
-      action: "CHECK_OUT",
-      result: "INVALID_TOKEN",
-      errorNote: "Thieu qrToken",
-    });
-
-    return res.status(400).json({
-      success: false,
-      message: "Vui lòng cung cấp mã QR.",
-    });
-  }
-
-  try {
-    const ticket = await getTicketByQrToken(qrToken);
-    const now = new Date();
-    const evaluation = evaluateTicketForCheckOut(ticket);
-
-    if (!evaluation.allowed) {
-      await writeScanLog(req, {
-        ticketId: ticket?._id || null,
-        action: "CHECK_OUT",
-        result: evaluation.result,
-        errorNote: evaluation.message,
-      });
-
-      return res.status(evaluation.statusCode).json({
-        success: false,
-        message: evaluation.message,
-        data: ticket
-          ? formatTicketForAdmin(ticket, {
-            canCheckIn: evaluateTicketForCheckIn(ticket, now).allowed,
-            canCheckOut: false,
-            result: evaluation.result,
-            checkInWindow: getCheckInWindow(ticket.showtimeId),
-          })
-          : null,
-      });
-    }
-
-    const updatedTicket = await Ticket.findOneAndUpdate(
-      {
-        _id: ticket._id,
-        status: "CHECKED_IN",
-      },
-      {
-        $set: {
-          status: "CHECKED_OUT",
-          checkedOutAt: now,
-          checkedOutBy: req.user.id,
-        },
-      },
-      {
-        new: true,
-      },
-    );
-
-    if (!updatedTicket) {
-      const latestTicket = await getTicketByQrToken(qrToken);
-      const latestEvaluation = evaluateTicketForCheckOut(latestTicket);
-
-      await writeScanLog(req, {
-        ticketId: latestTicket?._id || ticket._id,
-        action: "CHECK_OUT",
-        result: latestEvaluation.result,
-        errorNote: latestEvaluation.message,
-      });
-
-      return res.status(latestEvaluation.statusCode).json({
-        success: false,
-        message: latestEvaluation.message,
-        data: latestTicket
-          ? formatTicketForAdmin(latestTicket, {
-            canCheckIn: evaluateTicketForCheckIn(latestTicket, now).allowed,
-            canCheckOut: false,
-            result: latestEvaluation.result,
-            checkInWindow: getCheckInWindow(latestTicket.showtimeId),
-          })
-          : null,
-      });
-    }
-
-    const populatedTicket = await populateTicketForAdmin(Ticket.findById(updatedTicket._id));
-
-    await writeScanLog(req, {
-      ticketId: updatedTicket._id,
-      action: "CHECK_OUT",
-      result: "SUCCESS",
-    });
-
-    return res.json({
-      success: true,
-      message: "Check-out vé thành công.",
-      data: formatTicketForAdmin(populatedTicket, {
-        canCheckIn: false,
-        canCheckOut: false,
-        result: "SUCCESS",
-        checkInWindow: getCheckInWindow(populatedTicket.showtimeId),
-      }),
-    });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: "Không thể check-out vé.",
     });
   }
 };

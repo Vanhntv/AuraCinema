@@ -16,8 +16,3 @@ export const checkInTicketQr = async (qrToken) => {
   const response = await axiosClient.post(`${API_URL}/check-in`, { qrToken });
   return response.data;
 };
-
-export const checkOutTicketQr = async (qrToken) => {
-  const response = await axiosClient.post(`${API_URL}/check-out`, { qrToken });
-  return response.data;
-};

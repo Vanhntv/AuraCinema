@@ -11,19 +11,16 @@ const PAGE_SIZE = 10;
 const actionLabels = {
   VERIFY: "Xác minh",
   CHECK_IN: "Check-in",
-  CHECK_OUT: "Check-out",
 };
 
 const resultLabels = {
   SUCCESS: "Thành công",
   INVALID_TOKEN: "QR không hợp lệ",
   ALREADY_CHECKED_IN: "Đã check-in",
-  ALREADY_CHECKED_OUT: "Đã check-out",
   CANCELLED: "Vé đã hủy",
   EXPIRED: "Vé hết hạn",
   WRONG_SHOWTIME: "Sai thời gian",
   PAYMENT_NOT_COMPLETED: "Chưa thanh toán",
-  NOT_CHECKED_IN: "Chưa check-in",
 };
 
 const formatDateTime = (value) => {
@@ -41,7 +38,7 @@ const formatDateTime = (value) => {
 
 const resultBadgeClass = (result) => {
   if (result === "SUCCESS") return "status-badge status-now-showing";
-  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN", "ALREADY_CHECKED_OUT", "NOT_CHECKED_IN"].includes(result)) {
+  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN"].includes(result)) {
     return "status-badge status-coming-soon";
   }
   return "status-badge status-ended";
@@ -125,7 +122,7 @@ const TicketScanHistoryPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Lịch sử quét QR</h1>
-          <p>Theo dõi toàn bộ lượt xác minh, check-in và check-out vé điện tử.</p>
+          <p>Theo dõi toàn bộ lượt xác minh và check-in vé điện tử.</p>
         </div>
         <button className="btn btn-secondary" onClick={fetchLogs} disabled={loading} type="button">
           <HiOutlineRefresh />
@@ -138,8 +135,8 @@ const TicketScanHistoryPage = () => {
       <div className="ticket-scan-stats-grid">
         <StatCard label="Tổng lượt quét" value={stats?.totalScans ?? totalItems} />
         <StatCard label="Lượt quét lỗi" value={stats?.errorScans ?? 0} />
+        <StatCard label="Lượt quét thành công" value={stats?.successScans ?? "-"} />
         <StatCard label="Vé đã check-in" value={stats?.checkedInTickets ?? "-"} />
-        <StatCard label="Vé đã check-out" value={stats?.checkedOutTickets ?? "-"} />
       </div>
 
       <form className="ticket-scan-filters" onSubmit={handleSubmit}>

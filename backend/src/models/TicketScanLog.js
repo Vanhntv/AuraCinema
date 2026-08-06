@@ -3,19 +3,16 @@ import mongoose from "mongoose";
 export const TICKET_SCAN_ACTIONS = [
   "VERIFY",
   "CHECK_IN",
-  "CHECK_OUT",
 ];
 
 export const TICKET_SCAN_RESULTS = [
   "SUCCESS",
   "INVALID_TOKEN",
   "ALREADY_CHECKED_IN",
-  "ALREADY_CHECKED_OUT",
   "CANCELLED",
   "EXPIRED",
   "WRONG_SHOWTIME",
   "PAYMENT_NOT_COMPLETED",
-  "NOT_CHECKED_IN",
 ];
 
 const ticketScanLogSchema = new mongoose.Schema(

@@ -190,12 +190,8 @@ const ticketStatusMeta = {
     className: "bg-emerald-400/10 text-emerald-200 border-emerald-400/20",
   },
   CHECKED_IN: {
-    label: "Đã vào rạp",
+    label: "Đã sử dụng",
     className: "bg-sky-400/10 text-sky-200 border-sky-400/20",
-  },
-  CHECKED_OUT: {
-    label: "Đã rời rạp",
-    className: "bg-slate-400/10 text-slate-200 border-slate-400/20",
   },
   CANCELLED: {
     label: "Đã hủy",
@@ -916,8 +912,7 @@ function AccountPage() {
         >
           <option value="">Tất cả trạng thái</option>
           <option value="Chưa sử dụng">Chưa sử dụng</option>
-          <option value="Đã vào rạp">Đã vào rạp</option>
-          <option value="Đã rời rạp">Đã rời rạp</option>
+          <option value="Đã sử dụng">Đã sử dụng</option>
           <option value="Đã hủy">Đã hủy</option>
           <option value="Đã hết hạn">Đã hết hạn</option>
         </select>
@@ -1049,7 +1044,6 @@ function AccountPage() {
 
                 <div className="grid gap-2 border-t border-white/10 p-5 text-sm text-slate-400 sm:grid-cols-2">
                   <p>Check-in: <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
-                  <p>Check-out: <strong className="text-white">{formatDateTime(ticket.checkedOutAt)}</strong></p>
                 </div>
               </div>
             )}

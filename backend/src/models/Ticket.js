@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 export const TICKET_STATUSES = [
   "VALID",
   "CHECKED_IN",
-  "CHECKED_OUT",
   "CANCELLED",
   "EXPIRED",
 ];
@@ -85,16 +84,7 @@ const ticketSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    checkedOutAt: {
-      type: Date,
-      default: null,
-    },
     checkedInBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    checkedOutBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,

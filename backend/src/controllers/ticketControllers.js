@@ -52,7 +52,6 @@ const formatTicket = (ticket) => {
     price: ticket.price,
     status: ticket.status,
     checkedInAt: ticket.checkedInAt,
-    checkedOutAt: ticket.checkedOutAt,
     createdAt: ticket.createdAt,
     updatedAt: ticket.updatedAt,
   };

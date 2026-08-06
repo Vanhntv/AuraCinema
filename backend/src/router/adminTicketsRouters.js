@@ -1,7 +1,6 @@
 import express from "express";
 import {
   checkInAdminTicketQr,
-  checkOutAdminTicketQr,
   getAdminTicketScanLogs,
   verifyAdminTicketQr,
 } from "../controllers/adminTicketControllers.js";
@@ -14,6 +13,5 @@ router.use(authMiddleware, authorizeRoles("admin"));
 router.get("/scan-logs", getAdminTicketScanLogs);
 router.post("/verify", verifyAdminTicketQr);
 router.post("/check-in", checkInAdminTicketQr);
-router.post("/check-out", checkOutAdminTicketQr);
 
 export default router;
