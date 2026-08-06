@@ -25,6 +25,7 @@ import marketingContentRoute from "./router/marketingContentRouters.js";
 import adminMarketingContentRoute from "./router/adminMarketingContentRouters.js";
 import paymentsRoute from "./router/paymentsRouters.js";
 import sepayWebhookRoute from "./router/sepayWebhookRouters.js";
+import ticketsRoute from "./router/ticketsRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -63,6 +64,7 @@ app.use("/api/marketing-content", marketingContentRoute);
 app.use("/api/admin/marketing-content", adminMarketingContentRoute);
 app.use("/api/payments", paymentsRoute);
 app.use("/api/sepay", sepayWebhookRoute);
+app.use("/api/tickets", ticketsRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

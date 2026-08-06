@@ -110,6 +110,11 @@ const buildTicketDraft = ({ booking, showtime, showtimeSeat }) => {
   const seatLabel = buildSeatLabel(seat);
 
   if (!showtimeSeat.seat_id || !seatLabel) {
+    console.error("Du lieu ghe khong hop le khi tao ve", {
+      bookingId: String(booking._id),
+      showtimeSeatId: String(showtimeSeat._id || ""),
+      seatId: String(showtimeSeat.seat_id?._id || showtimeSeat.seat_id || ""),
+    });
     throw Object.assign(new Error("Thong tin ghe cua don ve khong hop le"), { statusCode: 409 });
   }
 
@@ -221,6 +226,11 @@ export const createTicketsForPaidBooking = async (bookingOrId, options = {}) => 
     .session(session);
 
   if (tickets.length !== showtimeSeats.length) {
+    console.error("So luong ve tao ra khong khop so ghe trong don", {
+      bookingId: String(booking._id),
+      expected: showtimeSeats.length,
+      actual: tickets.length,
+    });
     throw Object.assign(new Error("Khong the tao du ve cho tat ca ghe trong don"), {
       statusCode: 409,
     });

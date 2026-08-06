@@ -244,6 +244,11 @@ export const recordSepayTransaction = async ({ payload, source = "webhook" }) =>
     return { inserted: true, transactionKey };
   }
 
+  const existingTransaction = sepayTransaction.value || sepayTransaction;
+  if (existingTransaction.processing_status === "received") {
+    await processSepayPayment({ payload, transactionKey });
+  }
+
   return { inserted: false, transactionKey };
 };
 
@@ -268,9 +273,11 @@ export const receiveSepayWebhook = async (req, res) => {
       return res.status(200).json({ success: true });
     }
 
+    console.error("Khong the xu ly webhook SePay:", error.message);
+
     return res.status(500).json({
       success: false,
-      message: error.message || "Không thể xử lý webhook SePay",
+      message: "Không thể xử lý webhook SePay",
     });
   }
 };

@@ -74,6 +74,8 @@ const runWithOptionalTransaction = async (work) => {
   }
 };
 
+const isPaymentSimulationAllowed = () => process.env.NODE_ENV !== "production";
+
 export const markBookingAsPaid = async ({
   booking,
   provider = "internal",
@@ -461,6 +463,13 @@ export const createBooking = async (req, res) => {
 
 export const confirmBookingPayment = async (req, res) => {
   try {
+    if (!isPaymentSimulationAllowed()) {
+      return res.status(403).json({
+        success: false,
+        message: "Chức năng mô phỏng thanh toán không khả dụng trong production",
+      });
+    }
+
     const { id } = req.params;
     const provider = String(req.body?.payment_provider || "internal").trim();
     const transactionId = String(req.body?.transaction_id || req.body?.payment_transaction_id || "").trim();
@@ -480,7 +489,11 @@ export const confirmBookingPayment = async (req, res) => {
 
     return res.json({ success: true, message: "Thanh toán thành công", data: paidBooking });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    const statusCode = error.statusCode || 500;
+    return res.status(statusCode).json({
+      success: false,
+      message: statusCode >= 500 ? "Không thể xác nhận thanh toán" : error.message,
+    });
   }
 };
 
