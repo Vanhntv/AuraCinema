@@ -510,6 +510,45 @@ export const getBookingPaymentStatus = async (req, res) => {
   }
 };
 
+export const getBookingDetail = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user_id: req.user.id,
+    })
+      .populate({
+        path: "showtime_id",
+        select: "movie_id room_id start_time end_time",
+        populate: [
+          { path: "movie_id", select: "title poster duration age_limit" },
+          {
+            path: "room_id",
+            select: "name cinema_id",
+            populate: { path: "cinema_id", select: "name address city" },
+          },
+        ],
+      })
+      .populate({
+        path: "showtime_seat_ids",
+        populate: {
+          path: "seat_id",
+          select: "seat_row seat_number seat_type_id",
+          populate: { path: "seat_type_id", select: "name" },
+        },
+      })
+      .populate({ path: "combos.combo_id", select: "name image type" })
+      .populate({ path: "voucher.voucher_id", select: "code name apply_scope" });
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
+    }
+
+    return res.json({ success: true, data: booking });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
 export const cancelBooking = async (req, res) => {
   try {
     const { id } = req.params;
