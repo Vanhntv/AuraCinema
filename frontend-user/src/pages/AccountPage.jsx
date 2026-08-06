@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import QRCode from "qrcode";
 import {
   HiOutlineCreditCard,
   HiOutlineGift,
@@ -11,8 +12,8 @@ import {
 } from "react-icons/hi";
 import { changePassword, updateProfile } from "../api/authApi";
 import { promotionItems } from "../data/promotionContent";
-import { getMyBookings } from "../services/bookingService";
 import { getMarketingContent } from "../services/marketingContentService";
+import { getMyTicketDetail, getMyTicketQr, getMyTickets } from "../services/ticketService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import { mapCmsContentItem } from "../utils/marketingContent";
@@ -38,7 +39,7 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 const tabs = [
   { id: "account", label: "Tài khoản của tôi", icon: HiOutlineUser },
   { id: "member", label: "Thông tin thẻ thành viên", icon: HiOutlineCreditCard },
-  { id: "tickets", label: "Lịch sử mua vé", icon: HiOutlineTicket },
+  { id: "tickets", label: "Vé của tôi", icon: HiOutlineTicket },
   { id: "points", label: "Lịch sử điểm thưởng", icon: HiOutlineSparkles },
   { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
   { id: "promotions", label: "Chương trình khuyến mãi", icon: HiOutlineGift },
@@ -183,6 +184,57 @@ const getBookingStatusClassName = (booking) => {
   return "bg-red-500/10 text-red-200";
 };
 
+const ticketStatusMeta = {
+  VALID: {
+    label: "Chưa sử dụng",
+    className: "bg-emerald-400/10 text-emerald-200 border-emerald-400/20",
+  },
+  CHECKED_IN: {
+    label: "Đã vào rạp",
+    className: "bg-sky-400/10 text-sky-200 border-sky-400/20",
+  },
+  CHECKED_OUT: {
+    label: "Đã rời rạp",
+    className: "bg-slate-400/10 text-slate-200 border-slate-400/20",
+  },
+  CANCELLED: {
+    label: "Đã hủy",
+    className: "bg-red-500/10 text-red-200 border-red-400/20",
+  },
+  EXPIRED: {
+    label: "Đã hết hạn",
+    className: "bg-amber-400/10 text-amber-200 border-amber-400/20",
+  },
+};
+
+const getTicketStatusMeta = (status) =>
+  ticketStatusMeta[status] || {
+    label: status || "Không xác định",
+    className: "bg-white/[0.06] text-slate-200 border-white/10",
+  };
+
+const resolveImageUrl = (image) => {
+  if (!image) return "";
+  if (/^https?:\/\//i.test(image)) return image;
+
+  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+  const origin = apiBase.replace(/\/api\/?$/, "");
+  return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
+};
+
+const getTicketDate = (ticket) => formatDate(ticket.showtime?.startTime);
+
+const getTicketTime = (ticket) => {
+  const value = ticket.showtime?.startTime;
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 function EmptyState({ children = "Không có dữ liệu" }) {
   return (
     <div className="grid min-h-28 place-items-center text-sm text-slate-500">
@@ -284,7 +336,7 @@ function AccountPage() {
     password: "",
     confirm_password: "",
   });
-  const [bookings, setBookings] = useState([]);
+  const [tickets, setTickets] = useState([]);
   const [vouchers, setVouchers] = useState([]);
   const [activePromotions, setActivePromotions] = useState(() =>
     promotionItems.filter((item) => item.status !== "expired"),
@@ -293,18 +345,21 @@ function AccountPage() {
   const [profileError, setProfileError] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [bookingsError, setBookingsError] = useState("");
+  const [ticketsError, setTicketsError] = useState("");
   const [vouchersError, setVouchersError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
-  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [loadingTickets, setLoadingTickets] = useState(true);
   const [loadingVouchers, setLoadingVouchers] = useState(true);
   const [voucherFilter, setVoucherFilter] = useState("available");
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
-  const [selectedBookingDetail, setSelectedBookingDetail] = useState(null);
+  const [selectedTicketDetail, setSelectedTicketDetail] = useState(null);
+  const [ticketQrDataUrl, setTicketQrDataUrl] = useState("");
+  const [ticketQrError, setTicketQrError] = useState("");
+  const [loadingTicketDetail, setLoadingTicketDetail] = useState(false);
+  const [loadingTicketQr, setLoadingTicketQr] = useState(false);
   const [ticketFilters, setTicketFilters] = useState({
     query: "",
-    seatCount: "",
     status: "",
   });
   const [ticketPage, setTicketPage] = useState(1);
@@ -331,24 +386,24 @@ function AccountPage() {
   useEffect(() => {
     let isActive = true;
 
-    async function loadBookings() {
+    async function loadTickets() {
       try {
-        setLoadingBookings(true);
-        setBookingsError("");
-        const response = await getMyBookings();
-        if (isActive) setBookings(response.data || []);
+        setLoadingTickets(true);
+        setTicketsError("");
+        const response = await getMyTickets({ page: 1, limit: 50 });
+        if (isActive) setTickets(response.data || []);
       } catch (error) {
         if (isActive) {
-          setBookingsError(
-            error.response?.data?.message || "Không thể tải lịch sử mua vé.",
+          setTicketsError(
+            error.response?.data?.message || "Không thể tải vé của bạn.",
           );
         }
       } finally {
-        if (isActive) setLoadingBookings(false);
+        if (isActive) setLoadingTickets(false);
       }
     }
 
-    loadBookings();
+    loadTickets();
 
     return () => {
       isActive = false;
@@ -690,127 +745,206 @@ function AccountPage() {
     </section>
   );
 
-  const renderTicketRow = (booking) => (
-    <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] items-center gap-3 border-b border-white/10 px-5 py-4 last:border-b-0" key={booking._id}>
-      <strong className="min-w-0 break-words text-sm font-black text-white">{getBookingCode(booking)}</strong>
-      <span className="line-clamp-1 min-w-0 text-sm font-bold text-slate-200">{getBookingMovieTitle(booking)}</span>
-      <span className="min-w-0 text-sm font-semibold text-slate-200">{getBookingShowtime(booking)}</span>
-      <span className="min-w-0 text-sm font-semibold text-white">{getBookingSeatCount(booking)} ghế</span>
-      <span className="min-w-0 text-sm text-slate-400">{formatDateTime(booking.created_at)}</span>
-      <span className={`inline-flex min-w-0 justify-center rounded-full px-3 py-1.5 text-xs font-black ${getBookingStatusClassName(booking)}`}>
-        {getBookingStatusLabel(booking)}
-      </span>
-      <button
-        className="inline-flex h-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] px-3 text-xs font-black text-white hover:border-[#ff6070]"
-        type="button"
-        onClick={() => setSelectedBookingDetail(booking)}
-      >
-        Chi tiết
-      </button>
-    </div>
-  );
+  const loadTicketQr = async (ticketId) => {
+    try {
+      setLoadingTicketQr(true);
+      setTicketQrError("");
+      setTicketQrDataUrl("");
+      const response = await getMyTicketQr(ticketId);
+      const payload = response.data?.qrPayload;
 
-  const filteredBookings = bookings.filter((booking) => {
+      if (!payload) {
+        throw new Error("Không có dữ liệu QR cho vé này.");
+      }
+
+      const dataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 260,
+        color: {
+          dark: "#101010",
+          light: "#ffffff",
+        },
+      });
+
+      setTicketQrDataUrl(dataUrl);
+    } catch (error) {
+      setTicketQrError(error.response?.data?.message || error.message || "Không thể tải mã QR.");
+    } finally {
+      setLoadingTicketQr(false);
+    }
+  };
+
+  const openTicketDetail = async (ticket, { qrOnly = false } = {}) => {
+    setSelectedTicketDetail(ticket);
+    setTicketQrDataUrl("");
+    setTicketQrError("");
+
+    try {
+      setLoadingTicketDetail(!qrOnly);
+      const response = await getMyTicketDetail(ticket.id);
+      setSelectedTicketDetail(response.data || ticket);
+    } catch (error) {
+      setTicketQrError(error.response?.data?.message || "Không thể tải chi tiết vé.");
+    } finally {
+      setLoadingTicketDetail(false);
+    }
+
+    await loadTicketQr(ticket.id);
+  };
+
+  const renderTicketCard = (ticket) => {
+    const status = getTicketStatusMeta(ticket.status);
+    const poster = resolveImageUrl(ticket.movie?.poster);
+
+    return (
+      <article
+        className="grid overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:grid-cols-[120px_minmax(0,1fr)]"
+        key={ticket.id}
+      >
+        <div className="aspect-[3/4] bg-[#0f141c] sm:aspect-auto">
+          {poster ? (
+            <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} />
+          ) : (
+            <div className="grid h-full min-h-40 place-items-center text-sm font-black text-slate-600">AuraCinema</div>
+          )}
+        </div>
+        <div className="grid gap-4 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#ff8f99]">Mã vé</p>
+              <h3 className="mt-1 break-words text-lg font-black text-white">{ticket.ticketCode}</h3>
+            </div>
+            <span className={`rounded-full border px-3 py-1.5 text-xs font-black ${status.className}`}>
+              {status.label}
+            </span>
+          </div>
+          <div>
+            <p className="line-clamp-2 text-xl font-black text-white">{ticket.movie?.title || "Vé xem phim"}</p>
+            <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+              <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
+              <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
+              <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
+              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
+              <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
+              <p><span className="text-slate-500">Check-in:</span> <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-3 border-t border-white/10 pt-4">
+            <button
+              className="h-10 rounded-full border border-[#ff6070]/40 bg-[#ff5364]/10 px-4 text-sm font-black text-[#ffb1ba] hover:bg-[#ff5364]/20"
+              type="button"
+              onClick={() => openTicketDetail(ticket, { qrOnly: true })}
+            >
+              Xem mã QR
+            </button>
+            <button
+              className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
+              type="button"
+              onClick={() => openTicketDetail(ticket)}
+            >
+              Xem chi tiết
+            </button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  const filteredTickets = tickets.filter((ticket) => {
     const query = normalizeFilterText(ticketFilters.query);
-    const seatCountFilter = ticketFilters.seatCount;
     const statusFilter = ticketFilters.status;
-    const seatCount = getBookingSeatCount(booking);
-    const statusLabel = getBookingStatusLabel(booking);
+    const statusLabel = getTicketStatusMeta(ticket.status).label;
     const searchableText = normalizeFilterText([
-      getBookingCode(booking),
-      getBookingMovieTitle(booking),
-      getBookingShowtime(booking),
-      `${seatCount} ghế`,
-      formatDateTime(booking.created_at),
+      ticket.ticketCode,
+      ticket.movie?.title,
+      getTicketDate(ticket),
+      getTicketTime(ticket),
+      ticket.room?.name,
+      ticket.seat?.label,
       statusLabel,
     ].join(" "));
 
     if (query && !searchableText.includes(query)) return false;
-    if (seatCountFilter === "1" && seatCount !== 1) return false;
-    if (seatCountFilter === "2" && seatCount !== 2) return false;
-    if (seatCountFilter === "3plus" && seatCount < 3) return false;
     if (statusFilter && statusLabel !== statusFilter) return false;
 
     return true;
   });
-  const ticketTotalPages = Math.max(1, Math.ceil(filteredBookings.length / TICKETS_PER_PAGE));
+  const ticketTotalPages = Math.max(1, Math.ceil(filteredTickets.length / TICKETS_PER_PAGE));
   const normalizedTicketPage = Math.min(ticketPage, ticketTotalPages);
-  const paginatedBookings = filteredBookings.slice(
+  const paginatedTickets = filteredTickets.slice(
     (normalizedTicketPage - 1) * TICKETS_PER_PAGE,
     normalizedTicketPage * TICKETS_PER_PAGE,
   );
 
   useEffect(() => {
     setTicketPage(1);
-  }, [ticketFilters.query, ticketFilters.seatCount, ticketFilters.status]);
+  }, [ticketFilters.query, ticketFilters.status]);
 
   const renderTicketsTab = () => (
-    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
-      {bookingsError && (
+    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8 max-sm:p-5">
+      {ticketsError && (
         <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-          {bookingsError}
+          {ticketsError}
         </div>
       )}
-      <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 lg:grid-cols-[minmax(0,1fr)_170px_180px_auto]">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-white">Vé của tôi</h2>
+          <p className="mt-1 text-sm text-slate-400">Mỗi ghế là một vé điện tử riêng để xuất trình tại cửa phòng chiếu.</p>
+        </div>
+        <button
+          className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-5 text-sm font-black text-white hover:border-[#ff6070]"
+          type="button"
+          onClick={() => window.history.back()}
+        >
+          Quay lại
+        </button>
+      </div>
+      <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 md:grid-cols-[minmax(0,1fr)_190px_auto]">
         <input
           className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
           type="search"
           value={ticketFilters.query}
           onChange={(event) => setTicketFilters((current) => ({ ...current, query: event.target.value }))}
-          placeholder="Tìm mã hóa đơn, phim, suất chiếu, ngày đặt..."
+          placeholder="Tìm mã vé, phim, phòng, ghế..."
         />
-        <select
-          className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none focus:border-[#ff6070]"
-          value={ticketFilters.seatCount}
-          onChange={(event) => setTicketFilters((current) => ({ ...current, seatCount: event.target.value }))}
-        >
-          <option value="">Tất cả số ghế</option>
-          <option value="1">1 ghế</option>
-          <option value="2">2 ghế</option>
-          <option value="3plus">Từ 3 ghế</option>
-        </select>
         <select
           className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none focus:border-[#ff6070]"
           value={ticketFilters.status}
           onChange={(event) => setTicketFilters((current) => ({ ...current, status: event.target.value }))}
         >
           <option value="">Tất cả trạng thái</option>
-          <option value="Đã thanh toán">Đã thanh toán</option>
+          <option value="Chưa sử dụng">Chưa sử dụng</option>
+          <option value="Đã vào rạp">Đã vào rạp</option>
+          <option value="Đã rời rạp">Đã rời rạp</option>
           <option value="Đã hủy">Đã hủy</option>
+          <option value="Đã hết hạn">Đã hết hạn</option>
         </select>
         <button
           className="h-11 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
           type="button"
-          onClick={() => setTicketFilters({ query: "", seatCount: "", status: "" })}
+          onClick={() => setTicketFilters({ query: "", status: "" })}
         >
           Xóa lọc
         </button>
       </div>
-      {loadingBookings ? (
-        <EmptyState>Đang tải lịch sử mua vé...</EmptyState>
-      ) : bookings.length ? (
+      {loadingTickets ? (
+        <EmptyState>Đang tải vé của bạn...</EmptyState>
+      ) : tickets.length ? (
         <>
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)]">
-            <div className="grid grid-cols-[1.25fr_1.6fr_1fr_0.55fr_0.9fr_1fr_0.75fr] gap-3 border-b border-white/10 bg-white/[0.04] px-5 py-4 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
-              <span>Mã hóa đơn</span>
-              <span>Phim</span>
-              <span>Suất chiếu</span>
-              <span>Ghế</span>
-              <span>Ngày đặt</span>
-              <span>Trạng thái</span>
-              <span>Hành động</span>
+          {filteredTickets.length ? (
+            <div className="grid gap-5 xl:grid-cols-2">
+              {paginatedTickets.map(renderTicketCard)}
             </div>
-            {filteredBookings.length ? (
-              <div>{paginatedBookings.map(renderTicketRow)}</div>
-            ) : (
-              <EmptyState>Không có hóa đơn phù hợp.</EmptyState>
-            )}
-          </div>
-          {filteredBookings.length > 0 && (
+          ) : (
+            <EmptyState>Không có vé phù hợp.</EmptyState>
+          )}
+          {filteredTickets.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-400">
               <span>
                 Hiển thị {(normalizedTicketPage - 1) * TICKETS_PER_PAGE + 1}-
-                {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredBookings.length)} / {filteredBookings.length} vé
+                {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} / {filteredTickets.length} vé
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -844,98 +978,81 @@ function AccountPage() {
         )}
         </>
       ) : (
-        <EmptyState>Không có dữ liệu</EmptyState>
+        <EmptyState>Bạn chưa có vé điện tử nào.</EmptyState>
       )}
     </section>
   );
 
   const renderTicketDetailModal = () => {
-    const booking = selectedBookingDetail;
-    if (!booking) return null;
+    const ticket = selectedTicketDetail;
+    if (!ticket) return null;
 
-    const code = getBookingCode(booking);
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(code)}`;
-    const combos = booking.combos || [];
-    const seats = getBookingSeatLabels(booking);
-    const isPaid = booking.payment_status === "paid";
+    const status = getTicketStatusMeta(ticket.status);
+    const poster = resolveImageUrl(ticket.movie?.poster);
 
     return (
-      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Chi tiết đơn ${code}`} onClick={() => setSelectedBookingDetail(null)}>
-        <div className="max-h-[90vh] w-[min(620px,100%)] overflow-y-auto rounded-2xl border border-white/10 bg-[#101010] shadow-[0_30px_90px_rgba(0,0,0,0.65)]" onClick={(event) => event.stopPropagation()}>
+      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Chi tiết vé ${ticket.ticketCode}`} onClick={() => setSelectedTicketDetail(null)}>
+        <div className="max-h-[90vh] w-[min(720px,100%)] overflow-y-auto rounded-2xl border border-white/10 bg-[#10141c] shadow-[0_30px_90px_rgba(0,0,0,0.65)]" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff5364]">Chi tiết đơn vé</p>
-              <h2 className="mt-1 text-xl font-black text-white">{code}</h2>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff5364]">AuraCinema</p>
+              <h2 className="mt-1 text-xl font-black text-white">Vé điện tử</h2>
             </div>
-            <button className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364]" type="button" onClick={() => setSelectedBookingDetail(null)} aria-label="Đóng chi tiết">
+            <button className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364]" type="button" onClick={() => setSelectedTicketDetail(null)} aria-label="Đóng chi tiết">
               ×
             </button>
           </div>
 
           <div className="p-5 text-white">
-            <div className="text-center">
-              <div className={`mx-auto grid h-14 w-14 place-items-center rounded-full border text-3xl ${isPaid ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-300" : "border-red-400/30 bg-red-400/15 text-red-200"}`}>
-                {isPaid ? "✓" : "!"}
-              </div>
-              <h3 className="mt-3 text-2xl font-black">{isPaid ? "Đặt vé thành công!" : getBookingStatusLabel(booking)}</h3>
-              <p className="mt-2 text-sm text-slate-400">{isPaid ? "Đưa mã này cho nhân viên soát vé tại rạp." : "Đơn này chưa có vé hợp lệ để soát vé."}</p>
-            </div>
-
-            <div className="mt-6 rounded-xl border border-white/10 bg-[#171717]">
-              <div className="p-5">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff5364]">Vé xem phim</p>
-                <h4 className="mt-1 text-2xl font-black text-white">{getBookingMovieTitle(booking)}</h4>
-                <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                  <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{getBookingCinemaName(booking)}</strong></p>
-                  <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{getBookingRoomName(booking)}</strong></p>
-                  <p><span className="text-slate-500">Suất:</span> <strong className="text-white">{getBookingShowtime(booking)}</strong></p>
-                  <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{seats}</strong></p>
-                  <p><span className="text-slate-500">Ngày đặt:</span> <strong className="text-white">{formatDateTime(booking.created_at)}</strong></p>
-                  <p><span className="text-slate-500">Thanh toán:</span> <strong className="text-white">{getBookingPaymentProvider(booking)}</strong></p>
-                </div>
-              </div>
-
-              <div className="border-t border-white/10 p-5">
-                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Ghế đã đặt ({getBookingSeatCount(booking)})</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {seats.split(", ").filter(Boolean).map((seat) => (
-                    <span className="rounded-md border border-[#ff5364]/30 bg-[#ff5364]/15 px-3 py-1 text-xs font-black text-[#ff8f99]" key={seat}>{seat}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-4 border-t border-white/10 p-5 text-sm text-slate-300">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Dịch vụ đi kèm</p>
-                  {combos.length ? (
-                    <div className="mt-2 grid gap-2">
-                      {combos.map((item) => (
-                        <p className="flex justify-between gap-4" key={item._id || item.name}>
-                          <span>{item.name || item.combo_id?.name} x {item.quantity}</span>
-                          <strong className="text-slate-200">{currencyFormatter.format(Number(item.subtotal || 0))}</strong>
-                        </p>
-                      ))}
+            {loadingTicketDetail ? (
+              <EmptyState>Đang tải chi tiết vé...</EmptyState>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171717]">
+                <div className="grid gap-5 p-5 sm:grid-cols-[120px_minmax(0,1fr)]">
+                  <div className="aspect-[3/4] overflow-hidden rounded-xl bg-white/[0.04]">
+                    {poster ? <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} /> : null}
+                  </div>
+                  <div>
+                    <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${status.className}`}>
+                      {status.label}
+                    </span>
+                    <p className="mt-4 text-xs font-black uppercase tracking-[0.16em] text-[#ff5364]">Vé xem phim</p>
+                    <h3 className="mt-1 text-2xl font-black text-white">{ticket.movie?.title || "Vé xem phim"}</h3>
+                    <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+                      <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
+                      <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
+                      <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
+                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
+                      <p><span className="text-slate-500">Loại ghế:</span> <strong className="text-white">{ticket.seat?.type || "Đang cập nhật"}</strong></p>
+                      <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
                     </div>
-                  ) : (
-                    <p className="mt-2 text-slate-500">Không có</p>
-                  )}
+                  </div>
                 </div>
-                <p><span className="text-slate-500">Voucher:</span> {getBookingVoucherText(booking)}</p>
-              </div>
 
-              <div className="border-t border-white/10 p-5 text-sm">
-                <p className="flex justify-between gap-4 text-slate-400"><span>Tiền vé</span><strong className="text-slate-200">{currencyFormatter.format(getBookingTicketTotal(booking))}</strong></p>
-                <p className="mt-2 flex justify-between gap-4 text-slate-400"><span>Dịch vụ đi kèm</span><strong className="text-slate-200">{currencyFormatter.format(getBookingComboTotal(booking))}</strong></p>
-                <p className="mt-5 flex justify-between gap-4 text-base font-black text-white"><span>Tổng đã thanh toán</span><strong className="text-2xl text-[#ff5364]">{currencyFormatter.format(Number(booking.total_price || 0))}</strong></p>
-              </div>
-
-              {isPaid && (
-                <div className="bg-white p-5 text-center">
-                  <img className="mx-auto h-40 w-40 object-contain" src={qrUrl} alt={`QR vé ${code}`} />
-                  <p className="mt-2 text-xs font-black text-black">Đưa mã này cho nhân viên soát vé</p>
+                <div className="border-t border-white/10 p-5">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Mã vé</p>
+                  <p className="mt-1 break-words text-lg font-black text-white">{ticket.ticketCode}</p>
                 </div>
-              )}
-            </div>
+
+                <div className="border-t border-white/10 bg-white p-5 text-center">
+                  {loadingTicketQr ? (
+                    <div className="grid min-h-48 place-items-center text-sm font-bold text-slate-500">Đang tạo mã QR...</div>
+                  ) : ticketQrError ? (
+                    <div className="mx-auto max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                      {ticketQrError}
+                    </div>
+                  ) : ticketQrDataUrl ? (
+                    <img className="mx-auto h-48 w-48 object-contain" src={ticketQrDataUrl} alt={`QR vé ${ticket.ticketCode}`} />
+                  ) : null}
+                  <p className="mt-3 text-xs font-black text-black">Vui lòng xuất trình mã QR tại cửa phòng chiếu</p>
+                </div>
+
+                <div className="grid gap-2 border-t border-white/10 p-5 text-sm text-slate-400 sm:grid-cols-2">
+                  <p>Check-in: <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
+                  <p>Check-out: <strong className="text-white">{formatDateTime(ticket.checkedOutAt)}</strong></p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
