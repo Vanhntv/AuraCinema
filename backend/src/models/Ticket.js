@@ -68,6 +68,13 @@ const ticketSchema = new mongoose.Schema(
       minlength: 32,
       maxlength: 256,
     },
+    qrTokenEncrypted: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 512,
+      select: false,
+    },
     status: {
       type: String,
       enum: TICKET_STATUSES,

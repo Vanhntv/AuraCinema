@@ -11,6 +11,7 @@ import {
   reserveVoucherUsageForPayment,
   verifyVoucherService,
 } from "../services/voucherService.js";
+import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
 
 const normalizeText = (value = "") =>
@@ -84,6 +85,7 @@ export const markBookingAsPaid = async ({
   }
 
   if (booking.payment_status === "paid") {
+    await createTicketsForPaidBooking(booking._id, { session });
     return booking;
   }
 
@@ -168,6 +170,7 @@ export const markBookingAsPaid = async ({
   booking.payment_transaction_id = transactionId;
   booking.paid_at = new Date();
   await booking.save({ session });
+  await createTicketsForPaidBooking(booking._id, { session });
 
   return booking;
 };
