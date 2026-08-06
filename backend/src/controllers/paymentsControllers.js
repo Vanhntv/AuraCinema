@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
+import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";
+import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { markBookingAsPaid } from "./bookingsControllers.js";
 import {
   buildVnpayPaymentUrl,
@@ -34,6 +36,57 @@ const getSepayOrderAmount = (order = {}) => normalizeMoney(
 
 const SEPAY_PG_SUCCESS_STATUSES = new Set(["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "CAPTURED", "APPROVED"]);
 const SEPAY_PG_FAILED_STATUSES = new Set(["FAILED", "CANCELLED", "CANCELED", "VOIDED", "EXPIRED", "ERROR"]);
+
+const restoreComboStock = async ({ combos = [], session }) => {
+  const restorableCombos = combos
+    .map((item) => ({
+      combo_id: item.combo_id,
+      quantity: Number(item.quantity || 0),
+    }))
+    .filter((item) => item.combo_id && item.quantity > 0);
+
+  if (!restorableCombos.length) return;
+
+  await Promise.all(
+    restorableCombos.map((item) =>
+      Combo.updateOne(
+        { _id: item.combo_id },
+        { $inc: { stock: item.quantity } },
+        { session },
+      ),
+    ),
+  );
+};
+
+const cancelUnpaidBookingAfterPaymentFailure = async ({
+  booking,
+  provider,
+  transactionId = "",
+  reason = "Thanh toán thất bại hoặc bị hủy",
+  session,
+}) => {
+  if (booking.status !== "pending" || booking.payment_status !== "pending") {
+    return booking;
+  }
+
+  booking.status = "cancelled";
+  booking.cancelled_by = "customer";
+  booking.cancellation_reason = reason;
+  booking.cancelled_at = new Date();
+  booking.payment_status = "cancelled";
+  booking.payment_provider = provider;
+  booking.payment_transaction_id = transactionId;
+  await booking.save({ session });
+
+  await ShowtimeSeat.updateMany(
+    { _id: { $in: booking.showtime_seat_ids }, status: "reserved", held_by: booking.user_id },
+    { $set: { status: "available", held_by: null, hold_expires_at: null } },
+    { session },
+  );
+  await restoreComboStock({ combos: booking.combos, session });
+
+  return booking;
+};
 
 const isTransactionUnsupportedError = (error) => {
   const message = String(error?.message || "").toLowerCase();
@@ -284,14 +337,15 @@ export const verifyVnpayReturn = async (req, res) => {
       payment.status = "failed";
       await payment.save({ session });
 
-      if (booking.payment_status === "pending") {
-        booking.payment_status = "failed";
-        booking.payment_provider = "vnpay";
-        booking.payment_transaction_id = String(params.vnp_TransactionNo || params.vnp_BankTranNo || "");
-        await booking.save({ session });
-      }
+      const cancelledBooking = await cancelUnpaidBookingAfterPaymentFailure({
+        booking,
+        provider: "vnpay",
+        transactionId: String(params.vnp_TransactionNo || params.vnp_BankTranNo || ""),
+        reason: "Khách hủy hoặc thanh toán VNPay thất bại",
+        session,
+      });
 
-      return { booking, payment };
+      return { booking: cancelledBooking, payment };
     });
 
     return res.json({
@@ -391,12 +445,15 @@ export const verifySepayPgReturn = async (req, res) => {
         payment.status = "failed";
         await payment.save({ session });
 
-        if (booking.payment_status === "pending") {
-          booking.payment_status = "failed";
-          booking.payment_provider = "sepay_pg";
-          booking.payment_transaction_id = String(order.transaction_id || order.payment_id || order.id || "");
-          await booking.save({ session });
-        }
+        const cancelledBooking = await cancelUnpaidBookingAfterPaymentFailure({
+          booking,
+          provider: "sepay_pg",
+          transactionId: String(order.transaction_id || order.payment_id || order.id || ""),
+          reason: "Thanh toán SePay thất bại hoặc bị hủy",
+          session,
+        });
+
+        return { booking: cancelledBooking, payment };
       }
 
       return { booking, payment };

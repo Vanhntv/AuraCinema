@@ -25,6 +25,11 @@ export const getBookingPaymentStatus = async (bookingId) => {
   return response.data;
 };
 
+export const getBookingDetail = async (bookingId) => {
+  const response = await axiosClient.get(`/bookings/${bookingId}`);
+  return response.data;
+};
+
 export const verifyVnpayReturn = async (queryString) => {
   const response = await axiosClient.get(`/payments/vnpay/return${queryString}`);
   return response.data;

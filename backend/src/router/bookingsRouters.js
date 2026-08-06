@@ -3,6 +3,7 @@ import {
   cancelBooking,
   confirmBookingPayment,
   createBooking,
+  getBookingDetail,
   getBookingPaymentStatus,
   getMyBookings,
 } from "../controllers/bookingsControllers.js";
@@ -12,6 +13,7 @@ const router = express.Router();
 router.use(authMiddleware);
 router.get("/my", getMyBookings);
 router.get("/:id/status", getBookingPaymentStatus);
+router.get("/:id", getBookingDetail);
 router.post("/", createBooking);
 router.post("/:id/pay", confirmBookingPayment);
 router.patch("/:id/cancel", cancelBooking);

@@ -7,10 +7,30 @@ import {
   listShowtimeSeats,
   updateShowtimeSeatService,
 } from "../services/showtimeSeatService.js";
+import Booking from "../models/Booking.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
 
 const HOLD_DURATION_MS = 5 * 60 * 1000;
+
+const releaseFailedPaymentReservedSeats = async (showtimeId) => {
+  if (!showtimeId) return;
+
+  const failedBookings = await Booking.find({
+    showtime_id: showtimeId,
+    status: { $in: ["pending", "cancelled"] },
+    payment_status: { $in: ["failed", "cancelled"] },
+    showtime_seat_ids: { $exists: true, $ne: [] },
+  }).select("showtime_seat_ids");
+  const seatIds = failedBookings.flatMap((booking) => booking.showtime_seat_ids || []);
+
+  if (!seatIds.length) return;
+
+  await ShowtimeSeat.updateMany(
+    { _id: { $in: seatIds }, status: "reserved" },
+    { $set: { status: "available", held_by: null, hold_expires_at: null } },
+  );
+};
 
 export const holdShowtimeSeats = async (req, res) => {
   try {
@@ -73,6 +93,7 @@ export const getAllShowtimeSeats = async (req, res) => {
       { status: "held", hold_expires_at: { $lte: new Date() } },
       { $set: { status: "available", held_by: null, hold_expires_at: null } },
     );
+    await releaseFailedPaymentReservedSeats(req.query.showtime_id);
     let showtimeSeats = await listShowtimeSeats(req.query);
 
     if (req.query.showtime_id && showtimeSeats.length === 0) {
