@@ -1,6 +1,8 @@
 import { NavLink } from "react-router-dom";
 import {
+  HiOutlineClipboardList,
   HiOutlineFilm,
+  HiOutlineQrcode,
   HiOutlineShoppingBag,
   HiOutlineTag,
   HiOutlineTicket,
