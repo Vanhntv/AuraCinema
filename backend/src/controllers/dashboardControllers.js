@@ -637,6 +637,68 @@ export const getMovieRevenue = async (req, res) => {
               },
               { $sort: { _id: 1 } },
             ],
+            seatTypes: [
+              { $unwind: "$showtime_seat_ids" },
+              {
+                $lookup: {
+                  from: "showtime_seats",
+                  localField: "showtime_seat_ids",
+                  foreignField: "_id",
+                  as: "showtimeSeat",
+                },
+              },
+              { $unwind: "$showtimeSeat" },
+              {
+                $lookup: {
+                  from: "seats",
+                  localField: "showtimeSeat.seat_id",
+                  foreignField: "_id",
+                  as: "seat",
+                },
+              },
+              { $unwind: "$seat" },
+              {
+                $lookup: {
+                  from: "seat_types",
+                  localField: "seat.seat_type_id",
+                  foreignField: "_id",
+                  as: "seatType",
+                },
+              },
+              { $unwind: "$seatType" },
+              {
+                $group: {
+                  _id: {
+                    $switch: {
+                      branches: [
+                        {
+                          case: {
+                            $regexMatch: {
+                              input: "$seatType.name",
+                              regex: "vip",
+                              options: "i",
+                            },
+                          },
+                          then: "vip",
+                        },
+                        {
+                          case: {
+                            $regexMatch: {
+                              input: "$seatType.name",
+                              regex: "đôi|doi|couple|double",
+                              options: "i",
+                            },
+                          },
+                          then: "couple",
+                        },
+                      ],
+                      default: "normal",
+                    },
+                  },
+                  count: { $sum: 1 },
+                },
+              },
+            ],
           },
         },
       ]),
@@ -650,6 +712,16 @@ export const getMovieRevenue = async (req, res) => {
       label: `${item._id.slice(8, 10)}/${item._id.slice(5, 7)}`,
       revenue: item.revenue,
     }));
+    const ticketsBySeatType = {
+      normal: 0,
+      vip: 0,
+      couple: 0,
+    };
+    for (const item of movieRevenueResult.seatTypes || []) {
+      if (Object.hasOwn(ticketsBySeatType, item._id)) {
+        ticketsBySeatType[item._id] = item.count;
+      }
+    }
     return res.status(200).json({
       success: true,
       data: {
@@ -662,6 +734,7 @@ export const getMovieRevenue = async (req, res) => {
         bookingCount: summary.bookingCount ?? 0,
         showtimeCount,
         dailyRevenue,
+        ticketsBySeatType,
         from: from || null,
         to: to || null,
       },

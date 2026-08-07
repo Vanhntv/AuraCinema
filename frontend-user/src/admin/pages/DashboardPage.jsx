@@ -73,6 +73,11 @@ const emptyMovieRevenue = {
   bookingCount: 0,
   showtimeCount: 0,
   dailyRevenue: [],
+  ticketsBySeatType: {
+    normal: 0,
+    vip: 0,
+    couple: 0,
+  },
 };
 
 const DashboardPage = () => {
@@ -714,6 +719,41 @@ const DashboardPage = () => {
                     ? "..."
                     : numberFormatter.format(movieRevenue.showtimeCount)}
                 </strong>
+              </div>
+            </div>
+            <div className="dashboard-movie-daily-chart">
+              <div className="dashboard-movie-chart-heading">
+                <h3>Số vé bán theo loại ghế</h3>
+                <p>Tổng hợp từ các ghế trong booking của phim</p>
+              </div>
+              <div className="dashboard-seat-type-grid">
+                <div className="dashboard-seat-type-item normal">
+                  <HiOutlineTicket />
+                  <span>Ghế thường</span>
+                  <strong>
+                    {movieRevenueLoading
+                      ? "..."
+                      : numberFormatter.format(movieRevenue.ticketsBySeatType.normal)}
+                  </strong>
+                </div>
+                <div className="dashboard-seat-type-item vip">
+                  <HiOutlineTicket />
+                  <span>Ghế VIP</span>
+                  <strong>
+                    {movieRevenueLoading
+                      ? "..."
+                      : numberFormatter.format(movieRevenue.ticketsBySeatType.vip)}
+                  </strong>
+                </div>
+                <div className="dashboard-seat-type-item couple">
+                  <HiOutlineTicket />
+                  <span>Ghế đôi</span>
+                  <strong>
+                    {movieRevenueLoading
+                      ? "..."
+                      : numberFormatter.format(movieRevenue.ticketsBySeatType.couple)}
+                  </strong>
+                </div>
               </div>
             </div>
             <div className="dashboard-movie-daily-chart">

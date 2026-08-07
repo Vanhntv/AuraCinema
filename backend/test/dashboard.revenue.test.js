@@ -295,6 +295,11 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
         { _id: "2026-08-01", revenue: 12000000 },
         { _id: "2026-08-02", revenue: 36500000 },
       ],
+      seatTypes: [
+        { _id: "normal", count: 250 },
+        { _id: "vip", count: 135 },
+        { _id: "couple", count: 40 },
+      ],
     }];
   };
   Movie.findOne = () => ({
@@ -343,6 +348,9 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     bookingPipeline[4].$facet.dailyRevenue[0].$group._id.$dateToString.timezone,
     "Asia/Ho_Chi_Minh",
   );
+  assert.equal(bookingPipeline[4].$facet.seatTypes[1].$lookup.from, "showtime_seats");
+  assert.equal(bookingPipeline[4].$facet.seatTypes[3].$lookup.from, "seats");
+  assert.equal(bookingPipeline[4].$facet.seatTypes[5].$lookup.from, "seat_types");
   assert.deepEqual(
     {
       revenue: responseBody.data.revenue,
@@ -356,4 +364,9 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     { date: "2026-08-01", label: "01/08", revenue: 12000000 },
     { date: "2026-08-02", label: "02/08", revenue: 36500000 },
   ]);
+  assert.deepEqual(responseBody.data.ticketsBySeatType, {
+    normal: 250,
+    vip: 135,
+    couple: 40,
+  });
 });
