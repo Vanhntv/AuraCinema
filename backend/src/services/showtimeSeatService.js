@@ -3,7 +3,7 @@ import Seat from "../models/Seat.js";
 import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
-import { isBrokenSeatType } from "../utils/seatTypes.js";
+import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
 import {
   bulkUpsertShowtimeSeats,
   createManyShowtimeSeats,
@@ -73,10 +73,7 @@ const resolveDefaultPrice = async ({ showtime, seat, price }) => {
     throw error;
   }
 
-  const normalizedTypeName = String(seatType.name || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  const normalizedTypeName = normalizeSeatTypeName(seatType.name);
   const priceKey = normalizedTypeName.includes("vip")
     ? "vip"
     : normalizedTypeName.includes("doi") || normalizedTypeName.includes("couple")

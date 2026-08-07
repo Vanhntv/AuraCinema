@@ -132,6 +132,7 @@ const normalizeText = (value = "") =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/đ/g, "d")
     .trim();
 
 const matchesSearchQuery = (value, query) => {
