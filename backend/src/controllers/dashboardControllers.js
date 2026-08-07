@@ -2,6 +2,7 @@ import Cinema from "../models/Cinema.js";
 import Genre from "../models/Genre.js";
 import Movie from "../models/Movie.js";
 import Showtime from "../models/Showtime.js";
+import Booking from "../models/Booking.js";
 
 const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Jakarta",
@@ -85,6 +86,37 @@ export const getDashboardStats = async (_req, res) => {
           roomName: showtime.room_id?.name ?? null,
           startTime: formatTime(showtime.start_time),
         })),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getDashboardOverview = async (_req, res) => {
+  try {
+    const overview = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: "confirmed",
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          revenue: { $sum: "$total_price" },
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        revenue: overview?.[0]?.revenue ?? 0,
       },
     });
   } catch (error) {

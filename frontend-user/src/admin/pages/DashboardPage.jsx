@@ -11,7 +11,7 @@ import {
   HiOutlineTag,
   HiOutlineTicket,
 } from "react-icons/hi";
-import { getDashboardStats } from "../services/dashboardService";
+import { getDashboardStats, getDashboardOverview } from "../services/dashboardService";
 import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
@@ -22,6 +22,7 @@ const emptyDashboard = {
     bookings: 0,
     todayShowtimes: 0,
     nowShowingMovies: 0,
+    revenue: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -45,13 +46,18 @@ const DashboardPage = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await getDashboardStats();
+      const [statsResponse, overviewResponse] = await Promise.all([
+        getDashboardStats(),
+        getDashboardOverview(),
+      ]);
+
       setDashboard({
         ...emptyDashboard,
-        ...(response.data || {}),
+        ...(statsResponse.data || {}),
         stats: {
           ...emptyDashboard.stats,
-          ...(response.data?.stats || {}),
+          ...(statsResponse.data?.stats || {}),
+          revenue: overviewResponse.data?.revenue ?? 0,
         },
       });
     } catch (err) {
@@ -68,6 +74,14 @@ const DashboardPage = () => {
 
   const statCards = useMemo(
     () => [
+      {
+        label: "Tổng doanh thu",
+        value: dashboard.stats.revenue,
+        icon: <HiOutlineCash />,
+        tone: "teal",
+        hint: "Doanh thu đã thanh toán",
+        isCurrency: true,
+      },
       {
         label: "Tổng phim",
         value: dashboard.stats.movies,
@@ -132,11 +146,27 @@ const DashboardPage = () => {
 
       <div className="stats-grid">
         {statCards.map((card) => (
-          <div className="stat-card dashboard-stat-card" key={card.label}>
+          <div
+            className={`stat-card dashboard-stat-card${
+              card.isCurrency ? " dashboard-stat-card--revenue" : ""
+            }`}
+            key={card.label}
+          >
             <div className={`stat-card-icon ${card.tone}`}>{card.icon}</div>
-            <div>
-              <div className="stat-card-value">
-                {loading ? "..." : numberFormatter.format(card.value || 0)}
+            <div className="dashboard-stat-content">
+              <div
+                className="stat-card-value"
+                title={
+                  !loading && card.isCurrency
+                    ? currencyFormatter.format(card.value || 0)
+                    : undefined
+                }
+              >
+                {loading
+                  ? "..."
+                  : card.isCurrency
+                  ? currencyFormatter.format(card.value || 0)
+                  : numberFormatter.format(card.value || 0)}
               </div>
               <div className="stat-card-label">{card.label}</div>
               <div className="stat-card-hint">{card.hint}</div>

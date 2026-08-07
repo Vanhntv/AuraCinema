@@ -579,6 +579,11 @@
   color: var(--color-warning);
 }
 
+.stat-card-icon.teal {
+  background: rgba(20, 184, 166, 0.14);
+  color: #2dd4bf;
+}
+
 .stat-card-value {
   font-size: 24px;
   font-weight: 700;
@@ -623,7 +628,48 @@
 }
 
 .dashboard-stat-card {
-  min-height: 118px;
+  min-width: 0;
+  min-height: 108px;
+  padding: 16px;
+  gap: 12px;
+}
+
+.dashboard-page .stats-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.dashboard-stat-card--revenue {
+  grid-column: span 2;
+}
+
+.dashboard-stat-content {
+  min-width: 0;
+}
+
+.dashboard-stat-card .stat-card-icon {
+  width: 42px;
+  height: 42px;
+  font-size: 20px;
+}
+
+.dashboard-stat-card .stat-card-value {
+  overflow: hidden;
+  font-size: clamp(18px, 1.45vw, 22px);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-stat-card--revenue .stat-card-value {
+  font-size: clamp(18px, 1.65vw, 24px);
+}
+
+@media (max-width: 1399px) {
+  .dashboard-page .stats-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .dashboard-grid {
@@ -2095,6 +2141,18 @@
   .users-stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .dashboard-page .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-stat-card--revenue {
+    grid-column: span 2;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2148,6 +2206,14 @@
 @media (max-width: 480px) {
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-page .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-stat-card--revenue {
+    grid-column: auto;
   }
 
   .page-header-info h1 {

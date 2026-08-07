@@ -36,6 +36,7 @@ app.use("/api/cinemas", cinemasRoute);
 app.use("/api/rooms", roomsRoute);
 app.use("/api/trailers", trailersRoute);
 app.use("/api/dashboard", dashboardRoute);
+app.use("/api/admin/dashboard", dashboardRoute);
 app.use("/api/seat-types", seatTypesRoute);
 app.use("/seat-types", seatTypesRoute);
 app.use("/api/seats", seatsRoute);

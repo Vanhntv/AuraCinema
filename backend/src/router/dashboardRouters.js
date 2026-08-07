@@ -1,8 +1,11 @@
 import express from "express";
-import { getDashboardStats } from "../controllers/dashboardControllers.js";
+import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
+import { getDashboardStats, getDashboardOverview } from "../controllers/dashboardControllers.js";
 
 const router = express.Router();
+const adminOnly = [authMiddleware, authorizeRoles("admin")];
 
-router.get("/stats", getDashboardStats);
+router.get("/stats", adminOnly, getDashboardStats);
+router.get("/overview", adminOnly, getDashboardOverview);
 
 export default router;
