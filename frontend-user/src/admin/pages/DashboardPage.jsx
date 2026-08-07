@@ -20,6 +20,7 @@ import {
   getTodayRevenue,
   getWeeklyRevenue,
 } from "../services/dashboardService";
+import RevenueChart from "../components/dashboard/RevenueChart";
 import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
@@ -46,10 +47,6 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
-const compactNumberFormatter = new Intl.NumberFormat("vi-VN", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
 const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
@@ -230,6 +227,16 @@ const DashboardPage = () => {
     ),
     [monthlyRevenue.days],
   );
+
+  const dailyChartData = useMemo(() => {
+    const date = revenuePeriod === "today" ? dashboardCurrentDate : selectedDate;
+    const [, month, day] = String(date || "").split("-");
+
+    return [{
+      label: day && month ? `${day}/${month}` : "-",
+      revenue: Number(dailyStats.revenue || 0),
+    }];
+  }, [dailyStats.revenue, revenuePeriod, selectedDate]);
 
   const handleRefresh = () => {
     fetchDashboard();
