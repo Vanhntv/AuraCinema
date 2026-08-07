@@ -282,9 +282,11 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
   const originalAggregate = Booking.aggregate;
   const originalFindOne = Movie.findOne;
   const originalCountDocuments = Showtime.countDocuments;
+  const originalShowtimeAggregate = Showtime.aggregate;
   const movieId = "64f000000000000000000001";
   let bookingPipeline;
   let showtimeFilter;
+  let occupancyPipeline;
   let responseBody;
 
   Booking.aggregate = async (pipeline) => {
@@ -308,6 +310,27 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
   Showtime.countDocuments = async (filter) => {
     showtimeFilter = filter;
     return 27;
+  };
+  Showtime.aggregate = async (pipeline) => {
+    occupancyPipeline = pipeline;
+    return [
+    {
+      id: "showtime-1",
+      startTime: new Date("2026-08-01T13:00:00.000Z"),
+      roomName: "Phòng 1",
+      soldSeats: 82,
+      totalSeats: 100,
+      occupancyRate: 82,
+    },
+    {
+      id: "showtime-2",
+      startTime: new Date("2026-08-02T13:00:00.000Z"),
+      roomName: "Phòng 2",
+      soldSeats: 40,
+      totalSeats: 80,
+      occupancyRate: 50,
+    },
+    ];
   };
 
   const response = {
@@ -333,6 +356,7 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     Booking.aggregate = originalAggregate;
     Movie.findOne = originalFindOne;
     Showtime.countDocuments = originalCountDocuments;
+    Showtime.aggregate = originalShowtimeAggregate;
   }
 
   assert.equal(
@@ -344,6 +368,8 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     "2026-08-07T17:00:00.000Z",
   );
   assert.equal(showtimeFilter.start_time.$lt.toISOString(), "2026-08-07T17:00:00.000Z");
+  assert.equal(occupancyPipeline[3].$lookup.from, "seats");
+  assert.equal(occupancyPipeline[4].$lookup.from, "bookings");
   assert.equal(
     bookingPipeline[4].$facet.dailyRevenue[0].$group._id.$dateToString.timezone,
     "Asia/Ho_Chi_Minh",
@@ -369,4 +395,6 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     vip: 135,
     couple: 40,
   });
+  assert.equal(responseBody.data.averageOccupancyRate, 66);
+  assert.equal(responseBody.data.occupancyByShowtime.length, 2);
 });

@@ -1077,7 +1077,7 @@
 
 .dashboard-movie-revenue-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1101,6 +1101,10 @@
 
 .dashboard-movie-revenue-metric.primary > svg {
   color: #2dd4bf;
+}
+
+.dashboard-movie-revenue-metric.occupancy > svg {
+  color: var(--color-info);
 }
 
 .dashboard-movie-revenue-metric span,
@@ -1198,6 +1202,79 @@
 @media (max-width: 560px) {
   .dashboard-seat-type-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-occupancy-list {
+  display: grid;
+  max-height: 360px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+}
+
+.dashboard-occupancy-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(120px, 0.7fr) minmax(140px, 1fr) 58px;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-occupancy-row:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-occupancy-showtime strong,
+.dashboard-occupancy-showtime span {
+  display: block;
+}
+
+.dashboard-occupancy-showtime strong {
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.dashboard-occupancy-showtime span,
+.dashboard-occupancy-seats {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.dashboard-occupancy-progress {
+  height: 7px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.dashboard-occupancy-progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+}
+
+.dashboard-occupancy-rate {
+  color: var(--color-accent-light);
+  font-size: 13px;
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .dashboard-occupancy-row {
+    grid-template-columns: 1fr auto;
+    gap: 7px 12px;
+  }
+
+  .dashboard-occupancy-progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .dashboard-occupancy-seats {
+    display: none;
   }
 }
 

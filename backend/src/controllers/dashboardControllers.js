@@ -587,8 +587,9 @@ export const getMovieRevenue = async (req, res) => {
         $lt: selectedRange.end,
       };
     }
+    showtimeFilter.status = { $ne: "cancelled" };
 
-    const [bookingSummary, showtimeCount] = await Promise.all([
+    const [bookingSummary, showtimeCount, showtimeOccupancy] = await Promise.all([
       Booking.aggregate([
         { $match: bookingMatch },
         {
@@ -703,6 +704,110 @@ export const getMovieRevenue = async (req, res) => {
         },
       ]),
       Showtime.countDocuments(showtimeFilter),
+      Showtime.aggregate([
+        { $match: showtimeFilter },
+        {
+          $lookup: {
+            from: "rooms",
+            localField: "room_id",
+            foreignField: "_id",
+            as: "room",
+          },
+        },
+        { $unwind: "$room" },
+        {
+          $lookup: {
+            from: "seats",
+            let: { roomId: "$room_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$room_id", "$$roomId"] },
+                  deleted_at: null,
+                  status: true,
+                },
+              },
+              { $count: "total" },
+            ],
+            as: "seatCapacity",
+          },
+        },
+        {
+          $lookup: {
+            from: "bookings",
+            let: { showtimeId: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ["$showtime_id", "$$showtimeId"] },
+                  payment_status: "paid",
+                  status: { $in: REVENUE_BOOKING_STATUSES },
+                },
+              },
+              {
+                $project: {
+                  seatCount: {
+                    $size: { $ifNull: ["$showtime_seat_ids", []] },
+                  },
+                },
+              },
+            ],
+            as: "paidBookings",
+          },
+        },
+        {
+          $set: {
+            countedCapacity: {
+              $ifNull: [{ $arrayElemAt: ["$seatCapacity.total", 0] }, 0],
+            },
+            soldSeats: { $sum: "$paidBookings.seatCount" },
+          },
+        },
+        {
+          $set: {
+            totalSeats: {
+              $cond: [
+                { $gt: ["$countedCapacity", 0] },
+                "$countedCapacity",
+                { $ifNull: ["$room.capacity", 0] },
+              ],
+            },
+          },
+        },
+        {
+          $set: {
+            occupancyRate: {
+              $cond: [
+                { $gt: ["$totalSeats", 0] },
+                {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $divide: ["$soldSeats", "$totalSeats"] },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+                0,
+              ],
+            },
+          },
+        },
+        { $sort: { start_time: -1 } },
+        {
+          $project: {
+            _id: 0,
+            id: "$_id",
+            startTime: "$start_time",
+            roomName: "$room.name",
+            soldSeats: 1,
+            totalSeats: 1,
+            occupancyRate: 1,
+          },
+        },
+      ]),
     ]);
 
     const movieRevenueResult = bookingSummary?.[0] ?? {};
@@ -722,6 +827,16 @@ export const getMovieRevenue = async (req, res) => {
         ticketsBySeatType[item._id] = item.count;
       }
     }
+    const occupancyRates = showtimeOccupancy
+      .filter((item) => item.totalSeats > 0)
+      .map((item) => Number(item.occupancyRate || 0));
+    const averageOccupancyRate = occupancyRates.length
+      ? Math.round(
+          (occupancyRates.reduce((sum, rate) => sum + rate, 0) /
+            occupancyRates.length) *
+            100,
+        ) / 100
+      : 0;
     return res.status(200).json({
       success: true,
       data: {
@@ -735,6 +850,8 @@ export const getMovieRevenue = async (req, res) => {
         showtimeCount,
         dailyRevenue,
         ticketsBySeatType,
+        averageOccupancyRate,
+        occupancyByShowtime: showtimeOccupancy,
         from: from || null,
         to: to || null,
       },

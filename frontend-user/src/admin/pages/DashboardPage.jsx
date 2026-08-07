@@ -4,6 +4,7 @@ import {
   HiOutlineCalendar,
   HiOutlineCash,
   HiOutlineChartBar,
+  HiOutlineChartPie,
   HiOutlineCheckCircle,
   HiOutlineFilm,
   HiOutlineClock,
@@ -56,6 +57,14 @@ const numberFormatter = new Intl.NumberFormat("vi-VN");
 const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
+const dashboardDateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
 const dashboardCurrentDate = dashboardDateFormatter.format(new Date());
 const [dashboardCurrentYear, dashboardCurrentMonth] = dashboardCurrentDate
   .split("-")
@@ -78,6 +87,8 @@ const emptyMovieRevenue = {
     vip: 0,
     couple: 0,
   },
+  averageOccupancyRate: 0,
+  occupancyByShowtime: [],
 };
 
 const DashboardPage = () => {
@@ -717,7 +728,16 @@ const DashboardPage = () => {
                 <strong>
                   {movieRevenueLoading
                     ? "..."
-                    : numberFormatter.format(movieRevenue.showtimeCount)}
+                  : numberFormatter.format(movieRevenue.showtimeCount)}
+                </strong>
+              </div>
+              <div className="dashboard-movie-revenue-metric occupancy">
+                <HiOutlineChartPie />
+                <span>Lấp đầy trung bình</span>
+                <strong>
+                  {movieRevenueLoading
+                    ? "..."
+                    : `${numberFormatter.format(movieRevenue.averageOccupancyRate)}%`}
                 </strong>
               </div>
             </div>
@@ -755,6 +775,50 @@ const DashboardPage = () => {
                   </strong>
                 </div>
               </div>
+            </div>
+            <div className="dashboard-movie-daily-chart">
+              <div className="dashboard-movie-chart-heading">
+                <h3>Tỷ lệ lấp đầy theo suất chiếu</h3>
+                <p>Số ghế bán được trên tổng ghế hoạt động của phòng</p>
+              </div>
+              {movieRevenueLoading ? (
+                <div className="dashboard-mini-loading">Đang tải suất chiếu...</div>
+              ) : movieRevenue.occupancyByShowtime.length ? (
+                <div className="dashboard-occupancy-list">
+                  {movieRevenue.occupancyByShowtime.map((showtime) => (
+                    <div className="dashboard-occupancy-row" key={showtime.id}>
+                      <div className="dashboard-occupancy-showtime">
+                        <strong>
+                          {dashboardDateTimeFormatter.format(
+                            new Date(showtime.startTime),
+                          )}
+                        </strong>
+                        <span>{showtime.roomName || "Chưa xác định phòng"}</span>
+                      </div>
+                      <div className="dashboard-occupancy-seats">
+                        {numberFormatter.format(showtime.soldSeats)} / {numberFormatter.format(showtime.totalSeats)} ghế
+                      </div>
+                      <div className="dashboard-occupancy-progress">
+                        <div
+                          style={{
+                            width: `${Math.min(
+                              Number(showtime.occupancyRate || 0),
+                              100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      <strong className="dashboard-occupancy-rate">
+                        {numberFormatter.format(showtime.occupancyRate)}%
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="dashboard-empty-state">
+                  Chưa có suất chiếu để tính tỷ lệ lấp đầy.
+                </div>
+              )}
             </div>
             <div className="dashboard-movie-daily-chart">
               <div className="dashboard-movie-chart-heading">
