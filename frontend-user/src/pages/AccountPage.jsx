@@ -1143,32 +1143,34 @@ function AccountPage() {
     <main className="mx-auto w-[min(1280px,calc(100%_-_56px))] py-10 max-sm:w-[calc(100%_-_28px)]">
       <h1 className="text-center text-3xl font-black text-white">Thông tin cá nhân</h1>
 
-      <nav className="mt-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-2">
-        <div className="flex gap-2 overflow-x-auto">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const selected = activeTab === tab.id;
+      <div className="mt-10 flex justify-center">
+        <nav className="max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-2">
+          <div className="flex w-fit max-w-full gap-2 overflow-x-auto">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const selected = activeTab === tab.id;
 
-            return (
-              <button
-                className={`flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
-                  selected
-                    ? "bg-gradient-to-r from-[#ff321d] to-[#7b4652] text-white shadow-[0_15px_35px_rgba(255,62,29,0.22)]"
-                    : "text-slate-200 hover:bg-white/[0.04] hover:text-white"
-                }`}
-                key={tab.id}
-                onClick={() => handleTabClick(tab.id)}
-                type="button"
-              >
-                <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
-                  <Icon />
-                </span>
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+              return (
+                <button
+                  className={`flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                    selected
+                      ? "bg-gradient-to-r from-[#ff321d] to-[#7b4652] text-white shadow-[0_15px_35px_rgba(255,62,29,0.22)]"
+                      : "text-slate-200 hover:bg-white/[0.04] hover:text-white"
+                  }`}
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id)}
+                  type="button"
+                >
+                  <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
+                    <Icon />
+                  </span>
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
 
       <div className="mt-5">{renderActiveTab()}</div>
       {renderTicketDetailModal()}
