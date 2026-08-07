@@ -25,13 +25,39 @@ import marketingContentRoute from "./router/marketingContentRouters.js";
 import adminMarketingContentRoute from "./router/adminMarketingContentRouters.js";
 import paymentsRoute from "./router/paymentsRouters.js";
 import sepayWebhookRoute from "./router/sepayWebhookRouters.js";
+import ticketsRoute from "./router/ticketsRouters.js";
+import adminTicketsRoute from "./router/adminTicketsRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
+  ...(process.env.CORS_ORIGINS || "").split(","),
+]
+  .map((origin) => String(origin || "").trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.disable("x-powered-by");
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Origin không được phép truy cập API"));
+  },
+}));
 app.use(
   express.json({
+    limit: process.env.JSON_BODY_LIMIT || "1mb",
     verify: (req, res, buf) => {
       req.rawBody = buf.toString("utf8");
     },
@@ -63,6 +89,8 @@ app.use("/api/marketing-content", marketingContentRoute);
 app.use("/api/admin/marketing-content", adminMarketingContentRoute);
 app.use("/api/payments", paymentsRoute);
 app.use("/api/sepay", sepayWebhookRoute);
+app.use("/api/tickets", ticketsRoute);
+app.use("/api/admin/tickets", adminTicketsRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

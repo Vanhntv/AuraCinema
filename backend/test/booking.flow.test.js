@@ -7,6 +7,7 @@ import { holdShowtimeSeats } from "../src/controllers/showtimeSeatsControllers.j
 import Booking from "../src/models/Booking.js";
 import Showtime from "../src/models/Showtime.js";
 import ShowtimeSeat from "../src/models/ShowtimeSeat.js";
+import Ticket from "../src/models/Ticket.js";
 import User from "../src/models/User.js";
 
 const makeResponse = () => ({
@@ -106,7 +107,7 @@ test("hold seats releases expired holds before validating a new hold", async () 
 
     await holdShowtimeSeats(req, res);
 
-    assert.equal(res.statusCode, 200);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.equal(res.body.success, true);
     assert.equal(updateCalls.length, 2);
     assert.deepEqual(updateCalls[0].filter.status, "held");
@@ -304,18 +305,74 @@ test("confirm booking payment marks reserved seats as booked", async () => {
       return this;
     },
   };
+  const populatedBooking = {
+    ...booking,
+    showtime_id: {
+      _id: showtimeId,
+      movie_id: new mongoose.Types.ObjectId(),
+      room_id: new mongoose.Types.ObjectId(),
+    },
+    showtime_seat_ids: seatIds.map((seatId, index) => ({
+      _id: seatId,
+      price: 50000,
+      seat_id: {
+        _id: new mongoose.Types.ObjectId(),
+        seat_row: "A",
+        seat_number: index + 1,
+        seat_code: `A${index + 1}`,
+      },
+    })),
+  };
 
   await withPatched([
     [mongoose, "startSession", async () => makeFakeSession()],
     [Booking, "findOne", () => sessionResult(booking)],
+    [Booking, "findById", () => ({
+      populate() {
+        return this;
+      },
+      session() {
+        return this;
+      },
+      then(resolve, reject) {
+        return Promise.resolve({
+          ...populatedBooking,
+          status: booking.status,
+          payment_status: booking.payment_status,
+        }).then(resolve, reject);
+      },
+    })],
     [Showtime, "findOne", () => sessionResult({
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
+      room_id: new mongoose.Types.ObjectId(),
     })],
     [ShowtimeSeat, "updateMany", async (filter, update) => {
       bookedSeatUpdate = { filter, update };
       return { modifiedCount: 2 };
     }],
+    [Ticket, "find", () => ({
+      select() {
+        return this;
+      },
+      session: async () => [],
+      sort() {
+        return {
+          select() {
+            return {
+              session: async () => populatedBooking.showtime_seat_ids.map((showtimeSeat) => ({
+                _id: new mongoose.Types.ObjectId(),
+                ticketCode: `AURA-TEST-${showtimeSeat.seat_id.seat_code}`,
+                seatLabel: showtimeSeat.seat_id.seat_code,
+                seatId: showtimeSeat.seat_id._id,
+                qrTokenEncrypted: "v1:QTeouqvAKL8GjM7r:KRHBXPgwjaXEzaTVra3rKA:SllYk3iBBY1JUsasJaJDvA",
+              })),
+            };
+          },
+        };
+      },
+    })],
+    [Ticket, "bulkWrite", async () => ({ upsertedCount: 2 })],
   ], async () => {
     const req = {
       params: { id: bookingId },
