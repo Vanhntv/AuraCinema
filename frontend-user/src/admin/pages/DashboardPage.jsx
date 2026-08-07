@@ -53,8 +53,8 @@ const compactNumberFormatter = new Intl.NumberFormat("vi-VN", {
 const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
-const [dashboardCurrentYear, dashboardCurrentMonth] = dashboardDateFormatter
-  .format(new Date())
+const dashboardCurrentDate = dashboardDateFormatter.format(new Date());
+const [dashboardCurrentYear, dashboardCurrentMonth] = dashboardCurrentDate
   .split("-")
   .map(Number);
 
@@ -69,20 +69,14 @@ const DashboardPage = () => {
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedDate, setSelectedDate] = useState(() =>
-    dashboardDateFormatter.format(new Date()),
-  );
+  const [revenuePeriod, setRevenuePeriod] = useState("today");
+  const [selectedDate, setSelectedDate] = useState(dashboardCurrentDate);
   const [dailyStats, setDailyStats] = useState(emptyDailyStats);
   const [dailyLoading, setDailyLoading] = useState(true);
   const [dailyError, setDailyError] = useState("");
-  const [selectedWeekDate, setSelectedWeekDate] = useState(() =>
-    dashboardDateFormatter.format(new Date()),
-  );
   const [weeklyRevenue, setWeeklyRevenue] = useState([]);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
   const [weeklyError, setWeeklyError] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(dashboardCurrentMonth);
-  const [selectedYear, setSelectedYear] = useState(dashboardCurrentYear);
   const [monthlyRevenue, setMonthlyRevenue] = useState({
     totalRevenue: 0,
     days: [],
@@ -150,8 +144,12 @@ const DashboardPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchDailyStats(selectedDate);
-  }, [fetchDailyStats, selectedDate]);
+    if (revenuePeriod === "today") {
+      fetchDailyStats(dashboardCurrentDate);
+    } else if (revenuePeriod === "custom") {
+      fetchDailyStats(selectedDate);
+    }
+  }, [fetchDailyStats, revenuePeriod, selectedDate]);
 
   const fetchWeeklyRevenue = useCallback(async (date) => {
     if (!date) {
@@ -176,8 +174,10 @@ const DashboardPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchWeeklyRevenue(selectedWeekDate);
-  }, [fetchWeeklyRevenue, selectedWeekDate]);
+    if (revenuePeriod === "week") {
+      fetchWeeklyRevenue(dashboardCurrentDate);
+    }
+  }, [fetchWeeklyRevenue, revenuePeriod]);
 
   const weeklyRevenueSummary = useMemo(() => {
     const total = weeklyRevenue.reduce(
@@ -218,8 +218,10 @@ const DashboardPage = () => {
   }, []);
 
   useEffect(() => {
-    fetchMonthlyRevenue(selectedMonth, selectedYear);
-  }, [fetchMonthlyRevenue, selectedMonth, selectedYear]);
+    if (revenuePeriod === "month") {
+      fetchMonthlyRevenue(dashboardCurrentMonth, dashboardCurrentYear);
+    }
+  }, [fetchMonthlyRevenue, revenuePeriod]);
 
   const monthlyMaximum = useMemo(
     () => Math.max(
@@ -228,6 +230,20 @@ const DashboardPage = () => {
     ),
     [monthlyRevenue.days],
   );
+
+  const handleRefresh = () => {
+    fetchDashboard();
+
+    if (revenuePeriod === "today") {
+      fetchDailyStats(dashboardCurrentDate);
+    } else if (revenuePeriod === "week") {
+      fetchWeeklyRevenue(dashboardCurrentDate);
+    } else if (revenuePeriod === "month") {
+      fetchMonthlyRevenue(dashboardCurrentMonth, dashboardCurrentYear);
+    } else {
+      fetchDailyStats(selectedDate);
+    }
+  };
 
   const statCards = useMemo(
     () => [
@@ -294,7 +310,7 @@ const DashboardPage = () => {
         <div className="dashboard-header-actions">
           <button
             className="btn btn-secondary"
-            onClick={fetchDashboard}
+            onClick={handleRefresh}
             disabled={loading}
           >
             <HiOutlineRefresh />
@@ -340,12 +356,38 @@ const DashboardPage = () => {
         ))}
       </div>
 
+      <section className="dashboard-revenue-filter">
+        <div>
+          <h2>Phân tích doanh thu</h2>
+          <p>Chọn khoảng thời gian muốn theo dõi</p>
+        </div>
+        <label className="dashboard-date-filter">
+          <span>Thời gian</span>
+          <select
+            className="form-input dashboard-period-select"
+            value={revenuePeriod}
+            onChange={(event) => setRevenuePeriod(event.target.value)}
+          >
+            <option value="today">Hôm nay</option>
+            <option value="week">Tuần này</option>
+            <option value="month">Tháng này</option>
+            <option value="custom">Tùy chọn</option>
+          </select>
+        </label>
+      </section>
+
+      {(revenuePeriod === "today" || revenuePeriod === "custom") && (
       <section className="dashboard-daily-panel">
         <div className="dashboard-daily-header">
           <div>
-            <h2>Doanh thu theo ngày</h2>
+            <h2>
+              {revenuePeriod === "today"
+                ? "Doanh thu hôm nay"
+                : "Doanh thu ngày tùy chọn"}
+            </h2>
             <p>Chỉ tính booking đã thanh toán và xác nhận</p>
           </div>
+          {revenuePeriod === "custom" && (
           <label className="dashboard-date-filter">
             <span>Chọn ngày</span>
             <input
@@ -356,6 +398,7 @@ const DashboardPage = () => {
               onChange={(event) => setSelectedDate(event.target.value)}
             />
           </label>
+          )}
         </div>
 
         {dailyError ? (
@@ -383,7 +426,9 @@ const DashboardPage = () => {
           </div>
         )}
       </section>
+      )}
 
+      {revenuePeriod === "week" && (
       <section className="dashboard-weekly-panel">
         <div className="dashboard-daily-header">
           <div>
@@ -394,16 +439,6 @@ const DashboardPage = () => {
                 : currencyFormatter.format(weeklyRevenueSummary.total)}
             </p>
           </div>
-          <label className="dashboard-date-filter">
-            <span>Chọn ngày trong tuần</span>
-            <input
-              className="form-input dashboard-date-input"
-              type="date"
-              required
-              value={selectedWeekDate}
-              onChange={(event) => setSelectedWeekDate(event.target.value)}
-            />
-          </label>
         </div>
 
         {weeklyError ? (
@@ -455,7 +490,9 @@ const DashboardPage = () => {
           </div>
         )}
       </section>
+      )}
 
+      {revenuePeriod === "month" && (
       <section className="dashboard-monthly-panel">
         <div className="dashboard-daily-header">
           <div>
@@ -465,32 +502,6 @@ const DashboardPage = () => {
                 ? "..."
                 : currencyFormatter.format(monthlyRevenue.totalRevenue)}
             </p>
-          </div>
-          <div className="dashboard-month-filter">
-            <label className="dashboard-date-filter">
-              <span>Tháng</span>
-              <select
-                className="form-input dashboard-month-select"
-                value={selectedMonth}
-                onChange={(event) => setSelectedMonth(Number(event.target.value))}
-              >
-                {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
-                  <option value={month} key={month}>Tháng {month}</option>
-                ))}
-              </select>
-            </label>
-            <label className="dashboard-date-filter">
-              <span>Năm</span>
-              <input
-                className="form-input dashboard-year-input"
-                type="number"
-                min="1000"
-                max="9999"
-                required
-                value={selectedYear}
-                onChange={(event) => setSelectedYear(event.target.value)}
-              />
-            </label>
           </div>
         </div>
 
@@ -546,6 +557,7 @@ const DashboardPage = () => {
           </div>
         )}
       </section>
+      )}
 
       <div className="dashboard-grid">
         <section className="table-container dashboard-table">

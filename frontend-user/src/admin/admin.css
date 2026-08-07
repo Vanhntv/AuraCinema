@@ -674,6 +674,33 @@
   background: var(--color-bg-card);
 }
 
+.dashboard-revenue-filter {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-card), var(--color-bg-card);
+}
+
+.dashboard-revenue-filter h2 {
+  color: var(--color-text-primary);
+  font-size: 17px;
+}
+
+.dashboard-revenue-filter p {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dashboard-period-select {
+  min-width: 180px;
+}
+
 .dashboard-daily-header {
   display: flex;
   align-items: flex-end;
@@ -2373,6 +2400,15 @@
   .dashboard-daily-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .dashboard-revenue-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-period-select {
+    width: 100%;
   }
 
   .dashboard-date-input {
