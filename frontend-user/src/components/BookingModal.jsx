@@ -22,7 +22,11 @@ const SEAT_TYPES = {
 };
 
 function normalizeText(value = "") {
-  return String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/đ/g, "d");
 }
 
 function getSeatType(seat) {
@@ -277,7 +281,15 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [voucherError, setVoucherError] = useState("");
   const [voucherMessage, setVoucherMessage] = useState("");
   const [showLoginNotice, setShowLoginNotice] = useState(false);
+  const [initialRequestedDate] = useState(
+    () => new URLSearchParams(location.search).get("date") || "",
+  );
   const initialShowtimeId = getShowtimeId(initialShowtime);
+  const initialShowtimeDateValue = getShowtimeDateValue(initialShowtime);
+  const shouldLoadInitialShowtime = Boolean(
+    initialShowtimeId &&
+      (!initialRequestedDate || initialRequestedDate === initialShowtimeDateValue),
+  );
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
   const bookingResultRef = useRef(null);
@@ -340,7 +352,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   useEffect(() => {
     if (!movie?._id) return;
 
-    const initialDateValue = getShowtimeDateValue(initialShowtime);
+    const initialDateValue = initialRequestedDate || initialShowtimeDateValue;
     const nextDate =
       dateOptions.find((option) => option.value === initialDateValue) ||
       dateOptions[0];
@@ -350,7 +362,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setSelectedShowtime(null);
     setShowtimeSeats([]);
     setSelectedSeats([]);
-    setStep(initialShowtimeId ? "select-seat" : "select-showtime");
+    setStep(shouldLoadInitialShowtime ? "select-seat" : "select-showtime");
     setIsLoadingSeats(false);
     setError("");
     setSeatError("");
@@ -363,11 +375,16 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setAppliedVoucher(null);
     setVoucherError("");
     setVoucherMessage("");
-  }, [movie?._id, initialShowtimeId]);
+  }, [
+    initialRequestedDate,
+    initialShowtimeDateValue,
+    initialShowtimeId,
+    movie?._id,
+    shouldLoadInitialShowtime,
+  ]);
 
   useEffect(() => {
     if (!movie?._id) return undefined;
-    if (initialShowtimeId) return undefined;
     let isActive = true;
     async function loadShowtimes() {
       try {
@@ -386,7 +403,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
     loadShowtimes();
     return () => { isActive = false; };
-  }, [initialShowtimeId, movie?._id, selectedDate.value]);
+  }, [movie?._id, selectedDate.value]);
 
   useEffect(() => {
     if (!movie?._id) return undefined;
@@ -418,7 +435,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   }, [movie?._id]);
 
   useEffect(() => {
-    if (!movie?._id || !initialShowtimeId || !initialShowtime) {
+    if (!movie?._id || !shouldLoadInitialShowtime || !initialShowtime) {
       return undefined;
     }
 
@@ -449,7 +466,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     return () => {
       isActive = false;
     };
-  }, [initialShowtime, initialShowtimeId, movie?._id]);
+  }, [initialShowtime, initialShowtimeId, movie?._id, shouldLoadInitialShowtime]);
 
   useEffect(() => {
     if (!holdExpiresAt) return undefined;
@@ -604,6 +621,19 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const handleDateChange = async (dateOption) => {
     await releaseHeldSeats();
+
+    if (variant === "page") {
+      const nextSearchParams = new URLSearchParams(location.search);
+      nextSearchParams.set("date", dateOption.value);
+      navigate(
+        {
+          pathname: location.pathname,
+          search: `?${nextSearchParams.toString()}`,
+        },
+        { replace: true },
+      );
+    }
+
     setSelectedDate(dateOption);
     setSelectedShowtime(null);
     setShowtimeSeats([]);

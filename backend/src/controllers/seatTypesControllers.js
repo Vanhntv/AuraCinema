@@ -3,8 +3,7 @@ import { ensureCoreSeatTypes } from "../utils/seatTypes.js";
 
 export const getAllSeatTypes = async (req, res) => {
   try {
-    await ensureCoreSeatTypes();
-    const seatTypes = await SeatType.find().sort({ created_at: -1 });
+    const { seatTypes } = await ensureCoreSeatTypes();
 
     res.status(200).json({
       success: true,

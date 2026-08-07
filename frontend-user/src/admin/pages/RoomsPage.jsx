@@ -4,7 +4,6 @@ import {
   HiOutlineOfficeBuilding,
   HiOutlinePencil,
   HiOutlinePlus,
-  HiOutlinePlusCircle,
   HiOutlineRefresh,
   HiOutlineSearch,
   HiOutlineTrash,
@@ -19,7 +18,7 @@ import {
   updateRoom,
   updateRoomStatus,
 } from "../services/roomService";
-import { createSeatType, getSeatTypes } from "../services/seatTypeService";
+import { getSeatTypes } from "../services/seatTypeService";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
 
@@ -59,6 +58,7 @@ const normalizeSeatTypeName = (value = "") =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/đ/g, "d")
     .trim();
 const getSeatTypeTone = (seatType) => {
   const name = normalizeSeatTypeName(seatType?.name);
@@ -68,7 +68,35 @@ const getSeatTypeTone = (seatType) => {
   if (name.includes("wheelchair") || name.includes("xe lan")) return "wheelchair";
   return "normal";
 };
-const isWheelchairSeatType = (seatType) => getSeatTypeTone(seatType) === "wheelchair";
+const SEAT_TYPE_ORDER = ["broken", "normal", "vip", "couple"];
+const SEAT_TYPE_LABELS = {
+  broken: "Ghế hỏng",
+  normal: "Ghế thường",
+  vip: "VIP",
+  couple: "Ghế đôi",
+};
+const normalizeAvailableSeatTypes = (seatTypes = []) => {
+  const seatTypeByTone = new Map();
+
+  seatTypes.forEach((seatType) => {
+    const tone = getSeatTypeTone(seatType);
+    if (!SEAT_TYPE_ORDER.includes(tone)) return;
+
+    const currentSeatType = seatTypeByTone.get(tone);
+    const isCanonicalName =
+      normalizeSeatTypeName(seatType.name) ===
+      normalizeSeatTypeName(SEAT_TYPE_LABELS[tone]);
+
+    if (!currentSeatType || isCanonicalName) {
+      seatTypeByTone.set(tone, seatType);
+    }
+  });
+
+  return SEAT_TYPE_ORDER.flatMap((tone) => {
+    const seatType = seatTypeByTone.get(tone);
+    return seatType ? [{ ...seatType, name: SEAT_TYPE_LABELS[tone] }] : [];
+  });
+};
 const getCouplePairClass = ({ isCouple, previousCoupleCount, hasNextCouple }) => {
   if (!isCouple) return "";
   if (previousCoupleCount % 2 === 1) return "couple-connected-left";
@@ -333,7 +361,18 @@ function RoomsPage() {
       ]);
       setRooms(roomResponse.data || []);
       setCinemas(cinemaResponse.data || []);
-      setSeatTypes((seatTypeResponse.data || []).filter((seatType) => !isWheelchairSeatType(seatType)));
+      const normalizedSeatTypes = normalizeAvailableSeatTypes(seatTypeResponse.data || []);
+      const normalSeatType = normalizedSeatTypes.find(
+        (seatType) => getSeatTypeTone(seatType) === "normal",
+      );
+      const nextDefaultSeatTypeId = normalSeatType?._id || normalizedSeatTypes[0]?._id || "";
+
+      setSeatTypes(normalizedSeatTypes);
+      setSelectedSeatTypeId((currentSeatTypeId) =>
+        normalizedSeatTypes.some((seatType) => seatType._id === currentSeatTypeId)
+          ? currentSeatTypeId
+          : nextDefaultSeatTypeId,
+      );
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể tải dữ liệu phòng chiếu");
     } finally {
@@ -346,19 +385,6 @@ function RoomsPage() {
     const normalType = seatTypes.find((seatType) => getSeatTypeTone(seatType) === "normal");
     return normalType?._id || seatTypes[0]?._id || "";
   }, [seatTypes]);
-
-  useEffect(() => {
-    if (!selectedSeatTypeId && defaultSeatTypeId) {
-      setSelectedSeatTypeId(defaultSeatTypeId);
-    }
-    if (
-      selectedSeatTypeId &&
-      !seatTypes.some((seatType) => seatType._id === selectedSeatTypeId) &&
-      defaultSeatTypeId
-    ) {
-      setSelectedSeatTypeId(defaultSeatTypeId);
-    }
-  }, [defaultSeatTypeId, seatTypes, selectedSeatTypeId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -770,36 +796,6 @@ function RoomsPage() {
     applySeatTypeToSeatCodes(seatCodes);
   };
 
-  const addPresetSeatType = async (preset) => {
-    try {
-      const response = await createSeatType(preset);
-      const createdSeatType = response.data;
-      setSeatTypes((current) => [...current, createdSeatType]);
-      setSelectedSeatTypeId(createdSeatType._id);
-      addToast("success", `Đã thêm loại ghế ${createdSeatType.name}.`);
-    } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể thêm loại ghế");
-    }
-  };
-
-  const missingPresetSeatTypes = [
-    {
-      name: "Couple",
-      description: "Ghe doi danh cho hai khach",
-      price_multiplier: 1.8,
-    },
-    {
-      name: "Ghe hong",
-      description: "Ghe khong the ban ve",
-      price_multiplier: 0,
-    },
-  ].filter(
-    (preset) =>
-      !seatTypes.some(
-        (seatType) => normalizeSeatTypeName(seatType.name) === normalizeSeatTypeName(preset.name),
-      ),
-  );
-
   return (
     <div className="page-container">
       <div className="page-header">
@@ -924,17 +920,6 @@ function RoomsPage() {
                     onClick={() => selectSeatType(seatType._id)}
                   >
                     {seatType.name}
-                  </button>
-                ))}
-                {missingPresetSeatTypes.map((preset) => (
-                  <button
-                    className="seat-type-chip add"
-                    key={preset.name}
-                    type="button"
-                    onClick={() => addPresetSeatType(preset)}
-                  >
-                    <HiOutlinePlusCircle />
-                    {preset.name}
                   </button>
                 ))}
               </div>

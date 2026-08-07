@@ -12,12 +12,9 @@ import {
   verifyVoucherService,
 } from "../services/voucherService.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
-import { isBrokenSeatType } from "../utils/seatTypes.js";
+import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
 
-const normalizeText = (value = "") =>
-  String(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-const seatTypeName = (seat) => normalizeText(seat.seat_id?.seat_type_id?.name || "").trim();
+const seatTypeName = (seat) => normalizeSeatTypeName(seat.seat_id?.seat_type_id?.name);
 
 const isCoupleSeat = (seat) => {
   const typeName = seatTypeName(seat);
