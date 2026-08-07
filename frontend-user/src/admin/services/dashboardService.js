@@ -28,3 +28,10 @@ export const getWeeklyRevenue = async (date) => {
   });
   return res.data;
 };
+
+export const getMonthlyRevenue = async (month, year) => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/monthly", {
+    params: { month, year },
+  });
+  return res.data;
+};

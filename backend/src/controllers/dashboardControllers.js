@@ -75,6 +75,34 @@ export const getWeekRange = (date) => {
   return { start, end, days };
 };
 
+export const getMonthRange = (monthValue, yearValue) => {
+  const monthText = String(monthValue || "");
+  const yearText = String(yearValue || "");
+  if (!/^\d{1,2}$/.test(monthText) || !/^\d{4}$/.test(yearText)) {
+    return null;
+  }
+
+  const month = Number(monthText);
+  const year = Number(yearText);
+  if (month < 1 || month > 12 || year < 1000 || year > 9999) {
+    return null;
+  }
+
+  const start = new Date(Date.UTC(year, month - 1, 1, -7));
+  const end = new Date(Date.UTC(year, month, 1, -7));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const paddedMonth = String(month).padStart(2, "0");
+  const days = Array.from({ length: daysInMonth }, (_, index) => {
+    const day = String(index + 1).padStart(2, "0");
+    return {
+      label: day,
+      date: `${year}-${paddedMonth}-${day}`,
+    };
+  });
+
+  return { start, end, days, month, year };
+};
+
 const formatTime = (value) => {
   if (!value) {
     return null;
@@ -355,6 +383,68 @@ export const getWeeklyRevenue = async (req, res) => {
     return res.status(200).json({
       success: true,
       data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getMonthlyRevenue = async (req, res) => {
+  const monthRange = getMonthRange(req.query?.month, req.query?.year);
+  if (!monthRange) {
+    return res.status(400).json({
+      success: false,
+      message: "Tháng hoặc năm không hợp lệ.",
+    });
+  }
+
+  try {
+    const groupedRevenue = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: {
+            $gte: monthRange.start,
+            $lt: monthRange.end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$created_at",
+              timezone: DASHBOARD_TIME_ZONE,
+            },
+          },
+          revenue: { $sum: "$total_price" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const revenueByDate = new Map(
+      groupedRevenue.map((item) => [item._id, item.revenue]),
+    );
+    const days = monthRange.days.map((day) => ({
+      ...day,
+      revenue: revenueByDate.get(day.date) ?? 0,
+    }));
+    const totalRevenue = days.reduce((sum, day) => sum + day.revenue, 0);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        month: monthRange.month,
+        year: monthRange.year,
+        totalRevenue,
+        days,
+      },
     });
   } catch (error) {
     return res.status(500).json({

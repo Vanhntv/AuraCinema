@@ -4,6 +4,8 @@ import {
   getDailyRevenue,
   getDashboardOverview,
   getDateRange,
+  getMonthlyRevenue,
+  getMonthRange,
   getTodayRange,
   getWeeklyRevenue,
   getWeekRange,
@@ -46,6 +48,17 @@ test("getWeekRange uses Monday through Sunday in Vietnam", () => {
   );
   assert.equal(range.days[0].date, "2026-08-03");
   assert.equal(range.days[6].date, "2026-08-09");
+});
+
+test("getMonthRange returns every day in a leap-year month", () => {
+  const range = getMonthRange("2", "2028");
+
+  assert.equal(range.start.toISOString(), "2028-01-31T17:00:00.000Z");
+  assert.equal(range.end.toISOString(), "2028-02-29T17:00:00.000Z");
+  assert.equal(range.days.length, 29);
+  assert.equal(range.days[0].date, "2028-02-01");
+  assert.equal(range.days[28].date, "2028-02-29");
+  assert.equal(getMonthRange("13", "2028"), null);
 });
 
 test("getDashboardOverview returns tickets and successful paid bookings", async () => {
@@ -182,4 +195,43 @@ test("getWeeklyRevenue groups revenue and fills days without bookings", async ()
       { label: "CN", revenue: 0 },
     ],
   );
+});
+
+test("getMonthlyRevenue returns daily values and the monthly total", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [
+      { _id: "2026-08-01", revenue: 10000000 },
+      { _id: "2026-08-03", revenue: 8000000 },
+    ];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getMonthlyRevenue(
+      { query: { month: "8", year: "2026" } },
+      response,
+    );
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(receivedPipeline[1].$group._id.$dateToString.timezone, "Asia/Ho_Chi_Minh");
+  assert.equal(responseBody.data.days.length, 31);
+  assert.equal(responseBody.data.days[1].revenue, 0);
+  assert.equal(responseBody.data.totalRevenue, 18000000);
 });

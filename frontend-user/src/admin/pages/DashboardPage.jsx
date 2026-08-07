@@ -16,6 +16,7 @@ import {
   getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
+  getMonthlyRevenue,
   getTodayRevenue,
   getWeeklyRevenue,
 } from "../services/dashboardService";
@@ -52,6 +53,10 @@ const compactNumberFormatter = new Intl.NumberFormat("vi-VN", {
 const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
+const [dashboardCurrentYear, dashboardCurrentMonth] = dashboardDateFormatter
+  .format(new Date())
+  .split("-")
+  .map(Number);
 
 const emptyDailyStats = {
   revenue: 0,
@@ -76,6 +81,14 @@ const DashboardPage = () => {
   const [weeklyRevenue, setWeeklyRevenue] = useState([]);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
   const [weeklyError, setWeeklyError] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(dashboardCurrentMonth);
+  const [selectedYear, setSelectedYear] = useState(dashboardCurrentYear);
+  const [monthlyRevenue, setMonthlyRevenue] = useState({
+    totalRevenue: 0,
+    days: [],
+  });
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
+  const [monthlyError, setMonthlyError] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -178,6 +191,43 @@ const DashboardPage = () => {
 
     return { total, maximum };
   }, [weeklyRevenue]);
+
+  const fetchMonthlyRevenue = useCallback(async (month, year) => {
+    if (!month || !year) {
+      setMonthlyRevenue({ totalRevenue: 0, days: [] });
+      setMonthlyError("Vui lòng chọn đầy đủ tháng và năm.");
+      setMonthlyLoading(false);
+      return;
+    }
+
+    try {
+      setMonthlyLoading(true);
+      setMonthlyError("");
+      const response = await getMonthlyRevenue(month, year);
+      setMonthlyRevenue({
+        totalRevenue: response.data?.totalRevenue ?? 0,
+        days: response.data?.days || [],
+      });
+    } catch (err) {
+      setMonthlyError(
+        err.response?.data?.message || "Không thể tải doanh thu theo tháng.",
+      );
+    } finally {
+      setMonthlyLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMonthlyRevenue(selectedMonth, selectedYear);
+  }, [fetchMonthlyRevenue, selectedMonth, selectedYear]);
+
+  const monthlyMaximum = useMemo(
+    () => Math.max(
+      ...monthlyRevenue.days.map((item) => Number(item.revenue || 0)),
+      0,
+    ),
+    [monthlyRevenue.days],
+  );
 
   const statCards = useMemo(
     () => [
@@ -398,6 +448,97 @@ const DashboardPage = () => {
                     </div>
                     <strong>{item.label}</strong>
                     <small>{shortDate}</small>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="dashboard-monthly-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>Doanh thu theo tháng</h2>
+            <p>
+              Tổng tháng: {monthlyLoading
+                ? "..."
+                : currencyFormatter.format(monthlyRevenue.totalRevenue)}
+            </p>
+          </div>
+          <div className="dashboard-month-filter">
+            <label className="dashboard-date-filter">
+              <span>Tháng</span>
+              <select
+                className="form-input dashboard-month-select"
+                value={selectedMonth}
+                onChange={(event) => setSelectedMonth(Number(event.target.value))}
+              >
+                {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                  <option value={month} key={month}>Tháng {month}</option>
+                ))}
+              </select>
+            </label>
+            <label className="dashboard-date-filter">
+              <span>Năm</span>
+              <input
+                className="form-input dashboard-year-input"
+                type="number"
+                min="1000"
+                max="9999"
+                required
+                value={selectedYear}
+                onChange={(event) => setSelectedYear(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        {monthlyError ? (
+          <div className="dashboard-daily-error">{monthlyError}</div>
+        ) : (
+          <div className="dashboard-monthly-chart-scroll">
+            <div
+              className="dashboard-monthly-chart"
+              aria-busy={monthlyLoading}
+              aria-label="Biểu đồ doanh thu theo tháng"
+              role="img"
+              style={{
+                gridTemplateColumns: `repeat(${Math.max(
+                  monthlyRevenue.days.length || 31,
+                  1,
+                )}, minmax(32px, 1fr))`,
+                minWidth: `${Math.max(
+                  760,
+                  (monthlyRevenue.days.length || 31) * 42,
+                )}px`,
+              }}
+            >
+              {(monthlyLoading
+                ? Array.from({ length: 31 }, (_, index) => ({
+                    label: String(index + 1).padStart(2, "0"),
+                    date: "",
+                    revenue: 0,
+                  }))
+                : monthlyRevenue.days
+              ).map((item) => {
+                const revenue = Number(item.revenue || 0);
+                const height = monthlyMaximum
+                  ? Math.max((revenue / monthlyMaximum) * 100, revenue ? 3 : 0)
+                  : 0;
+
+                return (
+                  <div className="dashboard-monthly-column" key={`${item.label}-${item.date}`}>
+                    <div
+                      className="dashboard-weekly-track"
+                      title={`Ngày ${item.label}: ${currencyFormatter.format(revenue)}`}
+                    >
+                      <div
+                        className="dashboard-weekly-bar"
+                        style={{ "--bar-height": `${height}%` }}
+                      />
+                    </div>
+                    <strong>{item.label}</strong>
                   </div>
                 );
               })}
