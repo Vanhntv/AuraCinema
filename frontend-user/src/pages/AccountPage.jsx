@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
 import {
   HiOutlineCreditCard,
-  HiOutlineGift,
   HiOutlineLockClosed,
   HiOutlineSparkles,
   HiOutlineTag,
@@ -11,12 +10,9 @@ import {
   HiOutlineUser,
 } from "react-icons/hi";
 import { changePassword, updateProfile } from "../api/authApi";
-import { promotionItems } from "../data/promotionContent";
-import { getMarketingContent } from "../services/marketingContentService";
 import { getMyTicketDetail, getMyTicketQr, getMyTickets } from "../services/ticketService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
-import { mapCmsContentItem } from "../utils/marketingContent";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
 const tierTargets = {
@@ -43,7 +39,6 @@ const tabs = [
   { id: "tickets", label: "Vé của tôi", icon: HiOutlineTicket },
   { id: "points", label: "Lịch sử điểm thưởng", icon: HiOutlineSparkles },
   { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
-  { id: "promotions", label: "Chương trình khuyến mãi", icon: HiOutlineGift },
 ];
 
 const TICKETS_PER_PAGE = 10;
@@ -191,44 +186,45 @@ function MemberCard({ user, loyalty }) {
     .replace(/\W/g, "")
     .slice(-13)
     .padStart(13, "8");
-  const qrSeed = cardCode.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  const qrCells = Array.from({ length: 81 }, (_, index) => {
-    const row = Math.floor(index / 9);
-    const col = index % 9;
-    return row < 2 || col < 2 || (index + qrSeed + row * col) % 3 !== 0;
-  });
 
   return (
-    <div className="relative aspect-[3/5] w-full max-w-[310px] overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(135deg,#f7e441_0%,#62a7ff_52%,#222b7a_100%)] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.35)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.7),transparent_18%),radial-gradient(circle_at_82%_70%,rgba(255,115,0,0.45),transparent_24%)]" />
-      <div className="relative z-10">
-        <div className="text-sm font-black uppercase leading-tight text-[#1a2455]">
-          Aura
-          <br />
-          Cinema
-          <br />
-          Center
+    <div className="relative flex min-h-[360px] w-full max-w-[340px] overflow-hidden rounded-[28px] border border-white/15 bg-[linear-gradient(135deg,#f7e441_0%,#62a7ff_52%,#222b7a_100%)] p-7 shadow-[0_28px_80px_rgba(0,0,0,0.35)] max-sm:min-h-[300px] max-sm:max-w-full">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,255,255,0.75),transparent_18%),radial-gradient(circle_at_82%_72%,rgba(255,115,0,0.45),transparent_25%)]" />
+      <div className="absolute -bottom-20 -right-16 h-52 w-52 rounded-full border border-white/25 bg-white/10" />
+      <div className="relative z-10 flex w-full flex-col justify-between">
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-xl font-black uppercase leading-tight tracking-[0.04em] text-[#1a2455]">
+            AuraCinema
+          </div>
+          <span className="rounded-full bg-white px-4 py-1.5 text-xs font-black uppercase text-[#101827] shadow-sm">
+            {loyalty.label}
+          </span>
         </div>
-        <div className="mx-auto mt-10 grid w-40 grid-cols-9 gap-1 rounded-2xl bg-white p-4 shadow-xl">
-          {qrCells.map((filled, index) => (
-            <span
-              className={`aspect-square rounded-[2px] ${filled ? "bg-black" : "bg-white"}`}
-              key={index}
-            />
-          ))}
+
+        <div className="my-8">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-[#263066]/75">
+            Hạng thẻ
+          </p>
+          <p className="mt-3 text-4xl font-black uppercase leading-none text-white drop-shadow max-sm:text-3xl">
+            {loyalty.label}
+          </p>
         </div>
-        <div className="absolute bottom-6 left-0 right-0 text-center">
-          <p className="text-2xl font-black uppercase tracking-[0.08em] text-white drop-shadow">
+
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#263066]/80">
+            Chủ thẻ
+          </p>
+          <p className="mt-2 break-words text-2xl font-black uppercase tracking-[0.06em] text-white drop-shadow max-sm:text-xl">
             {user?.full_name || "Aura Member"}
           </p>
-          <p className="mt-1 text-xl font-black tracking-[0.08em] text-white drop-shadow">
+          <p className="mt-5 text-xs font-black uppercase tracking-[0.18em] text-[#263066]/80">
+            Mã thẻ
+          </p>
+          <p className="mt-2 font-mono text-xl font-black tracking-[0.08em] text-white drop-shadow max-sm:text-lg">
             {cardCode}
           </p>
         </div>
       </div>
-      <span className="absolute right-5 top-5 rounded-full bg-white px-4 py-1 text-xs font-black uppercase text-[#101827]">
-        {loyalty.label}
-      </span>
     </div>
   );
 }
@@ -252,9 +248,6 @@ function AccountPage() {
   });
   const [tickets, setTickets] = useState([]);
   const [vouchers, setVouchers] = useState([]);
-  const [activePromotions, setActivePromotions] = useState(() =>
-    promotionItems.filter((item) => item.status !== "expired"),
-  );
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
@@ -339,25 +332,6 @@ function AccountPage() {
       })
       .finally(() => {
         if (isActive) setLoadingVouchers(false);
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isActive = true;
-
-    getMarketingContent({ type: "promotion", limit: 100 })
-      .then((response) => {
-        const items = (response.data || []).map(mapCmsContentItem);
-        if (isActive && items.length) setActivePromotions(items);
-      })
-      .catch(() => {
-        if (isActive) {
-          setActivePromotions(promotionItems.filter((item) => item.status !== "expired"));
-        }
       });
 
     return () => {
@@ -633,11 +607,13 @@ function AccountPage() {
   );
 
   const renderMemberTab = () => (
-    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
+    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8 max-sm:p-5">
       <h2 className="text-center text-xl font-black text-white">Thông tin thẻ thành viên</h2>
-      <div className="mx-auto mt-7 grid max-w-[860px] items-center gap-8 md:grid-cols-[300px_minmax(0,1fr)]">
-        <MemberCard user={user} loyalty={loyalty} />
-        <div className="grid gap-1 text-sm">
+      <div className="mx-auto mt-7 grid max-w-[960px] items-start gap-8 lg:grid-cols-[340px_minmax(0,1fr)]">
+        <div className="flex justify-center lg:justify-start">
+          <MemberCard user={user} loyalty={loyalty} />
+        </div>
+        <div className="grid gap-1 rounded-[24px] border border-white/10 bg-black/15 p-5 text-sm sm:p-6">
           {[
             ["Mã thẻ", String(user?._id || user?.id || "-").slice(-13).toUpperCase()],
             ["Hạng thẻ", loyalty.label],
@@ -665,7 +641,7 @@ function AccountPage() {
               : "Bạn đang ở hạng thành viên cao nhất."}
           </p>
           <button className="mt-5 rounded-full bg-gradient-to-b from-[#ff7b39] to-[#ff321d] px-8 py-3 font-extrabold text-white">
-            Đăng ký U22
+            Đăng ký 
           </button>
         </div>
       </div>
@@ -1155,51 +1131,11 @@ function AccountPage() {
     );
   };
 
-  const renderPromotionsTab = () => {
-    const rows = activePromotions.map((promotion, index) => (
-      <tr key={promotion.slug}>
-        <td className="whitespace-nowrap px-5 py-4">{index + 1}</td>
-        <td className="px-5 py-4 font-bold text-white">
-          <Link className="text-white no-underline hover:text-[#ff5364]" to={`/khuyen-mai/${promotion.slug}`}>
-            {promotion.title}
-          </Link>
-        </td>
-        <td className="px-5 py-4 text-slate-400">{promotion.summary}</td>
-        <td className="whitespace-nowrap px-5 py-4 text-[#ff9aa5]">{promotion.category}</td>
-        <td className="whitespace-nowrap px-5 py-4">Theo chương trình</td>
-        <td className="whitespace-nowrap px-5 py-4">-</td>
-        <td className="whitespace-nowrap px-5 py-4">{promotion.startDate}</td>
-        <td className="whitespace-nowrap px-5 py-4">{promotion.endDate}</td>
-      </tr>
-    ));
-
-    return (
-      <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8">
-        <AccountTable
-          empty="Không có dữ liệu"
-          headers={[
-            "STT",
-            "Chiến dịch voucher",
-            "Mô tả",
-            "Giá trị",
-            "Giá trị đơn tối thiểu",
-            "Số lượng vé tối thiểu",
-            "Ngày bắt đầu",
-            "Ngày kết thúc",
-          ]}
-        >
-          {rows.length ? rows : null}
-        </AccountTable>
-      </section>
-    );
-  };
-
   const renderActiveTab = () => {
     if (activeTab === "member") return renderMemberTab();
     if (activeTab === "tickets") return renderTicketsTab();
     if (activeTab === "points") return renderPointsTab();
     if (activeTab === "vouchers") return renderVouchersTab();
-    if (activeTab === "promotions") return renderPromotionsTab();
     return renderAccountTab();
   };
 
