@@ -5,6 +5,8 @@ import { useAuth } from "../hooks/useAuth";
 import { isAdminUser } from "../utils/authRedirect";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
+const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
+
 function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,13 +38,50 @@ function LoginPage() {
     }));
   };
 
+  const validateForm = () => {
+    const email = formData.email.trim();
+
+    if (!email && !formData.password) {
+      return "Vui lòng nhập email và mật khẩu.";
+    }
+
+    if (!email) {
+      return "Vui lòng nhập email.";
+    }
+
+    if (!isValidEmail(email)) {
+      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
+    }
+
+    if (!formData.password) {
+      return "Vui lòng nhập mật khẩu.";
+    }
+
+    if (formData.password.length < 6) {
+      return "Mật khẩu phải có ít nhất 6 ký tự.";
+    }
+
+    return "";
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      showToast("error", validationError);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const response = await login(formData);
+      const response = await login({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
 
       if (isAdminUser(response.data)) {
         navigate("/admin/dashboard", { replace: true });
@@ -68,7 +107,7 @@ function LoginPage() {
           <p>Truy cập tài khoản để đặt vé và quản lý lịch xem phim.</p>
         </div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" noValidate onSubmit={handleSubmit}>
           {successMessage && <div className="auth-success">{successMessage}</div>}
           {error && <div className="auth-error">{error}</div>}
 

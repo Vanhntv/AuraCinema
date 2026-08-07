@@ -56,6 +56,42 @@ const activeUserQuery = {
   ],
 };
 
+const SERVER_ERROR_MESSAGE = "Hệ thống đang gặp sự cố. Vui lòng thử lại sau.";
+
+const getValidationMessage = (error) => {
+  if (error?.name === "ValidationError") {
+    const messages = Object.values(error.errors || {})
+      .map((item) => item?.message)
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(". ");
+    }
+
+    return "Dữ liệu không hợp lệ. Vui lòng kiểm tra lại.";
+  }
+
+  if (error?.code === 11000) {
+    return "Dữ liệu đã tồn tại. Vui lòng kiểm tra lại.";
+  }
+
+  return "";
+};
+
+const sendAuthError = (res, error, fallback = SERVER_ERROR_MESSAGE) => {
+  const validationMessage = getValidationMessage(error);
+  const statusCode = error?.statusCode || (validationMessage ? 400 : 500);
+
+  if (statusCode >= 500) {
+    console.error("Auth error:", error);
+  }
+
+  return res.status(statusCode).json({
+    success: false,
+    message: validationMessage || error?.publicMessage || fallback,
+  });
+};
+
 export const loginRateLimit = (req, res, next) => {
   const key = getRateLimitKey(req);
   const now = Date.now();
@@ -86,6 +122,10 @@ export const loginRateLimit = (req, res, next) => {
 };
 
 const verifyPassword = async (password, storedPassword) => {
+  if (typeof storedPassword !== "string" || !storedPassword.includes(":")) {
+    return false;
+  }
+
   const [salt, key] = storedPassword.split(":");
 
   if (!salt || !key) {
@@ -240,10 +280,7 @@ export const register = async (req, res) => {
       });
     }
 
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Đăng ký thất bại. Vui lòng thử lại sau.");
   }
 };
 
@@ -290,10 +327,21 @@ export const login = async (req, res) => {
 
     resetLoginAttempts(req);
 
-    user.account_status = user.account_status || (user.status ? "active" : "banned");
-    user.status = user.account_status === "active";
+    const accountStatus = user.account_status || (user.status ? "active" : "banned");
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          account_status: accountStatus,
+          status: accountStatus === "active",
+          last_login_at: new Date(),
+        },
+      },
+      { runValidators: false },
+    );
+    user.account_status = accountStatus;
+    user.status = accountStatus === "active";
     user.last_login_at = new Date();
-    await user.save();
 
     const userResponse = sanitizeUser(user);
 
@@ -314,10 +362,7 @@ export const login = async (req, res) => {
       data: userResponse,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Đăng nhập thất bại. Vui lòng thử lại sau.");
   }
 };
 
@@ -361,10 +406,7 @@ export const forgotPassword = async (req, res) => {
 
     return res.status(200).json(responsePayload);
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Không thể gửi OTP. Vui lòng thử lại sau.");
   }
 };
 
@@ -448,10 +490,7 @@ export const resetPassword = async (req, res) => {
       message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.",
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Không thể đặt lại mật khẩu. Vui lòng thử lại sau.");
   }
 };
 
@@ -474,10 +513,7 @@ export const profile = async (req, res) => {
       data: sanitizeUser(user),
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Không thể tải thông tin tài khoản. Vui lòng thử lại sau.");
   }
 };
 
@@ -539,10 +575,7 @@ export const updateProfile = async (req, res) => {
       data: sanitizeUser(user),
     });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Cập nhật thông tin thất bại. Vui lòng thử lại sau.");
   }
 };
 
@@ -601,9 +634,6 @@ export const changePassword = async (req, res) => {
       message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    return sendAuthError(res, error, "Đổi mật khẩu thất bại. Vui lòng thử lại sau.");
   }
 };

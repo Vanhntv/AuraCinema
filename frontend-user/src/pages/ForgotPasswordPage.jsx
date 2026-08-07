@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { forgotPassword, resetPassword } from "../api/authApi";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
+const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
+
 function ForgotPasswordPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState("request");
@@ -25,6 +27,30 @@ function ForgotPasswordPage() {
   };
 
   const validatePassword = () => {
+    if (!formData.email.trim()) {
+      return "Vui lòng nhập email.";
+    }
+
+    if (!isValidEmail(formData.email)) {
+      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
+    }
+
+    if (!String(formData.otp || "").trim()) {
+      return "Vui lòng nhập mã OTP.";
+    }
+
+    if (!/^\d{6}$/.test(String(formData.otp || "").trim())) {
+      return "Mã OTP phải gồm 6 chữ số.";
+    }
+
+    if (!formData.password) {
+      return "Vui lòng nhập mật khẩu mới.";
+    }
+
+    if (!formData.confirm_password) {
+      return "Vui lòng nhập xác nhận mật khẩu mới.";
+    }
+
     if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
       return "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
     }
@@ -36,14 +62,34 @@ function ForgotPasswordPage() {
     return "";
   };
 
+  const validateEmail = () => {
+    if (!formData.email.trim()) {
+      return "Vui lòng nhập email.";
+    }
+
+    if (!isValidEmail(formData.email)) {
+      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
+    }
+
+    return "";
+  };
+
   const handleRequestOtp = async (event) => {
     event.preventDefault();
     setError("");
     setMessage("");
+
+    const validationError = validateEmail();
+    if (validationError) {
+      setError(validationError);
+      showToast("error", validationError);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const response = await forgotPassword({ email: formData.email });
+      const response = await forgotPassword({ email: formData.email.trim() });
       const successMessage = response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message;
       setMessage(successMessage);
       showToast("success", successMessage);
@@ -72,7 +118,11 @@ function ForgotPasswordPage() {
     setSubmitting(true);
 
     try {
-      await resetPassword(formData);
+      await resetPassword({
+        ...formData,
+        email: formData.email.trim(),
+        otp: String(formData.otp || "").trim(),
+      });
       navigate("/login", {
         replace: true,
         state: { message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập." },
