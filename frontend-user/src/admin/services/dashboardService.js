@@ -14,3 +14,10 @@ export const getTodayRevenue = async () => {
   const res = await axiosClient.get("/admin/dashboard/revenue/today");
   return res.data;
 };
+
+export const getDailyRevenue = async (date) => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/daily", {
+    params: { date },
+  });
+  return res.data;
+};

@@ -13,6 +13,7 @@ import {
   HiOutlineTicket,
 } from "react-icons/hi";
 import {
+  getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
   getTodayRevenue,
@@ -43,12 +44,27 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
+const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Ho_Chi_Minh",
+});
+
+const emptyDailyStats = {
+  revenue: 0,
+  ticketsSold: 0,
+  bookingCount: 0,
+};
 
 const DashboardPage = () => {
   const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() =>
+    dashboardDateFormatter.format(new Date()),
+  );
+  const [dailyStats, setDailyStats] = useState(emptyDailyStats);
+  const [dailyLoading, setDailyLoading] = useState(true);
+  const [dailyError, setDailyError] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -83,6 +99,35 @@ const DashboardPage = () => {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  const fetchDailyStats = useCallback(async (date) => {
+    if (!date) {
+      setDailyStats(emptyDailyStats);
+      setDailyError("Vui lòng chọn ngày cần xem.");
+      setDailyLoading(false);
+      return;
+    }
+
+    try {
+      setDailyLoading(true);
+      setDailyError("");
+      const response = await getDailyRevenue(date);
+      setDailyStats({
+        ...emptyDailyStats,
+        ...(response.data || {}),
+      });
+    } catch (err) {
+      setDailyError(
+        err.response?.data?.message || "Không thể tải doanh thu theo ngày.",
+      );
+    } finally {
+      setDailyLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDailyStats(selectedDate);
+  }, [fetchDailyStats, selectedDate]);
 
   const statCards = useMemo(
     () => [
@@ -194,6 +239,50 @@ const DashboardPage = () => {
           </div>
         ))}
       </div>
+
+      <section className="dashboard-daily-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>Doanh thu theo ngày</h2>
+            <p>Chỉ tính booking đã thanh toán và xác nhận</p>
+          </div>
+          <label className="dashboard-date-filter">
+            <span>Chọn ngày</span>
+            <input
+              className="form-input dashboard-date-input"
+              type="date"
+              required
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {dailyError ? (
+          <div className="dashboard-daily-error">{dailyError}</div>
+        ) : (
+          <div className="dashboard-daily-results" aria-busy={dailyLoading}>
+            <div className="dashboard-daily-metric">
+              <span>Doanh thu</span>
+              <strong>
+                {dailyLoading ? "..." : currencyFormatter.format(dailyStats.revenue)}
+              </strong>
+            </div>
+            <div className="dashboard-daily-metric">
+              <span>Vé đã bán</span>
+              <strong>
+                {dailyLoading ? "..." : numberFormatter.format(dailyStats.ticketsSold)}
+              </strong>
+            </div>
+            <div className="dashboard-daily-metric">
+              <span>Đơn thành công</span>
+              <strong>
+                {dailyLoading ? "..." : numberFormatter.format(dailyStats.bookingCount)}
+              </strong>
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="dashboard-grid">
         <section className="table-container dashboard-table">

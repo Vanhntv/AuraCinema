@@ -6,6 +6,7 @@ import Booking from "../models/Booking.js";
 
 const DASHBOARD_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const REVENUE_BOOKING_STATUSES = ["confirmed", "checked_in"];
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 const dashboardTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: DASHBOARD_TIME_ZONE,
@@ -14,15 +15,36 @@ const dashboardTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   hour12: false,
 });
 
+export const getDateRange = (date) => {
+  const match = DATE_PATTERN.exec(String(date || ""));
+  if (!match) return null;
+
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    calendarDate.getUTCFullYear() !== year ||
+    calendarDate.getUTCMonth() !== month - 1 ||
+    calendarDate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  const start = new Date(Date.UTC(year, month - 1, day, -7));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+
+  return { start, end, localDay: date };
+};
+
 export const getTodayRange = (now = new Date()) => {
   const localDay = now.toLocaleDateString("en-CA", {
     timeZone: DASHBOARD_TIME_ZONE,
   });
 
-  const start = new Date(`${localDay}T00:00:00.000+07:00`);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-
-  return { start, end, localDay };
+  return getDateRange(localDay);
 };
 
 const formatTime = (value) => {
@@ -197,6 +219,60 @@ export const getTodayRevenue = async (_req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getDailyRevenue = async (req, res) => {
+  const dateRange = getDateRange(req.query?.date);
+  if (!dateRange) {
+    return res.status(400).json({
+      success: false,
+      message: "Ngày không hợp lệ. Vui lòng sử dụng định dạng YYYY-MM-DD.",
+    });
+  }
+
+  try {
+    const result = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: {
+            $gte: dateRange.start,
+            $lt: dateRange.end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          revenue: { $sum: "$total_price" },
+          ticketsSold: {
+            $sum: {
+              $size: { $ifNull: ["$showtime_seat_ids", []] },
+            },
+          },
+          bookingCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const summary = result?.[0] ?? {};
+    return res.status(200).json({
+      success: true,
+      data: {
+        revenue: summary.revenue ?? 0,
+        ticketsSold: summary.ticketsSold ?? 0,
+        bookingCount: summary.bookingCount ?? 0,
+        date: dateRange.localDay,
+        timezone: DASHBOARD_TIME_ZONE,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

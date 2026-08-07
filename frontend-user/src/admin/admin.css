@@ -666,6 +666,85 @@
   font-size: clamp(18px, 1.65vw, 24px);
 }
 
+.dashboard-daily-panel {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+}
+
+.dashboard-daily-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.dashboard-daily-header h2 {
+  color: var(--color-text-primary);
+  font-size: 17px;
+}
+
+.dashboard-daily-header p {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dashboard-date-filter {
+  display: grid;
+  gap: 5px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dashboard-date-input {
+  min-width: 170px;
+  color-scheme: dark;
+}
+
+.dashboard-daily-results {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-daily-metric {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+}
+
+.dashboard-daily-metric span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dashboard-daily-metric strong {
+  display: block;
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: clamp(17px, 1.6vw, 22px);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-daily-error {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 13px;
+}
+
 @media (max-width: 1399px) {
   .dashboard-page .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2171,6 +2250,19 @@
 
   .stats-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .dashboard-daily-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-date-input {
+    width: 100%;
+  }
+
+  .dashboard-daily-results {
+    grid-template-columns: 1fr;
   }
 
   .header-search {
