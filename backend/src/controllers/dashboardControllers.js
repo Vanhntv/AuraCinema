@@ -104,21 +104,46 @@ export const getDashboardOverview = async (_req, res) => {
       {
         $match: {
           payment_status: "paid",
-          status: "confirmed",
         },
       },
       {
-        $group: {
-          _id: null,
-          revenue: { $sum: "$total_price" },
+        $facet: {
+          revenue: [
+            {
+              $match: {
+                status: { $in: REVENUE_BOOKING_STATUSES },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: "$total_price" },
+              },
+            },
+          ],
+          tickets: [
+            {
+              $group: {
+                _id: null,
+                total: {
+                  $sum: {
+                    $size: { $ifNull: ["$showtime_seat_ids", []] },
+                  },
+                },
+              },
+            },
+          ],
         },
       },
     ]);
 
+    const summary = overview?.[0] ?? {};
+
     res.status(200).json({
       success: true,
       data: {
-        revenue: overview?.[0]?.revenue ?? 0,
+        revenue: summary.revenue?.[0]?.total ?? 0,
+        ticketsSold: summary.tickets?.[0]?.total ?? 0,
       },
     });
   } catch (error) {

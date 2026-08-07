@@ -28,6 +28,7 @@ const emptyDashboard = {
     nowShowingMovies: 0,
     revenue: 0,
     todayRevenue: 0,
+    ticketsSold: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -65,6 +66,7 @@ const DashboardPage = () => {
           ...(statsResponse.data?.stats || {}),
           revenue: overviewResponse.data?.revenue ?? 0,
           todayRevenue: todayRevenueResponse.data?.revenue ?? 0,
+          ticketsSold: overviewResponse.data?.ticketsSold ?? 0,
         },
       });
     } catch (err) {
@@ -119,11 +121,11 @@ const DashboardPage = () => {
         hint: "Địa điểm hoạt động",
       },
       {
-        label: "Vé đã đặt",
-        value: dashboard.stats.bookings,
+        label: "Vé đã bán",
+        value: dashboard.stats.ticketsSold,
         icon: <HiOutlineTicket />,
         tone: "orange",
-        hint: "Chờ module đặt vé",
+        hint: "Từ booking đã thanh toán",
       },
     ],
     [dashboard.stats],
