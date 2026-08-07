@@ -4,6 +4,7 @@ import {
   HiOutlineCamera,
   HiOutlineCheckCircle,
   HiOutlinePhotograph,
+  HiOutlinePrinter,
   HiOutlineRefresh,
   HiOutlineStop,
   HiOutlineTicket,
@@ -43,6 +44,53 @@ const formatDateTime = (value) => {
 const getApiMessage = (error, fallback) =>
   error?.response?.data?.message || error?.message || fallback;
 
+const getCameraErrorMessage = (error) => {
+  const errorName = String(error?.name || "").toLowerCase();
+  const errorText = String(error?.message || error || "").toLowerCase();
+
+  if (errorName.includes("notallowed") || errorText.includes("permission")) {
+    return "Trình duyệt chưa cho phép sử dụng camera. Hãy bật quyền camera rồi tải lại trang.";
+  }
+
+  if (
+    errorName.includes("notfound")
+    || errorText.includes("device not found")
+    || errorText.includes("no camera")
+  ) {
+    return "Không tìm thấy camera trên thiết bị này. Hãy kiểm tra kết nối webcam.";
+  }
+
+  if (
+    errorName.includes("notreadable")
+    || errorName.includes("trackstarterror")
+    || errorText.includes("could not start video source")
+    || errorText.includes("starting videoinput failed")
+  ) {
+    return "Camera đang được ứng dụng hoặc tab khác sử dụng. Hãy đóng ứng dụng đó rồi thử lại.";
+  }
+
+  if (errorName.includes("overconstrained") || errorText.includes("constraint")) {
+    return "Camera không hỗ trợ cấu hình quét hiện tại. Hãy thử lại hoặc chọn tải ảnh QR.";
+  }
+
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    return "Trình duyệt không hỗ trợ camera trong kết nối hiện tại. Hãy dùng localhost hoặc HTTPS.";
+  }
+
+  return "Không thể khởi động camera. Hãy đóng ứng dụng đang dùng webcam, tải lại trang rồi thử lại.";
+};
+
+const selectPreferredCamera = (cameras) => {
+  const rearCameraPattern = /back|rear|environment|sau/i;
+  return cameras.find((camera) => rearCameraPattern.test(camera.label || "")) || cameras[0] || null;
+};
+
+const getResponsiveQrBox = (viewfinderWidth, viewfinderHeight) => {
+  const availableSize = Math.min(viewfinderWidth, viewfinderHeight);
+  const qrBoxSize = Math.max(50, Math.min(Math.floor(availableSize * 0.8), 380));
+  return { width: qrBoxSize, height: qrBoxSize };
+};
+
 const getStatusClass = (status) => {
   if (status === "VALID") return "status-badge status-now-showing";
   if (status === "CHECKED_IN") return "status-badge status-coming-soon";
@@ -67,6 +115,7 @@ const TicketScannerPage = () => {
   const [cameraMessage, setCameraMessage] = useState("Camera chưa bật. Hãy cấp quyền camera khi trình duyệt hỏi.");
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [printingTicket, setPrintingTicket] = useState(false);
   const [currentQrToken, setCurrentQrToken] = useState("");
   const [verifyResult, setVerifyResult] = useState(null);
   const [checkInResult, setCheckInResult] = useState(null);
@@ -78,10 +127,9 @@ const TicketScannerPage = () => {
 
   const scannerConfig = useMemo(
     () => ({
-      fps: 10,
-      qrbox: { width: 260, height: 260 },
-      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-      rememberLastUsedCamera: true,
+      fps: 15,
+      qrbox: getResponsiveQrBox,
+      disableFlip: false,
     }),
     [],
   );
@@ -154,16 +202,40 @@ const TicketScannerPage = () => {
 
     try {
       setCameraMessage("Đang bật camera...");
-      if (!scannerRef.current) {
-        scannerRef.current = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
-        });
+
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera API is unavailable in the current context");
       }
 
+      if (scannerRef.current) {
+        try {
+          await scannerRef.current.clear();
+        } catch {
+          // Recreate a clean scanner instance after a failed previous attempt.
+        }
+        scannerRef.current = null;
+      }
+
+      const cameras = await Html5Qrcode.getCameras();
+      const selectedCamera = selectPreferredCamera(cameras);
+      if (!selectedCamera) throw new Error("No camera found");
+
+      scannerRef.current = new Html5Qrcode(SCANNER_ELEMENT_ID, {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        useBarCodeDetectorIfSupported: true,
+        verbose: false,
+      });
+
       await scannerRef.current.start(
-        { facingMode: { ideal: "environment" } },
-        scannerConfig,
+        selectedCamera.id,
+        {
+          ...scannerConfig,
+          videoConstraints: {
+            deviceId: { exact: selectedCamera.id },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
         handleQrToken,
       );
 
@@ -171,11 +243,22 @@ const TicketScannerPage = () => {
         setCameraActive(true);
         setCameraMessage("Đưa mã QR vé vào khung camera để xác minh.");
       }
-    } catch {
+    } catch (error) {
       if (!mountedRef.current) return;
       setCameraActive(false);
+
+      const failedScanner = scannerRef.current;
+      if (failedScanner) {
+        try {
+          if (failedScanner.isScanning) await failedScanner.stop();
+          await failedScanner.clear();
+        } catch {
+          // The scanner may already be partially disposed after start() fails.
+        }
+      }
+
       scannerRef.current = null;
-      const message = "Không thể bật camera. Hãy kiểm tra quyền camera của trình duyệt hoặc thử tải ảnh QR.";
+      const message = getCameraErrorMessage(error);
       setCameraMessage(message);
       showToast("error", message);
     }
@@ -215,6 +298,21 @@ const TicketScannerPage = () => {
     lastQrTokenRef.current = "";
     handlingQrRef.current = false;
     await startScanner();
+  };
+
+  const handlePrintTicket = async () => {
+    if (!ticket || printingTicket) return;
+
+    try {
+      setPrintingTicket(true);
+      const { downloadTicketPdf } = await import("../utils/ticketPdf");
+      await downloadTicketPdf(ticket, currentQrToken);
+      showToast("success", "Đã tải file PDF của vé.");
+    } catch (error) {
+      showToast("error", getApiMessage(error, "Không thể tạo file PDF của vé."));
+    } finally {
+      setPrintingTicket(false);
+    }
   };
 
   const handleFileChange = async (event) => {
@@ -385,6 +483,16 @@ const TicketScannerPage = () => {
               {checkingIn ? "Đang check-in..." : "Xác nhận check-in"}
             </button>
           )}
+
+          <button
+            className="btn btn-primary ticket-print-btn"
+            disabled={!ticket || processing || checkingIn || printingTicket}
+            onClick={handlePrintTicket}
+            type="button"
+          >
+            <HiOutlinePrinter />
+            {printingTicket ? "Đang tạo PDF..." : "In vé PDF"}
+          </button>
 
           {isAlreadyCheckedInResult && (
             <div className="ticket-checkin-feedback error">
