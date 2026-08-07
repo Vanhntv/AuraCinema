@@ -5,7 +5,6 @@ import TicketScanLog, {
   TICKET_SCAN_RESULTS,
   createTicketScanLogSafe,
 } from "../models/TicketScanLog.js";
-import { ticketCheckInConfig } from "../config/ticketConfig.js";
 import { hashQrToken } from "../services/ticketService.js";
 
 const QR_PAYLOAD_PREFIX = "AURA_TICKET:";
@@ -373,24 +372,26 @@ const getTicketByQrToken = async (qrToken) => {
   );
 };
 
-const getCheckInWindow = (showtime) => {
+const getCheckInWindow = (showtime, movie) => {
   const startTime = showtime?.start_time ? new Date(showtime.start_time) : null;
   if (!startTime || Number.isNaN(startTime.getTime())) return null;
 
+  const configuredEndTime = showtime?.end_time ? new Date(showtime.end_time) : null;
+  const durationMinutes = Number(movie?.duration || 0);
+  const calculatedEndTime = durationMinutes > 0
+    ? new Date(startTime.getTime() + durationMinutes * 60 * 1000)
+    : null;
+  const closesAt = configuredEndTime && !Number.isNaN(configuredEndTime.getTime())
+    ? configuredEndTime
+    : calculatedEndTime;
+
+  if (!closesAt || Number.isNaN(closesAt.getTime())) return null;
+
   return {
-    opensAt: new Date(startTime.getTime() - ticketCheckInConfig.beforeMinutes * 60 * 1000),
-    closesAt: new Date(startTime.getTime() + ticketCheckInConfig.afterMinutes * 60 * 1000),
+    opensAt: null,
+    closesAt,
   };
 };
-
-const formatVietnamDateTime = (value) =>
-  new Date(value).toLocaleString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 
 const evaluateTicketBase = (ticket) => {
   if (!ticket) {
@@ -433,7 +434,7 @@ const evaluateTicketBase = (ticket) => {
   return null;
 };
 
-const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
+export const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
   const baseEvaluation = evaluateTicketBase(ticket);
   if (baseEvaluation) return baseEvaluation;
 
@@ -449,7 +450,7 @@ const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
     };
   }
 
-  const checkInWindow = getCheckInWindow(ticket.showtimeId);
+  const checkInWindow = getCheckInWindow(ticket.showtimeId, ticket.movieId);
   if (!checkInWindow) {
     return {
       allowed: false,
@@ -459,22 +460,12 @@ const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
     };
   }
 
-  if (now < checkInWindow.opensAt) {
-    return {
-      allowed: false,
-      result: "WRONG_SHOWTIME",
-      statusCode: 409,
-      message: `Chưa đến thời gian check-in. Thời gian bắt đầu check-in là: ${formatVietnamDateTime(checkInWindow.opensAt)}.`,
-      checkInWindow,
-    };
-  }
-
   if (now > checkInWindow.closesAt) {
     return {
       allowed: false,
       result: "EXPIRED",
       statusCode: 409,
-      message: "Vé đã hết hạn.",
+      message: "Suất chiếu đã kết thúc, không thể check-in vé.",
       checkInWindow,
     };
   }
@@ -506,29 +497,26 @@ export const verifyAdminTicketQr = async (req, res) => {
 
   try {
     const ticket = await getTicketByQrToken(qrToken);
-    const evaluation = evaluateTicketForCheckIn(ticket);
 
     await writeScanLog(req, {
       ticketId: ticket?._id || null,
       action: "VERIFY",
-      result: evaluation.result,
-      errorNote: evaluation.allowed ? "" : evaluation.message,
+      result: ticket ? "SUCCESS" : "INVALID_TOKEN",
+      errorNote: ticket ? "" : "Khong tim thay ve tu ma QR",
     });
 
     if (!ticket) {
       return res.status(404).json({
         success: false,
-        message: evaluation.message,
+        message: "Không tìm thấy vé từ mã QR này.",
       });
     }
 
-    return res.status(evaluation.allowed ? 200 : evaluation.statusCode).json({
-      success: evaluation.allowed,
-      message: evaluation.message,
+    return res.json({
+      success: true,
+      message: "Đã tải thông tin vé thành công.",
       data: formatTicketForAdmin(ticket, {
-        canCheckIn: evaluation.allowed,
-        result: evaluation.result,
-        checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId),
+        result: "SUCCESS",
       }),
     });
   } catch (error) {
@@ -624,7 +612,7 @@ export const checkInAdminTicketQr = async (req, res) => {
           ? formatTicketForAdmin(ticket, {
             canCheckIn: false,
             result: evaluation.result,
-            checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId),
+            checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId, ticket.movieId),
           })
           : null,
       });
@@ -665,7 +653,7 @@ export const checkInAdminTicketQr = async (req, res) => {
           ? formatTicketForAdmin(latestTicket, {
             canCheckIn: false,
             result: latestEvaluation.result,
-            checkInWindow: latestEvaluation.checkInWindow || getCheckInWindow(latestTicket.showtimeId),
+            checkInWindow: latestEvaluation.checkInWindow || getCheckInWindow(latestTicket.showtimeId, latestTicket.movieId),
           })
           : null,
       });

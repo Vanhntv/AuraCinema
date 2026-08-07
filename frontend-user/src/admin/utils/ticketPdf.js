@@ -12,13 +12,6 @@ pdfMake.addFonts({
   },
 });
 
-const statusLabels = {
-  VALID: "Chưa sử dụng",
-  CHECKED_IN: "Đã check-in",
-  CANCELLED: "Đã hủy",
-  EXPIRED: "Đã hết hạn",
-};
-
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
   currency: "VND",
@@ -52,7 +45,6 @@ const buildDetailRows = (ticket) => [
   ["Ghế", printableValue(ticket.seat?.label || ticket.seatLabel)],
   ["Loại ghế", printableValue(ticket.seat?.type)],
   ["Giá vé", currencyFormatter.format(Number(ticket.price || 0))],
-  ["Trạng thái", statusLabels[ticket.status] || printableValue(ticket.status)],
   ["Mã đơn hàng", printableValue(ticket.booking?.bookingCode)],
 ];
 
