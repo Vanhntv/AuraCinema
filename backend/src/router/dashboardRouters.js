@@ -5,6 +5,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getMonthlyRevenue,
+  getTopMoviesRevenue,
   getTodayRevenue,
   getWeeklyRevenue,
 } from "../controllers/dashboardControllers.js";
@@ -18,5 +19,6 @@ router.get("/revenue/today", adminOnly, getTodayRevenue);
 router.get("/revenue/daily", adminOnly, getDailyRevenue);
 router.get("/revenue/weekly", adminOnly, getWeeklyRevenue);
 router.get("/revenue/monthly", adminOnly, getMonthlyRevenue);
+router.get("/movies/top-revenue", adminOnly, getTopMoviesRevenue);
 
 export default router;

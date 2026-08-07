@@ -35,3 +35,8 @@ export const getMonthlyRevenue = async (month, year) => {
   });
   return res.data;
 };
+
+export const getTopMoviesRevenue = async () => {
+  const res = await axiosClient.get("/admin/dashboard/movies/top-revenue");
+  return res.data;
+};

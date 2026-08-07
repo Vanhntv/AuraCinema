@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
+  HiOutlineChartBar,
   HiOutlineCheckCircle,
   HiOutlineFilm,
   HiOutlineLogout,
@@ -17,6 +18,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getMonthlyRevenue,
+  getTopMoviesRevenue,
   getTodayRevenue,
   getWeeklyRevenue,
 } from "../services/dashboardService";
@@ -38,6 +40,7 @@ const emptyDashboard = {
   },
   recentBookings: [],
   todayShowtimes: [],
+  topMovies: [],
 };
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
@@ -85,15 +88,22 @@ const DashboardPage = () => {
     try {
       setLoading(true);
       setError("");
-      const [statsResponse, overviewResponse, todayRevenueResponse] = await Promise.all([
+      const [
+        statsResponse,
+        overviewResponse,
+        todayRevenueResponse,
+        topMoviesResponse,
+      ] = await Promise.all([
         getDashboardStats(),
         getDashboardOverview(),
         getTodayRevenue(),
+        getTopMoviesRevenue(),
       ]);
 
       setDashboard({
         ...emptyDashboard,
         ...(statsResponse.data || {}),
+        topMovies: topMoviesResponse.data || [],
         stats: {
           ...emptyDashboard.stats,
           ...(statsResponse.data?.stats || {}),
@@ -225,6 +235,14 @@ const DashboardPage = () => {
       revenue: Number(dailyStats.revenue || 0),
     }];
   }, [dailyStats.revenue, revenuePeriod, selectedDate]);
+
+  const topMovieRevenueMax = useMemo(
+    () => Math.max(
+      ...dashboard.topMovies.map((movie) => Number(movie.revenue || 0)),
+      0,
+    ),
+    [dashboard.topMovies],
+  );
 
   const handleRefresh = () => {
     fetchDashboard();
@@ -467,6 +485,56 @@ const DashboardPage = () => {
         )}
       </section>
       )}
+
+      <section className="dashboard-top-movies-panel">
+        <div className="dashboard-panel-header dashboard-top-movies-header">
+          <div>
+            <h2>Top phim doanh thu cao nhất</h2>
+            <p>Xếp hạng theo tổng doanh thu từ booking đã thanh toán</p>
+          </div>
+          <HiOutlineChartBar />
+        </div>
+
+        {loading ? (
+          <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
+        ) : dashboard.topMovies.length ? (
+          <div className="dashboard-top-movies-list">
+            {dashboard.topMovies.map((movie, index) => {
+              const revenue = Number(movie.revenue || 0);
+              const width = topMovieRevenueMax
+                ? Math.max((revenue / topMovieRevenueMax) * 100, 3)
+                : 0;
+
+              return (
+                <div className="dashboard-top-movie" key={movie.id || movie.title}>
+                  <span className={`dashboard-movie-rank rank-${index + 1}`}>
+                    {index + 1}
+                  </span>
+                  <div className="dashboard-top-movie-info">
+                    <div className="dashboard-top-movie-title-row">
+                      <strong>{movie.title || "Phim không xác định"}</strong>
+                      <span>{currencyFormatter.format(revenue)}</span>
+                    </div>
+                    <div className="dashboard-top-movie-track">
+                      <div
+                        className="dashboard-top-movie-bar"
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                    <small>
+                      {numberFormatter.format(movie.ticketsSold || 0)} vé · {numberFormatter.format(movie.bookingCount || 0)} đơn
+                    </small>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="dashboard-empty-state">
+            Chưa có dữ liệu doanh thu theo phim.
+          </div>
+        )}
+      </section>
 
       <div className="dashboard-grid">
         <section className="table-container dashboard-table">

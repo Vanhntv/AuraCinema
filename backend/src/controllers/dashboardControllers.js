@@ -453,3 +453,69 @@ export const getMonthlyRevenue = async (req, res) => {
     });
   }
 };
+
+export const getTopMoviesRevenue = async (_req, res) => {
+  try {
+    const movies = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+        },
+      },
+      {
+        $lookup: {
+          from: "showtimes",
+          localField: "showtime_id",
+          foreignField: "_id",
+          as: "showtime",
+        },
+      },
+      { $unwind: "$showtime" },
+      {
+        $lookup: {
+          from: "movies",
+          localField: "showtime.movie_id",
+          foreignField: "_id",
+          as: "movie",
+        },
+      },
+      { $unwind: "$movie" },
+      {
+        $group: {
+          _id: "$movie._id",
+          title: { $first: "$movie.title" },
+          revenue: { $sum: "$total_price" },
+          ticketsSold: {
+            $sum: {
+              $size: { $ifNull: ["$showtime_seat_ids", []] },
+            },
+          },
+          bookingCount: { $sum: 1 },
+        },
+      },
+      { $sort: { revenue: -1, title: 1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          _id: 0,
+          id: "$_id",
+          title: 1,
+          revenue: 1,
+          ticketsSold: 1,
+          bookingCount: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: movies,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

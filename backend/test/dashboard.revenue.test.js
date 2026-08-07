@@ -6,6 +6,7 @@ import {
   getDateRange,
   getMonthlyRevenue,
   getMonthRange,
+  getTopMoviesRevenue,
   getTodayRange,
   getWeeklyRevenue,
   getWeekRange,
@@ -234,4 +235,42 @@ test("getMonthlyRevenue returns daily values and the monthly total", async () =>
   assert.equal(responseBody.data.days.length, 31);
   assert.equal(responseBody.data.days[1].revenue, 0);
   assert.equal(responseBody.data.totalRevenue, 18000000);
+});
+
+test("getTopMoviesRevenue joins showtimes and returns the five highest movies", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+  const topMovies = [
+    { id: "movie-1", title: "Movie A", revenue: 20000000 },
+    { id: "movie-2", title: "Movie B", revenue: 15000000 },
+  ];
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return topMovies;
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getTopMoviesRevenue({}, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(receivedPipeline[1].$lookup.from, "showtimes");
+  assert.equal(receivedPipeline[3].$lookup.from, "movies");
+  assert.deepEqual(receivedPipeline[6], { $sort: { revenue: -1, title: 1 } });
+  assert.deepEqual(receivedPipeline[7], { $limit: 5 });
+  assert.deepEqual(responseBody.data, topMovies);
 });

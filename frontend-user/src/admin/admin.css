@@ -807,6 +807,110 @@
   font-size: 13px;
 }
 
+.dashboard-top-movies-panel {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+}
+
+.dashboard-top-movies-header {
+  margin-bottom: 10px;
+}
+
+.dashboard-top-movies-list {
+  display: grid;
+}
+
+.dashboard-top-movie {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-top-movie:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-movie-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-bg-input);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-movie-rank.rank-1 {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+}
+
+.dashboard-movie-rank.rank-2 {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+.dashboard-movie-rank.rank-3 {
+  background: rgba(180, 83, 9, 0.16);
+  color: #fb923c;
+}
+
+.dashboard-top-movie-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.dashboard-top-movie-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.dashboard-top-movie-title-row strong {
+  overflow: hidden;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-top-movie-title-row span {
+  flex-shrink: 0;
+  color: var(--color-accent-light);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-top-movie-track {
+  height: 7px;
+  overflow: hidden;
+  margin: 8px 0 5px;
+  border-radius: var(--radius-full);
+  background: rgba(148, 163, 184, 0.1);
+}
+
+.dashboard-top-movie-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+  transition: width var(--transition-slow);
+}
+
+.dashboard-top-movie-info small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 @media (max-width: 1399px) {
   .dashboard-page .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
