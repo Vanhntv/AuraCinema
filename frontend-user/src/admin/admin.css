@@ -4502,6 +4502,11 @@
   justify-content: center;
 }
 
+.ticket-print-btn {
+  min-width: 150px;
+  justify-content: center;
+}
+
 .ticket-checkin-feedback {
   padding: 10px 12px;
   border-radius: var(--radius-md);

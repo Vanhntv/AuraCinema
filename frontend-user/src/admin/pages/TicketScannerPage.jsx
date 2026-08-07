@@ -4,6 +4,7 @@ import {
   HiOutlineCamera,
   HiOutlineCheckCircle,
   HiOutlinePhotograph,
+  HiOutlinePrinter,
   HiOutlineRefresh,
   HiOutlineStop,
   HiOutlineTicket,
@@ -67,6 +68,7 @@ const TicketScannerPage = () => {
   const [cameraMessage, setCameraMessage] = useState("Camera chưa bật. Hãy cấp quyền camera khi trình duyệt hỏi.");
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [printingTicket, setPrintingTicket] = useState(false);
   const [currentQrToken, setCurrentQrToken] = useState("");
   const [verifyResult, setVerifyResult] = useState(null);
   const [checkInResult, setCheckInResult] = useState(null);
@@ -215,6 +217,21 @@ const TicketScannerPage = () => {
     lastQrTokenRef.current = "";
     handlingQrRef.current = false;
     await startScanner();
+  };
+
+  const handlePrintTicket = async () => {
+    if (!ticket || printingTicket) return;
+
+    try {
+      setPrintingTicket(true);
+      const { downloadTicketPdf } = await import("../utils/ticketPdf");
+      await downloadTicketPdf(ticket, currentQrToken);
+      showToast("success", "Đã tải file PDF của vé.");
+    } catch (error) {
+      showToast("error", getApiMessage(error, "Không thể tạo file PDF của vé."));
+    } finally {
+      setPrintingTicket(false);
+    }
   };
 
   const handleFileChange = async (event) => {
@@ -385,6 +402,16 @@ const TicketScannerPage = () => {
               {checkingIn ? "Đang check-in..." : "Xác nhận check-in"}
             </button>
           )}
+
+          <button
+            className="btn btn-primary ticket-print-btn"
+            disabled={!ticket || processing || checkingIn || printingTicket}
+            onClick={handlePrintTicket}
+            type="button"
+          >
+            <HiOutlinePrinter />
+            {printingTicket ? "Đang tạo PDF..." : "In vé PDF"}
+          </button>
 
           {isAlreadyCheckedInResult && (
             <div className="ticket-checkin-feedback error">
