@@ -76,6 +76,7 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
       revenue: [{ total: 500000 }],
       tickets: [{ total: 4 }],
       successfulBookings: [{ total: 2 }],
+      comboRevenue: [{ total: 180000 }],
     }];
   };
 
@@ -105,9 +106,14 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
   );
   assert.equal(responseBody.data.ticketsSold, 4);
   assert.equal(responseBody.data.successfulBookings, 2);
+  assert.equal(responseBody.data.comboRevenue, 180000);
   assert.deepEqual(
     receivedPipeline[1].$facet.successfulBookings[0],
     { $match: { status: { $in: ["confirmed", "checked_in"] } } },
+  );
+  assert.deepEqual(
+    receivedPipeline[1].$facet.comboRevenue[0].$group.total.$sum.$reduce.input,
+    { $ifNull: ["$combos", []] },
   );
 });
 

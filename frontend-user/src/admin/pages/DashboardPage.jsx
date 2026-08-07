@@ -12,6 +12,7 @@ import {
   HiOutlineOfficeBuilding,
   HiOutlinePlus,
   HiOutlineRefresh,
+  HiOutlineShoppingBag,
   HiOutlineTag,
   HiOutlineTicket,
 } from "react-icons/hi";
@@ -41,6 +42,7 @@ const emptyDashboard = {
     todayRevenue: 0,
     ticketsSold: 0,
     successfulBookings: 0,
+    comboRevenue: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -144,6 +146,7 @@ const DashboardPage = () => {
           todayRevenue: todayRevenueResponse.data?.revenue ?? 0,
           ticketsSold: overviewResponse.data?.ticketsSold ?? 0,
           successfulBookings: overviewResponse.data?.successfulBookings ?? 0,
+          comboRevenue: overviewResponse.data?.comboRevenue ?? 0,
         },
       });
     } catch (err) {
@@ -365,6 +368,14 @@ const DashboardPage = () => {
         icon: <HiOutlineCash />,
         tone: "teal",
         hint: "Doanh thu đã thanh toán",
+        isCurrency: true,
+      },
+      {
+        label: "Doanh thu bắp nước",
+        value: dashboard.stats.comboRevenue,
+        icon: <HiOutlineShoppingBag />,
+        tone: "pink",
+        hint: "Combo trong booking đã thanh toán",
         isCurrency: true,
       },
       {

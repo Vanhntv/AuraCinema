@@ -222,6 +222,37 @@ export const getDashboardOverview = async (_req, res) => {
               $count: "total",
             },
           ],
+          comboRevenue: [
+            {
+              $group: {
+                _id: null,
+                total: {
+                  $sum: {
+                    $reduce: {
+                      input: { $ifNull: ["$combos", []] },
+                      initialValue: 0,
+                      in: {
+                        $add: [
+                          "$$value",
+                          {
+                            $ifNull: [
+                              "$$this.subtotal",
+                              {
+                                $multiply: [
+                                  { $ifNull: ["$$this.price", 0] },
+                                  { $ifNull: ["$$this.quantity", 0] },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
         },
       },
     ]);
@@ -234,6 +265,7 @@ export const getDashboardOverview = async (_req, res) => {
         revenue: summary.revenue?.[0]?.total ?? 0,
         ticketsSold: summary.tickets?.[0]?.total ?? 0,
         successfulBookings: summary.successfulBookings?.[0]?.total ?? 0,
+        comboRevenue: summary.comboRevenue?.[0]?.total ?? 0,
       },
     });
   } catch (error) {
