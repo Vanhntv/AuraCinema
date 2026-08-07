@@ -5,6 +5,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getTodayRevenue,
+  getWeeklyRevenue,
 } from "../controllers/dashboardControllers.js";
 
 const router = express.Router();
@@ -14,5 +15,6 @@ router.get("/stats", adminOnly, getDashboardStats);
 router.get("/overview", adminOnly, getDashboardOverview);
 router.get("/revenue/today", adminOnly, getTodayRevenue);
 router.get("/revenue/daily", adminOnly, getDailyRevenue);
+router.get("/revenue/weekly", adminOnly, getWeeklyRevenue);
 
 export default router;

@@ -5,6 +5,8 @@ import {
   getDashboardOverview,
   getDateRange,
   getTodayRange,
+  getWeeklyRevenue,
+  getWeekRange,
 } from "../src/controllers/dashboardControllers.js";
 import Booking from "../src/models/Booking.js";
 
@@ -31,6 +33,19 @@ test("getDateRange validates a calendar date and creates Vietnam boundaries", ()
   assert.equal(range.end.toISOString(), "2026-08-07T17:00:00.000Z");
   assert.equal(getDateRange("2026-02-30"), null);
   assert.equal(getDateRange("07-08-2026"), null);
+});
+
+test("getWeekRange uses Monday through Sunday in Vietnam", () => {
+  const range = getWeekRange("2026-08-09");
+
+  assert.equal(range.start.toISOString(), "2026-08-02T17:00:00.000Z");
+  assert.equal(range.end.toISOString(), "2026-08-09T17:00:00.000Z");
+  assert.deepEqual(
+    range.days.map((item) => item.label),
+    ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+  );
+  assert.equal(range.days[0].date, "2026-08-03");
+  assert.equal(range.days[6].date, "2026-08-09");
 });
 
 test("getDashboardOverview returns tickets and successful paid bookings", async () => {
@@ -121,5 +136,50 @@ test("getDailyRevenue returns revenue, seats, and bookings for the selected date
       bookingCount: responseBody.data.bookingCount,
     },
     { revenue: 12500000, ticketsSold: 126, bookingCount: 74 },
+  );
+});
+
+test("getWeeklyRevenue groups revenue and fills days without bookings", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [
+      { _id: "2026-08-03", revenue: 8000000 },
+      { _id: "2026-08-04", revenue: 7000000 },
+    ];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getWeeklyRevenue({ query: { date: "2026-08-07" } }, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(receivedPipeline[1].$group._id.$dateToString.timezone, "Asia/Ho_Chi_Minh");
+  assert.deepEqual(
+    responseBody.data.map(({ label, revenue }) => ({ label, revenue })),
+    [
+      { label: "T2", revenue: 8000000 },
+      { label: "T3", revenue: 7000000 },
+      { label: "T4", revenue: 0 },
+      { label: "T5", revenue: 0 },
+      { label: "T6", revenue: 0 },
+      { label: "T7", revenue: 0 },
+      { label: "CN", revenue: 0 },
+    ],
   );
 });

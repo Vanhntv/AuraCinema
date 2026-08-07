@@ -7,6 +7,7 @@ import Booking from "../models/Booking.js";
 const DASHBOARD_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const REVENUE_BOOKING_STATUSES = ["confirmed", "checked_in"];
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const WEEKDAY_LABELS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
 const dashboardTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: DASHBOARD_TIME_ZONE,
@@ -45,6 +46,33 @@ export const getTodayRange = (now = new Date()) => {
   });
 
   return getDateRange(localDay);
+};
+
+export const getWeekRange = (date) => {
+  const dateRange = getDateRange(date);
+  if (!dateRange) return null;
+
+  const [, yearText, monthText, dayText] = DATE_PATTERN.exec(date);
+  const dayOfWeek = new Date(
+    Date.UTC(Number(yearText), Number(monthText) - 1, Number(dayText)),
+  ).getUTCDay();
+  const daysFromMonday = (dayOfWeek + 6) % 7;
+  const start = new Date(
+    dateRange.start.getTime() - daysFromMonday * 24 * 60 * 60 * 1000,
+  );
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const days = WEEKDAY_LABELS.map((label, index) => {
+    const instant = new Date(start.getTime() + index * 24 * 60 * 60 * 1000);
+    return {
+      label,
+      date: instant.toLocaleDateString("en-CA", {
+        timeZone: DASHBOARD_TIME_ZONE,
+      }),
+    };
+  });
+
+  return { start, end, days };
 };
 
 const formatTime = (value) => {
@@ -270,6 +298,63 @@ export const getDailyRevenue = async (req, res) => {
         date: dateRange.localDay,
         timezone: DASHBOARD_TIME_ZONE,
       },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getWeeklyRevenue = async (req, res) => {
+  const requestedDate = req.query?.date;
+  const weekRange = getWeekRange(requestedDate);
+  if (!weekRange) {
+    return res.status(400).json({
+      success: false,
+      message: "Ngày không hợp lệ. Vui lòng sử dụng định dạng YYYY-MM-DD.",
+    });
+  }
+
+  try {
+    const groupedRevenue = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: {
+            $gte: weekRange.start,
+            $lt: weekRange.end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$created_at",
+              timezone: DASHBOARD_TIME_ZONE,
+            },
+          },
+          revenue: { $sum: "$total_price" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const revenueByDate = new Map(
+      groupedRevenue.map((item) => [item._id, item.revenue]),
+    );
+    const data = weekRange.days.map((day) => ({
+      ...day,
+      revenue: revenueByDate.get(day.date) ?? 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data,
     });
   } catch (error) {
     return res.status(500).json({

@@ -17,6 +17,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getTodayRevenue,
+  getWeeklyRevenue,
 } from "../services/dashboardService";
 import { useAuth } from "../../hooks/useAuth";
 
@@ -44,6 +45,10 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 const numberFormatter = new Intl.NumberFormat("vi-VN");
+const compactNumberFormatter = new Intl.NumberFormat("vi-VN", {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Ho_Chi_Minh",
 });
@@ -65,6 +70,12 @@ const DashboardPage = () => {
   const [dailyStats, setDailyStats] = useState(emptyDailyStats);
   const [dailyLoading, setDailyLoading] = useState(true);
   const [dailyError, setDailyError] = useState("");
+  const [selectedWeekDate, setSelectedWeekDate] = useState(() =>
+    dashboardDateFormatter.format(new Date()),
+  );
+  const [weeklyRevenue, setWeeklyRevenue] = useState([]);
+  const [weeklyLoading, setWeeklyLoading] = useState(true);
+  const [weeklyError, setWeeklyError] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -128,6 +139,45 @@ const DashboardPage = () => {
   useEffect(() => {
     fetchDailyStats(selectedDate);
   }, [fetchDailyStats, selectedDate]);
+
+  const fetchWeeklyRevenue = useCallback(async (date) => {
+    if (!date) {
+      setWeeklyRevenue([]);
+      setWeeklyError("Vui lòng chọn một ngày trong tuần cần xem.");
+      setWeeklyLoading(false);
+      return;
+    }
+
+    try {
+      setWeeklyLoading(true);
+      setWeeklyError("");
+      const response = await getWeeklyRevenue(date);
+      setWeeklyRevenue(response.data || []);
+    } catch (err) {
+      setWeeklyError(
+        err.response?.data?.message || "Không thể tải doanh thu theo tuần.",
+      );
+    } finally {
+      setWeeklyLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWeeklyRevenue(selectedWeekDate);
+  }, [fetchWeeklyRevenue, selectedWeekDate]);
+
+  const weeklyRevenueSummary = useMemo(() => {
+    const total = weeklyRevenue.reduce(
+      (sum, item) => sum + Number(item.revenue || 0),
+      0,
+    );
+    const maximum = Math.max(
+      ...weeklyRevenue.map((item) => Number(item.revenue || 0)),
+      0,
+    );
+
+    return { total, maximum };
+  }, [weeklyRevenue]);
 
   const statCards = useMemo(
     () => [
@@ -279,6 +329,78 @@ const DashboardPage = () => {
               <strong>
                 {dailyLoading ? "..." : numberFormatter.format(dailyStats.bookingCount)}
               </strong>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="dashboard-weekly-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>Doanh thu theo tuần</h2>
+            <p>
+              Tổng tuần: {weeklyLoading
+                ? "..."
+                : currencyFormatter.format(weeklyRevenueSummary.total)}
+            </p>
+          </div>
+          <label className="dashboard-date-filter">
+            <span>Chọn ngày trong tuần</span>
+            <input
+              className="form-input dashboard-date-input"
+              type="date"
+              required
+              value={selectedWeekDate}
+              onChange={(event) => setSelectedWeekDate(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {weeklyError ? (
+          <div className="dashboard-daily-error">{weeklyError}</div>
+        ) : (
+          <div className="dashboard-weekly-chart-scroll">
+            <div
+              className="dashboard-weekly-chart"
+              aria-busy={weeklyLoading}
+              aria-label="Biểu đồ doanh thu theo tuần"
+              role="img"
+            >
+              {(weeklyLoading
+                ? Array.from({ length: 7 }, (_, index) => ({
+                    label: index === 6 ? "CN" : `T${index + 2}`,
+                    date: "",
+                    revenue: 0,
+                  }))
+                : weeklyRevenue
+              ).map((item) => {
+                const revenue = Number(item.revenue || 0);
+                const height = weeklyRevenueSummary.maximum
+                  ? Math.max((revenue / weeklyRevenueSummary.maximum) * 100, revenue ? 4 : 0)
+                  : 0;
+                const shortDate = item.date
+                  ? item.date.split("-").slice(1).reverse().join("/")
+                  : "--/--";
+
+                return (
+                  <div className="dashboard-weekly-column" key={`${item.label}-${item.date}`}>
+                    <span className="dashboard-weekly-value">
+                      {weeklyLoading ? "..." : `${compactNumberFormatter.format(revenue)} ₫`}
+                    </span>
+                    <div
+                      className="dashboard-weekly-track"
+                      title={`${item.label}: ${currencyFormatter.format(revenue)}`}
+                    >
+                      <div
+                        className="dashboard-weekly-bar"
+                        style={{ "--bar-height": `${height}%` }}
+                      />
+                    </div>
+                    <strong>{item.label}</strong>
+                    <small>{shortDate}</small>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -21,3 +21,10 @@ export const getDailyRevenue = async (date) => {
   });
   return res.data;
 };
+
+export const getWeeklyRevenue = async (date) => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/weekly", {
+    params: { date },
+  });
+  return res.data;
+};
