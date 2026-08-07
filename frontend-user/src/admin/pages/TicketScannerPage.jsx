@@ -15,13 +15,6 @@ import { showToast } from "../../utils/toast";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
 
-const ticketStatusLabels = {
-  VALID: "Chưa sử dụng",
-  CHECKED_IN: "Đã check-in",
-  CANCELLED: "Đã hủy",
-  EXPIRED: "Đã hết hạn",
-};
-
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
   currency: "VND",
@@ -91,17 +84,7 @@ const getResponsiveQrBox = (viewfinderWidth, viewfinderHeight) => {
   return { width: qrBoxSize, height: qrBoxSize };
 };
 
-const getStatusClass = (status) => {
-  if (status === "VALID") return "status-badge status-now-showing";
-  if (status === "CHECKED_IN") return "status-badge status-coming-soon";
-  return "status-badge status-ended";
-};
-
-const getVerificationTone = (result) => {
-  if (result?.success) return "success";
-  if (result?.data?.status === "CHECKED_IN") return "warning";
-  return "error";
-};
+const getVerificationTone = (result) => (result?.success ? "success" : "error");
 
 const TicketScannerPage = () => {
   const scannerRef = useRef(null);
@@ -120,10 +103,7 @@ const TicketScannerPage = () => {
   const [verifyResult, setVerifyResult] = useState(null);
   const [checkInResult, setCheckInResult] = useState(null);
 
-  const ticket = verifyResult?.data || checkInResult?.data || null;
-  const actionResult = checkInResult;
-  const canCheckIn = Boolean(verifyResult?.data?.verification?.canCheckIn && !checkingIn);
-  const isAlreadyCheckedInResult = ticket?.verification?.result === "ALREADY_CHECKED_IN";
+  const ticket = checkInResult?.data || verifyResult?.data || null;
 
   const scannerConfig = useMemo(
     () => ({
@@ -170,7 +150,7 @@ const TicketScannerPage = () => {
       setCurrentQrToken(qrToken);
       setCheckInResult(null);
       setVerifyResult(null);
-      setCameraMessage("Đã đọc QR. Đang xác minh vé...");
+      setCameraMessage("Đã đọc QR. Đang tải thông tin vé...");
     }
 
     await stopScanner();
@@ -179,10 +159,11 @@ const TicketScannerPage = () => {
       const response = await verifyTicketQr(qrToken);
       if (!mountedRef.current) return;
       setVerifyResult(response);
-      setCameraMessage(response.message || "Đã xác minh vé.");
-      showToast(response.success ? "success" : "error", response.message || "Đã xác minh vé.");
+      const successMessage = "Đã tải thông tin vé.";
+      setCameraMessage(response.message || successMessage);
+      showToast(response.success ? "success" : "error", response.message || successMessage);
     } catch (error) {
-      const message = getApiMessage(error, "Không thể xác minh mã QR.");
+      const message = getApiMessage(error, "Không thể đọc thông tin từ mã QR.");
       if (!mountedRef.current) return;
       setVerifyResult({
         success: false,
@@ -264,33 +245,6 @@ const TicketScannerPage = () => {
     }
   }, [handleQrToken, processing, scannerConfig]);
 
-  const handleCheckIn = async () => {
-    if (!currentQrToken || checkingIn || checkingInRef.current || !canCheckIn) return;
-
-    try {
-      checkingInRef.current = true;
-      setCheckingIn(true);
-      setCheckInResult(null);
-      const response = await checkInTicketQr(currentQrToken);
-      setCheckInResult(response);
-      setVerifyResult(response);
-      setCameraMessage(response.message || "Check-in vé thành công.");
-      showToast("success", response.message || "Check-in vé thành công.");
-    } catch (error) {
-      const message = getApiMessage(error, "Không thể check-in vé.");
-      setCheckInResult({
-        success: false,
-        message,
-        data: error?.response?.data?.data || ticket,
-      });
-      setCameraMessage(message);
-      showToast("error", message);
-    } finally {
-      checkingInRef.current = false;
-      setCheckingIn(false);
-    }
-  };
-
   const handleScanNext = async () => {
     setVerifyResult(null);
     setCheckInResult(null);
@@ -312,6 +266,30 @@ const TicketScannerPage = () => {
       showToast("error", getApiMessage(error, "Không thể tạo file PDF của vé."));
     } finally {
       setPrintingTicket(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!currentQrToken || !ticket || checkingIn || checkingInRef.current) return;
+
+    try {
+      checkingInRef.current = true;
+      setCheckingIn(true);
+      setCheckInResult(null);
+      const response = await checkInTicketQr(currentQrToken);
+      setCheckInResult(response);
+      showToast("success", response.message || "Check-in vé thành công.");
+    } catch (error) {
+      const message = getApiMessage(error, "Không thể check-in vé.");
+      setCheckInResult({
+        success: false,
+        message,
+        data: error?.response?.data?.data || ticket,
+      });
+      showToast("error", message);
+    } finally {
+      checkingInRef.current = false;
+      setCheckingIn(false);
     }
   };
 
@@ -364,7 +342,7 @@ const TicketScannerPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Quét vé QR</h1>
-          <p>Xác minh vé điện tử và check-in khách tại cửa phòng chiếu.</p>
+          <p>Quét mã QR để xem thông tin, xuất file PDF hoặc check-in vé.</p>
         </div>
         <button className="btn btn-secondary" onClick={handleScanNext} type="button">
           <HiOutlineRefresh />
@@ -424,8 +402,8 @@ const TicketScannerPage = () => {
         <section className={`ticket-scanner-panel ticket-result-panel ${verificationTone}`}>
           <div className="ticket-scanner-panel-header">
             <div>
-              <h2>Kết quả xác minh</h2>
-              <p>Verify chỉ kiểm tra vé, chưa tự động check-in.</p>
+              <h2>Kết quả quét vé</h2>
+              <p>Thông tin vé sau khi quét, sẵn sàng để in hoặc check-in.</p>
             </div>
             <HiOutlineTicket />
           </div>
@@ -454,8 +432,6 @@ const TicketScannerPage = () => {
                   <InfoItem label="Ghế" value={ticket.seat?.label || ticket.seatLabel || "-"} />
                   <InfoItem label="Loại ghế" value={ticket.seat?.type || "-"} />
                   <InfoItem label="Giá vé" value={currencyFormatter.format(Number(ticket.price || 0))} />
-                  <InfoItem label="Trạng thái" value={ticketStatusLabels[ticket.status] || ticket.status || "-"} />
-                  <InfoItem label="Thời gian check-in" value={formatDateTime(ticket.checkedInAt)} />
                   <InfoItem label="Mã đơn" value={ticket.booking?.bookingCode || "-"} />
                 </div>
               )}
@@ -467,22 +443,9 @@ const TicketScannerPage = () => {
           <div className="ticket-scanner-panel-header">
             <div>
               <h2>Hành động</h2>
-              <p>Admin xác nhận thủ công sau khi xem thông tin vé.</p>
+              <p>Chọn in vé PDF hoặc check-in vé vừa quét.</p>
             </div>
           </div>
-
-          {ticket?.status && (
-            <span className={getStatusClass(ticket.status)}>
-              {ticketStatusLabels[ticket.status] || ticket.status}
-            </span>
-          )}
-
-          {ticket?.status !== "CHECKED_IN" && (
-            <button className="btn btn-success ticket-checkin-btn" disabled={!canCheckIn || checkingIn} onClick={handleCheckIn} type="button">
-              <HiOutlineCheckCircle />
-              {checkingIn ? "Đang check-in..." : "Xác nhận check-in"}
-            </button>
-          )}
 
           <button
             className="btn btn-primary ticket-print-btn"
@@ -494,15 +457,19 @@ const TicketScannerPage = () => {
             {printingTicket ? "Đang tạo PDF..." : "In vé PDF"}
           </button>
 
-          {isAlreadyCheckedInResult && (
-            <div className="ticket-checkin-feedback error">
-              Vé này đã được check-in trước đó.
-            </div>
-          )}
+          <button
+            className="btn btn-success ticket-checkin-btn"
+            disabled={!ticket || processing || printingTicket || checkingIn || ticket.status !== "VALID"}
+            onClick={handleCheckIn}
+            type="button"
+          >
+            <HiOutlineCheckCircle />
+            {checkingIn ? "Đang check-in..." : ticket?.status === "CHECKED_IN" ? "Đã check-in" : "Check-in vé"}
+          </button>
 
-          {actionResult && (
-            <div className={`ticket-checkin-feedback ${actionResult.success ? "success" : "error"}`}>
-              {actionResult.message}
+          {checkInResult && (
+            <div className={`ticket-checkin-feedback ${checkInResult.success ? "success" : "error"}`}>
+              {checkInResult.message}
             </div>
           )}
 

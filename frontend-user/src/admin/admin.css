@@ -4497,12 +4497,12 @@
   word-break: break-word;
 }
 
-.ticket-checkin-btn {
-  min-width: 190px;
+.ticket-print-btn {
+  min-width: 150px;
   justify-content: center;
 }
 
-.ticket-print-btn {
+.ticket-checkin-btn {
   min-width: 150px;
   justify-content: center;
 }
