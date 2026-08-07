@@ -8,6 +8,7 @@ import {
   getMonthlyRevenue,
   getMonthRange,
   getMovieRevenue,
+  getRevenueComparison,
   getTopMoviesRevenue,
   getTopSellingCombos,
   getTodayRange,
@@ -305,6 +306,54 @@ test("getMonthlyRevenue returns daily values and the monthly total", async () =>
   assert.equal(responseBody.data.days.length, 31);
   assert.equal(responseBody.data.days[1].revenue, 0);
   assert.equal(responseBody.data.totalRevenue, 18000000);
+});
+
+test("getRevenueComparison compares the selected month with the previous month", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [{
+      current: [{ revenue: 320000000 }],
+      previous: [{ revenue: 285000000 }],
+    }];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getRevenueComparison({
+      query: { period: "month", date: "2026-08-07" },
+    }, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$gte.toISOString(),
+    "2026-06-30T17:00:00.000Z",
+  );
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$lt.toISOString(),
+    "2026-08-31T17:00:00.000Z",
+  );
+  assert.deepEqual(responseBody.data, {
+    period: "month",
+    current: { label: "Tháng 8/2026", revenue: 320000000 },
+    previous: { label: "Tháng 7/2026", revenue: 285000000 },
+    percentageChange: 12.28,
+  });
 });
 
 test("getTopMoviesRevenue joins showtimes and returns the five highest movies", async () => {

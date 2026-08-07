@@ -104,6 +104,78 @@ export const getMonthRange = (monthValue, yearValue) => {
   return { start, end, days, month, year };
 };
 
+const shiftLocalDate = (date, days) => {
+  const match = DATE_PATTERN.exec(String(date || ""));
+  if (!match) return null;
+
+  const shifted = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days),
+  );
+  return shifted.toISOString().slice(0, 10);
+};
+
+const toLocalDate = (instant) => instant.toLocaleDateString("en-CA", {
+  timeZone: DASHBOARD_TIME_ZONE,
+});
+
+const getComparisonRanges = (period, selectedDate) => {
+  const normalizedPeriod = period === "today" || period === "custom" ? "day" : period;
+
+  if (normalizedPeriod === "day") {
+    const current = getDateRange(selectedDate);
+    const previousDate = shiftLocalDate(selectedDate, -1);
+    const previous = getDateRange(previousDate);
+    if (!current || !previous) return null;
+
+    return {
+      period: normalizedPeriod,
+      current: { ...current, label: current.localDay },
+      previous: { ...previous, label: previous.localDay },
+    };
+  }
+
+  if (normalizedPeriod === "week") {
+    const current = getWeekRange(selectedDate);
+    if (!current) return null;
+    const previousStartDate = toLocalDate(
+      new Date(current.start.getTime() - 7 * 24 * 60 * 60 * 1000),
+    );
+    const previous = getWeekRange(previousStartDate);
+
+    return {
+      period: normalizedPeriod,
+      current: {
+        ...current,
+        label: `${current.days[0].date} - ${current.days[6].date}`,
+      },
+      previous: {
+        ...previous,
+        label: `${previous.days[0].date} - ${previous.days[6].date}`,
+      },
+    };
+  }
+
+  if (normalizedPeriod === "month") {
+    const dateRange = getDateRange(selectedDate);
+    if (!dateRange) return null;
+    const match = DATE_PATTERN.exec(selectedDate);
+    const month = Number(match[2]);
+    const year = Number(match[1]);
+    const previousMonth = month === 1 ? 12 : month - 1;
+    const previousYear = month === 1 ? year - 1 : year;
+    const current = getMonthRange(month, year);
+    const previous = getMonthRange(previousMonth, previousYear);
+
+    return {
+      period: normalizedPeriod,
+      current: { ...current, label: `Tháng ${month}/${year}` },
+      previous: { ...previous, label: `Tháng ${previousMonth}/${previousYear}` },
+    };
+  }
+
+  return null;
+};
+
 const formatTime = (value) => {
   if (!value) {
     return null;
@@ -562,6 +634,87 @@ export const getMonthlyRevenue = async (req, res) => {
         year: monthRange.year,
         totalRevenue,
         days,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getRevenueComparison = async (req, res) => {
+  const period = String(req.query?.period || "month").toLowerCase();
+  const selectedDate = req.query?.date || getTodayRange().localDay;
+  const ranges = getComparisonRanges(period, selectedDate);
+
+  if (!ranges) {
+    return res.status(400).json({
+      success: false,
+      message: "Kỳ so sánh hoặc ngày được chọn không hợp lệ.",
+    });
+  }
+
+  try {
+    const result = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: {
+            $gte: ranges.previous.start,
+            $lt: ranges.current.end,
+          },
+        },
+      },
+      {
+        $facet: {
+          current: [
+            {
+              $match: {
+                created_at: {
+                  $gte: ranges.current.start,
+                  $lt: ranges.current.end,
+                },
+              },
+            },
+            { $group: { _id: null, revenue: { $sum: "$total_price" } } },
+          ],
+          previous: [
+            {
+              $match: {
+                created_at: {
+                  $gte: ranges.previous.start,
+                  $lt: ranges.previous.end,
+                },
+              },
+            },
+            { $group: { _id: null, revenue: { $sum: "$total_price" } } },
+          ],
+        },
+      },
+    ]);
+
+    const currentRevenue = result?.[0]?.current?.[0]?.revenue ?? 0;
+    const previousRevenue = result?.[0]?.previous?.[0]?.revenue ?? 0;
+    const percentageChange = previousRevenue === 0
+      ? null
+      : Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 10000) / 100;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        period: ranges.period,
+        current: {
+          label: ranges.current.label,
+          revenue: currentRevenue,
+        },
+        previous: {
+          label: ranges.previous.label,
+          revenue: previousRevenue,
+        },
+        percentageChange,
       },
     });
   } catch (error) {

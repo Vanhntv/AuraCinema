@@ -23,6 +23,7 @@ import {
   getDashboardStats,
   getMonthlyRevenue,
   getMovieRevenue,
+  getRevenueComparison,
   getTopMoviesRevenue,
   getTopSellingCombos,
   getTodayRevenue,
@@ -91,6 +92,13 @@ const emptyDailyStats = {
   bookingCount: 0,
 };
 
+const emptyRevenueComparison = {
+  period: "day",
+  current: { label: "", revenue: 0 },
+  previous: { label: "", revenue: 0 },
+  percentageChange: null,
+};
+
 const emptyMovieRevenue = {
   revenue: 0,
   ticketsSold: 0,
@@ -125,6 +133,9 @@ const DashboardPage = () => {
   const [dailyStats, setDailyStats] = useState(emptyDailyStats);
   const [dailyLoading, setDailyLoading] = useState(true);
   const [dailyError, setDailyError] = useState("");
+  const [revenueComparison, setRevenueComparison] = useState(emptyRevenueComparison);
+  const [comparisonLoading, setComparisonLoading] = useState(true);
+  const [comparisonError, setComparisonError] = useState("");
   const [weeklyRevenue, setWeeklyRevenue] = useState([]);
   const [weeklyLoading, setWeeklyLoading] = useState(true);
   const [weeklyError, setWeeklyError] = useState("");
@@ -295,6 +306,34 @@ const DashboardPage = () => {
     }
   }, [fetchMonthlyRevenue, revenuePeriod]);
 
+  const fetchRevenueComparison = useCallback(async (period, date) => {
+    if (!date) return;
+
+    try {
+      setComparisonLoading(true);
+      setComparisonError("");
+      const response = await getRevenueComparison(period, date);
+      setRevenueComparison({
+        ...emptyRevenueComparison,
+        ...(response.data || {}),
+      });
+    } catch (err) {
+      setComparisonError(
+        err.response?.data?.message || "Không thể tải dữ liệu so sánh kỳ trước.",
+      );
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const period = revenuePeriod === "today" || revenuePeriod === "custom"
+      ? "day"
+      : revenuePeriod;
+    const date = revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate;
+    fetchRevenueComparison(period, date);
+  }, [fetchRevenueComparison, revenuePeriod, selectedDate]);
+
   const dailyChartData = useMemo(() => {
     const date = revenuePeriod === "today" ? dashboardCurrentDate : selectedDate;
     const [, month, day] = String(date || "").split("-");
@@ -320,6 +359,20 @@ const DashboardPage = () => {
     ),
     [dashboard.topCombos],
   );
+
+  const comparisonTrend = useMemo(() => {
+    const change = revenueComparison.percentageChange;
+    if (change === null || change === undefined) {
+      return { label: "Chưa có dữ liệu kỳ trước", tone: "neutral" };
+    }
+    if (change > 0) {
+      return { label: `Tăng ${numberFormatter.format(change)}%`, tone: "increase" };
+    }
+    if (change < 0) {
+      return { label: `Giảm ${numberFormatter.format(Math.abs(change))}%`, tone: "decrease" };
+    }
+    return { label: "Không thay đổi", tone: "neutral" };
+  }, [revenueComparison.percentageChange]);
 
   const fetchSelectedMovieRevenue = useCallback(async (movie, filters = {}) => {
     if (!movie?._id) return;
@@ -381,6 +434,12 @@ const DashboardPage = () => {
 
   const handleRefresh = () => {
     fetchDashboard();
+
+    const comparisonPeriod = revenuePeriod === "today" || revenuePeriod === "custom"
+      ? "day"
+      : revenuePeriod;
+    const comparisonDate = revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate;
+    fetchRevenueComparison(comparisonPeriod, comparisonDate);
 
     if (revenuePeriod === "today") {
       fetchDailyStats(dashboardCurrentDate);
@@ -574,6 +633,46 @@ const DashboardPage = () => {
             <option value="custom">Tùy chọn</option>
           </select>
         </label>
+      </section>
+
+      <section className="dashboard-comparison-panel">
+        <div className="dashboard-panel-header">
+          <div>
+            <h2>So sánh kỳ trước</h2>
+            <p>Đối chiếu doanh thu với kỳ liền trước cùng độ dài</p>
+          </div>
+          <HiOutlineChartBar />
+        </div>
+
+        {comparisonError ? (
+          <div className="dashboard-daily-error">{comparisonError}</div>
+        ) : (
+          <div className="dashboard-comparison-grid" aria-busy={comparisonLoading}>
+            <div className="dashboard-comparison-metric current">
+              <span>{comparisonLoading ? "Kỳ hiện tại" : revenueComparison.current.label}</span>
+              <strong>
+                {comparisonLoading
+                  ? "..."
+                  : currencyFormatter.format(revenueComparison.current.revenue || 0)}
+              </strong>
+              <small>Kỳ hiện tại</small>
+            </div>
+            <div className="dashboard-comparison-metric previous">
+              <span>{comparisonLoading ? "Kỳ trước" : revenueComparison.previous.label}</span>
+              <strong>
+                {comparisonLoading
+                  ? "..."
+                  : currencyFormatter.format(revenueComparison.previous.revenue || 0)}
+              </strong>
+              <small>Kỳ trước</small>
+            </div>
+            <div className={`dashboard-comparison-metric trend ${comparisonTrend.tone}`}>
+              <span>Biến động</span>
+              <strong>{comparisonLoading ? "..." : comparisonTrend.label}</strong>
+              <small>So với kỳ trước</small>
+            </div>
+          </div>
+        )}
       </section>
 
       {(revenuePeriod === "today" || revenuePeriod === "custom") && (
