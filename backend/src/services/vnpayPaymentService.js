@@ -36,6 +36,16 @@ export const getVnpayConfig = () => {
   return { tmnCode, hashSecret, vnpUrl, returnUrl };
 };
 
+export const resolveVnpayReturnUrl = (frontendUrl) => {
+  const normalizedFrontendUrl = normalizeString(frontendUrl).replace(/\/+$/, "");
+  if (normalizedFrontendUrl) {
+    return `${normalizedFrontendUrl}/payment/vnpay-return`;
+  }
+
+  const { returnUrl } = getVnpayConfig();
+  return returnUrl;
+};
+
 export const signVnpayParams = ({ params, hashSecret }) => {
   const sortedParams = sortObject(params);
   const signData = qs.stringify(sortedParams, { encode: false });
@@ -44,10 +54,11 @@ export const signVnpayParams = ({ params, hashSecret }) => {
   return { sortedParams, secureHash: signed };
 };
 
-export const buildVnpayPaymentUrl = ({ bookingId, amount, ipAddr }) => {
+export const buildVnpayPaymentUrl = ({ bookingId, amount, ipAddr, frontendUrl }) => {
   process.env.TZ = "Asia/Ho_Chi_Minh";
 
-  const { tmnCode, hashSecret, vnpUrl, returnUrl } = getVnpayConfig();
+  const { tmnCode, hashSecret, vnpUrl } = getVnpayConfig();
+  const returnUrl = resolveVnpayReturnUrl(frontendUrl);
   const normalizedAmount = normalizeMoney(amount);
 
   if (!bookingId) {

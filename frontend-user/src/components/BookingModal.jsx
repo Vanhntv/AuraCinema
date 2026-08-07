@@ -919,6 +919,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const response = await createSepayPgCheckout({
         booking_id: bookingId,
         amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+        frontend_url: window.location.origin,
       });
       const checkoutUrl = response.data?.checkoutUrl;
       const fields = response.data?.fields;
@@ -945,6 +946,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const response = await createVnpayPaymentUrl({
         booking_id: bookingId,
         amount: confirmedBookingSummary?.finalTotal || bookingResult?.total_price,
+        frontend_url: window.location.origin,
       });
       const paymentUrl = response.data?.paymentUrl;
 

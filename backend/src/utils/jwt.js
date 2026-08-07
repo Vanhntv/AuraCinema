@@ -1,5 +1,19 @@
 import { createHmac, timingSafeEqual } from "crypto";
 
+const DEV_JWT_SECRET = "auracinema-dev-jwt-secret";
+
+const resolveSecret = (secret) => {
+  if (secret) {
+    return secret;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return DEV_JWT_SECRET;
+  }
+
+  throw new Error("Missing JWT secret");
+};
+
 const base64UrlEncode = (value) => {
   return Buffer.from(value)
     .toString("base64")
@@ -21,9 +35,7 @@ const base64UrlToBuffer = (value) => {
 };
 
 export const signJwt = (payload, secret, expiresInSeconds = 7 * 24 * 60 * 60) => {
-  if (!secret) {
-    throw new Error("Missing JWT secret");
-  }
+  const jwtSecret = resolveSecret(secret);
 
   const header = {
     alg: "HS256",
@@ -39,7 +51,7 @@ export const signJwt = (payload, secret, expiresInSeconds = 7 * 24 * 60 * 60) =>
 
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(tokenPayload));
-  const signature = createHmac("sha256", secret)
+  const signature = createHmac("sha256", jwtSecret)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64")
     .replace(/=/g, "")
@@ -50,9 +62,7 @@ export const signJwt = (payload, secret, expiresInSeconds = 7 * 24 * 60 * 60) =>
 };
 
 export const verifyJwt = (token, secret) => {
-  if (!secret) {
-    throw new Error("Missing JWT secret");
-  }
+  const jwtSecret = resolveSecret(secret);
 
   const parts = token.split(".");
   if (parts.length !== 3) {
@@ -60,7 +70,7 @@ export const verifyJwt = (token, secret) => {
   }
 
   const [encodedHeader, encodedPayload, signature] = parts;
-  const expectedSignature = createHmac("sha256", secret)
+  const expectedSignature = createHmac("sha256", jwtSecret)
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64")
     .replace(/=/g, "")

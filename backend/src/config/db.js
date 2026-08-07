@@ -1,10 +1,13 @@
 import mongoose from "mongoose";
 
+const DEFAULT_MONGODB_URI =
+  "mongodb+srv://taovohoang2k6_db_user:sb0euxYwl8c6jbEY@cluster0.hdnuiwm.mongodb.net/?appName=Cluster0";
+
 export const connectDB = async () => {
   try {
-     await mongoose.connect(
-      "mongodb+srv://taovohoang2k6_db_user:sb0euxYwl8c6jbEY@cluster0.hdnuiwm.mongodb.net/?appName=Cluster0"
-    );
+    const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
+
+    await mongoose.connect(mongoUri);
 
     // mongoose.connect("mongodb://localhost:27017/nodejs");
     console.log("Liên kết csdl thành công");

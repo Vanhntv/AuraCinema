@@ -156,6 +156,7 @@ export const createVnpayPaymentUrl = async (req, res) => {
       bookingId,
       amount: bookingAmount,
       ipAddr: getClientIp(req),
+      frontendUrl: req.body?.frontend_url || req.get("origin") || process.env.FRONTEND_URL,
     });
 
     const payment = await Payment.findOneAndUpdate(
@@ -223,7 +224,7 @@ export const createSepayPgCheckout = async (req, res) => {
     const { checkoutUrl, fields } = buildSepayPgCheckoutFields({
       booking,
       amount: bookingAmount,
-      frontendUrl: process.env.FRONTEND_URL,
+      frontendUrl: req.body?.frontend_url || req.get("origin") || process.env.FRONTEND_URL,
       customerName: booking.user_id?.full_name,
     });
 

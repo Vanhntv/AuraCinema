@@ -123,7 +123,11 @@ function PaymentPage() {
     try {
       setIsPaying(true);
       setPaymentError("");
-      const response = await createSepayPgCheckout({ booking_id: bookingId, amount });
+      const response = await createSepayPgCheckout({
+        booking_id: bookingId,
+        amount,
+        frontend_url: window.location.origin,
+      });
       const checkoutUrl = response.data?.checkoutUrl;
       const fields = response.data?.fields;
 
@@ -150,7 +154,11 @@ function PaymentPage() {
     try {
       setIsPaying(true);
       setPaymentError("");
-      const response = await createVnpayPaymentUrl({ booking_id: bookingId, amount });
+      const response = await createVnpayPaymentUrl({
+        booking_id: bookingId,
+        amount,
+        frontend_url: window.location.origin,
+      });
       const paymentUrl = response.data?.paymentUrl;
 
       if (!paymentUrl) {
