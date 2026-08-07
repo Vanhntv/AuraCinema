@@ -4,6 +4,9 @@ import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
+const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
+const isValidPhone = (phone) => /^0\d{9}$/.test(String(phone || "").trim());
+
 function RegisterPage() {
   const navigate = useNavigate();
   const { register } = useAuth();
@@ -27,21 +30,58 @@ function RegisterPage() {
     }));
   };
 
+  const validateForm = () => {
+    const fullName = formData.full_name.trim();
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
+
+    if (!fullName) {
+      return "Vui lòng nhập họ và tên.";
+    }
+
+    if (fullName.length < 2) {
+      return "Họ và tên phải có ít nhất 2 ký tự.";
+    }
+
+    if (!email) {
+      return "Vui lòng nhập email.";
+    }
+
+    if (!isValidEmail(email)) {
+      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
+    }
+
+    if (phone && !isValidPhone(phone)) {
+      return "Số điện thoại không hợp lệ. Vui lòng nhập 10 số và bắt đầu bằng số 0.";
+    }
+
+    if (!formData.password) {
+      return "Vui lòng nhập mật khẩu.";
+    }
+
+    if (!formData.confirm_password) {
+      return "Vui lòng nhập xác nhận mật khẩu.";
+    }
+
+    if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
+      return "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
+    }
+
+    if (formData.password !== formData.confirm_password) {
+      return "Mật khẩu xác nhận không khớp.";
+    }
+
+    return "";
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
 
-    if (formData.password.length < 8 || !/[A-Z]/.test(formData.password) || !/\d/.test(formData.password)) {
-      const message = "Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa và số.";
-      setError(message);
-      showToast("error", message);
-      return;
-    }
-
-    if (formData.password !== formData.confirm_password) {
-      const message = "Mật khẩu xác nhận không khớp.";
-      setError(message);
-      showToast("error", message);
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      showToast("error", validationError);
       return;
     }
 
@@ -49,8 +89,8 @@ function RegisterPage() {
 
     try {
       await register({
-        full_name: formData.full_name,
-        email: formData.email,
+        full_name: formData.full_name.trim(),
+        email: formData.email.trim(),
         password: formData.password,
         confirm_password: formData.confirm_password,
         phone: formData.phone.trim() || undefined,
