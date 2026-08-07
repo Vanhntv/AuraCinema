@@ -1,6 +1,7 @@
 import express from "express";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
 import {
+  getBookingStatusStats,
   getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
@@ -17,6 +18,7 @@ const adminOnly = [authMiddleware, authorizeRoles("admin")];
 
 router.get("/stats", adminOnly, getDashboardStats);
 router.get("/overview", adminOnly, getDashboardOverview);
+router.get("/bookings/statuses", adminOnly, getBookingStatusStats);
 router.get("/revenue/today", adminOnly, getTodayRevenue);
 router.get("/revenue/daily", adminOnly, getDailyRevenue);
 router.get("/revenue/weekly", adminOnly, getWeeklyRevenue);

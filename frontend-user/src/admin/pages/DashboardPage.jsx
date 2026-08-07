@@ -17,6 +17,7 @@ import {
   HiOutlineTicket,
 } from "react-icons/hi";
 import {
+  getBookingStatusStats,
   getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
@@ -51,6 +52,14 @@ const emptyDashboard = {
   todayShowtimes: [],
   topMovies: [],
   topCombos: [],
+  bookingStatuses: {
+    pending: 0,
+    confirmed: 0,
+    cancelled: 0,
+    expired: 0,
+    refunded: 0,
+    checked_in: 0,
+  },
 };
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
@@ -97,6 +106,15 @@ const emptyMovieRevenue = {
   occupancyByShowtime: [],
 };
 
+const bookingStatusItems = [
+  { key: "pending", label: "Chờ xử lý", tone: "pending" },
+  { key: "confirmed", label: "Đã xác nhận", tone: "confirmed" },
+  { key: "cancelled", label: "Đã hủy", tone: "cancelled" },
+  { key: "expired", label: "Hết hạn", tone: "expired" },
+  { key: "refunded", label: "Đã hoàn tiền", tone: "refunded" },
+  { key: "checked_in", label: "Đã check-in", tone: "checked-in" },
+];
+
 const DashboardPage = () => {
   const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
@@ -133,12 +151,14 @@ const DashboardPage = () => {
         todayRevenueResponse,
         topMoviesResponse,
         topCombosResponse,
+        bookingStatusesResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getDashboardOverview(),
         getTodayRevenue(),
         getTopMoviesRevenue(),
         getTopSellingCombos(),
+        getBookingStatusStats(),
       ]);
 
       setDashboard({
@@ -146,6 +166,10 @@ const DashboardPage = () => {
         ...(statsResponse.data || {}),
         topMovies: topMoviesResponse.data || [],
         topCombos: topCombosResponse.data || [],
+        bookingStatuses: {
+          ...emptyDashboard.bookingStatuses,
+          ...(bookingStatusesResponse.data || {}),
+        },
         stats: {
           ...emptyDashboard.stats,
           ...(statsResponse.data?.stats || {}),
@@ -502,6 +526,35 @@ const DashboardPage = () => {
           </div>
         ))}
       </div>
+
+      <section className="dashboard-booking-status-panel">
+        <div className="dashboard-panel-header">
+          <div>
+            <h2>Thống kê trạng thái booking</h2>
+            <p>Mỗi booking được tính một lần theo trạng thái hiện tại</p>
+          </div>
+          <HiOutlineChartPie />
+        </div>
+        <div className="dashboard-booking-status-grid" aria-busy={loading}>
+          {bookingStatusItems.map((status) => (
+            <div
+              className={`dashboard-booking-status-item ${status.tone}`}
+              key={status.key}
+            >
+              <span className="dashboard-booking-status-dot" />
+              <div>
+                <strong>
+                  {loading
+                    ? "..."
+                    : numberFormatter.format(dashboard.bookingStatuses[status.key] || 0)}
+                </strong>
+                <span>{status.label}</span>
+                <small>{status.key}</small>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="dashboard-revenue-filter">
         <div>

@@ -294,6 +294,73 @@ export const getDashboardOverview = async (_req, res) => {
   }
 };
 
+export const getBookingStatusStats = async (_req, res) => {
+  try {
+    const groupedStatuses = await Booking.aggregate([
+      {
+        $project: {
+          effectiveStatus: {
+            $switch: {
+              branches: [
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$payment_status", "refunded"] },
+                      { $eq: ["$status", "refunded"] },
+                    ],
+                  },
+                  then: "refunded",
+                },
+                { case: { $eq: ["$status", "cancelled"] }, then: "cancelled" },
+                { case: { $eq: ["$status", "expired"] }, then: "expired" },
+                { case: { $eq: ["$status", "checked_in"] }, then: "checked_in" },
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$payment_status", "pending"] },
+                      { $eq: ["$status", "pending"] },
+                    ],
+                  },
+                  then: "pending",
+                },
+                { case: { $eq: ["$status", "confirmed"] }, then: "confirmed" },
+              ],
+              default: null,
+            },
+          },
+        },
+      },
+      { $match: { effectiveStatus: { $ne: null } } },
+      { $group: { _id: "$effectiveStatus", count: { $sum: 1 } } },
+    ]);
+
+    const statusCounts = {
+      pending: 0,
+      confirmed: 0,
+      cancelled: 0,
+      expired: 0,
+      refunded: 0,
+      checked_in: 0,
+    };
+
+    groupedStatuses.forEach((item) => {
+      if (Object.prototype.hasOwnProperty.call(statusCounts, item._id)) {
+        statusCounts[item._id] = item.count;
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: statusCounts,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const getTodayRevenue = async (_req, res) => {
   try {
     const { start, end, localDay } = getTodayRange();

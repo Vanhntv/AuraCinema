@@ -672,6 +672,94 @@
   font-size: clamp(18px, 1.65vw, 24px);
 }
 
+.dashboard-booking-status-panel {
+  margin-bottom: 22px;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-card);
+}
+
+.dashboard-booking-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dashboard-booking-status-item {
+  --booking-status-color: #94a3b8;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--booking-status-color) 22%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--booking-status-color) 8%, transparent);
+}
+
+.dashboard-booking-status-item.pending {
+  --booking-status-color: #f59e0b;
+}
+
+.dashboard-booking-status-item.confirmed {
+  --booking-status-color: #22c55e;
+}
+
+.dashboard-booking-status-item.cancelled {
+  --booking-status-color: #ef4444;
+}
+
+.dashboard-booking-status-item.expired {
+  --booking-status-color: #94a3b8;
+}
+
+.dashboard-booking-status-item.refunded {
+  --booking-status-color: #a855f7;
+}
+
+.dashboard-booking-status-item.checked-in {
+  --booking-status-color: #06b6d4;
+}
+
+.dashboard-booking-status-dot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  margin-top: 5px;
+  border-radius: var(--radius-full);
+  background: var(--booking-status-color);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--booking-status-color) 60%, transparent);
+}
+
+.dashboard-booking-status-item > div {
+  display: grid;
+  min-width: 0;
+}
+
+.dashboard-booking-status-item strong {
+  color: var(--color-text-primary);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.dashboard-booking-status-item span:not(.dashboard-booking-status-dot) {
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-booking-status-item small {
+  margin-top: 2px;
+  color: var(--booking-status-color);
+  font-size: 10px;
+}
+
 .dashboard-daily-panel {
   margin-bottom: 22px;
   padding: 18px;

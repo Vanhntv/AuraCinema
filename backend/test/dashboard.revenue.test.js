@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  getBookingStatusStats,
   getDailyRevenue,
   getDashboardOverview,
   getDateRange,
@@ -131,6 +132,50 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
     receivedPipeline[1].$facet.voucherStats[1].$group.totalDiscount,
     { $sum: { $ifNull: ["$discount_amount", 0] } },
   );
+});
+
+test("getBookingStatusStats returns all booking status counters with zero defaults", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [
+      { _id: "confirmed", count: 12 },
+      { _id: "pending", count: 3 },
+      { _id: "refunded", count: 2 },
+    ];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getBookingStatusStats({}, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.deepEqual(receivedPipeline[2], {
+    $group: { _id: "$effectiveStatus", count: { $sum: 1 } },
+  });
+  assert.deepEqual(responseBody.data, {
+    pending: 3,
+    confirmed: 12,
+    cancelled: 0,
+    expired: 0,
+    refunded: 2,
+    checked_in: 0,
+  });
 });
 
 test("getDailyRevenue returns revenue, seats, and bookings for the selected date", async () => {

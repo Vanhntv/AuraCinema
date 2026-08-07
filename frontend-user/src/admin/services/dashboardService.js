@@ -10,6 +10,11 @@ export const getDashboardOverview = async () => {
   return res.data;
 };
 
+export const getBookingStatusStats = async () => {
+  const res = await axiosClient.get("/admin/dashboard/bookings/statuses");
+  return res.data;
+};
+
 export const getTodayRevenue = async () => {
   const res = await axiosClient.get("/admin/dashboard/revenue/today");
   return res.data;
