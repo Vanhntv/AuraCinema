@@ -6,12 +6,15 @@ import {
   getDateRange,
   getMonthlyRevenue,
   getMonthRange,
+  getMovieRevenue,
   getTopMoviesRevenue,
   getTodayRange,
   getWeeklyRevenue,
   getWeekRange,
 } from "../src/controllers/dashboardControllers.js";
 import Booking from "../src/models/Booking.js";
+import Movie from "../src/models/Movie.js";
+import Showtime from "../src/models/Showtime.js";
 
 test("getTodayRange uses the Asia/Ho_Chi_Minh calendar day", () => {
   const range = getTodayRange(new Date("2026-08-07T16:59:59.999Z"));
@@ -273,4 +276,70 @@ test("getTopMoviesRevenue joins showtimes and returns the five highest movies", 
   assert.deepEqual(receivedPipeline[6], { $sort: { revenue: -1, title: 1 } });
   assert.deepEqual(receivedPipeline[7], { $limit: 5 });
   assert.deepEqual(responseBody.data, topMovies);
+});
+
+test("getMovieRevenue returns revenue metrics for one movie and date range", async () => {
+  const originalAggregate = Booking.aggregate;
+  const originalFindOne = Movie.findOne;
+  const originalCountDocuments = Showtime.countDocuments;
+  const movieId = "64f000000000000000000001";
+  let bookingPipeline;
+  let showtimeFilter;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    bookingPipeline = pipeline;
+    return [{ revenue: 48500000, ticketsSold: 425, bookingCount: 238 }];
+  };
+  Movie.findOne = () => ({
+    select: async () => ({ _id: movieId, title: "Avengers: Endgame" }),
+  });
+  Showtime.countDocuments = async (filter) => {
+    showtimeFilter = filter;
+    return 27;
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getMovieRevenue(
+      {
+        params: { movieId },
+        query: { from: "2026-08-01", to: "2026-08-07" },
+      },
+      response,
+    );
+  } finally {
+    Booking.aggregate = originalAggregate;
+    Movie.findOne = originalFindOne;
+    Showtime.countDocuments = originalCountDocuments;
+  }
+
+  assert.equal(
+    bookingPipeline[0].$match.created_at.$gte.toISOString(),
+    "2026-07-31T17:00:00.000Z",
+  );
+  assert.equal(
+    bookingPipeline[0].$match.created_at.$lt.toISOString(),
+    "2026-08-07T17:00:00.000Z",
+  );
+  assert.equal(showtimeFilter.start_time.$lt.toISOString(), "2026-08-07T17:00:00.000Z");
+  assert.deepEqual(
+    {
+      revenue: responseBody.data.revenue,
+      ticketsSold: responseBody.data.ticketsSold,
+      bookingCount: responseBody.data.bookingCount,
+      showtimeCount: responseBody.data.showtimeCount,
+    },
+    { revenue: 48500000, ticketsSold: 425, bookingCount: 238, showtimeCount: 27 },
+  );
 });

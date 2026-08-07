@@ -6,6 +6,7 @@ import {
   HiOutlineChartBar,
   HiOutlineCheckCircle,
   HiOutlineFilm,
+  HiOutlineClock,
   HiOutlineLogout,
   HiOutlineOfficeBuilding,
   HiOutlinePlus,
@@ -18,6 +19,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getMonthlyRevenue,
+  getMovieRevenue,
   getTopMoviesRevenue,
   getTodayRevenue,
   getWeeklyRevenue,
@@ -65,6 +67,13 @@ const emptyDailyStats = {
   bookingCount: 0,
 };
 
+const emptyMovieRevenue = {
+  revenue: 0,
+  ticketsSold: 0,
+  bookingCount: 0,
+  showtimeCount: 0,
+};
+
 const DashboardPage = () => {
   const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
@@ -85,6 +94,11 @@ const DashboardPage = () => {
   const [monthlyLoading, setMonthlyLoading] = useState(true);
   const [monthlyError, setMonthlyError] = useState("");
   const [selectedMovie, setSelectedMovie] = useState(null);
+  const [movieRevenue, setMovieRevenue] = useState(emptyMovieRevenue);
+  const [movieRevenueLoading, setMovieRevenueLoading] = useState(false);
+  const [movieRevenueError, setMovieRevenueError] = useState("");
+  const [movieRevenueFrom, setMovieRevenueFrom] = useState("");
+  const [movieRevenueTo, setMovieRevenueTo] = useState("");
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -245,6 +259,64 @@ const DashboardPage = () => {
     ),
     [dashboard.topMovies],
   );
+
+  const fetchSelectedMovieRevenue = useCallback(async (movie, filters = {}) => {
+    if (!movie?._id) return;
+
+    try {
+      setMovieRevenueLoading(true);
+      setMovieRevenueError("");
+      const response = await getMovieRevenue(movie._id, filters);
+      setMovieRevenue({
+        ...emptyMovieRevenue,
+        ...(response.data || {}),
+      });
+    } catch (err) {
+      setMovieRevenueError(
+        err.response?.data?.message || "Không thể tải doanh thu của phim.",
+      );
+    } finally {
+      setMovieRevenueLoading(false);
+    }
+  }, []);
+
+  const handleMovieSelect = (movie) => {
+    setSelectedMovie(movie);
+    setMovieRevenueFrom("");
+    setMovieRevenueTo("");
+    setMovieRevenueError("");
+
+    if (movie) {
+      fetchSelectedMovieRevenue(movie);
+    } else {
+      setMovieRevenue(emptyMovieRevenue);
+    }
+  };
+
+  const handleMovieRevenueFilter = (event) => {
+    event.preventDefault();
+    if (!selectedMovie) return;
+
+    if (!movieRevenueFrom || !movieRevenueTo) {
+      setMovieRevenueError("Vui lòng chọn đầy đủ từ ngày và đến ngày.");
+      return;
+    }
+    if (movieRevenueFrom > movieRevenueTo) {
+      setMovieRevenueError("Từ ngày không được lớn hơn đến ngày.");
+      return;
+    }
+
+    fetchSelectedMovieRevenue(selectedMovie, {
+      from: movieRevenueFrom,
+      to: movieRevenueTo,
+    });
+  };
+
+  const handleClearMovieRevenueFilter = () => {
+    setMovieRevenueFrom("");
+    setMovieRevenueTo("");
+    fetchSelectedMovieRevenue(selectedMovie);
+  };
 
   const handleRefresh = () => {
     fetchDashboard();
@@ -548,9 +620,103 @@ const DashboardPage = () => {
         </div>
         <MovieSearch
           selectedMovie={selectedMovie}
-          onSelect={setSelectedMovie}
+          onSelect={handleMovieSelect}
         />
       </section>
+
+      {selectedMovie && (
+        <section className="dashboard-movie-revenue-panel">
+          <div className="dashboard-daily-header">
+            <div>
+              <h2>Doanh thu phim: {selectedMovie.title}</h2>
+              <p>Lọc theo ngày thanh toán booking, timezone Việt Nam</p>
+            </div>
+            <form
+              className="dashboard-movie-revenue-filter"
+              onSubmit={handleMovieRevenueFilter}
+            >
+              <label className="dashboard-date-filter">
+                <span>Từ ngày</span>
+                <input
+                  className="form-input dashboard-date-input"
+                  type="date"
+                  value={movieRevenueFrom}
+                  onChange={(event) => setMovieRevenueFrom(event.target.value)}
+                />
+              </label>
+              <label className="dashboard-date-filter">
+                <span>Đến ngày</span>
+                <input
+                  className="form-input dashboard-date-input"
+                  type="date"
+                  value={movieRevenueTo}
+                  onChange={(event) => setMovieRevenueTo(event.target.value)}
+                />
+              </label>
+              <button
+                className="btn btn-primary dashboard-movie-filter-button"
+                disabled={movieRevenueLoading}
+                type="submit"
+              >
+                Áp dụng
+              </button>
+              {(movieRevenueFrom || movieRevenueTo) && (
+                <button
+                  className="btn btn-secondary dashboard-movie-filter-button"
+                  disabled={movieRevenueLoading}
+                  onClick={handleClearMovieRevenueFilter}
+                  type="button"
+                >
+                  Toàn bộ
+                </button>
+              )}
+            </form>
+          </div>
+
+          {movieRevenueError ? (
+            <div className="dashboard-daily-error">{movieRevenueError}</div>
+          ) : (
+            <div className="dashboard-movie-revenue-grid" aria-busy={movieRevenueLoading}>
+              <div className="dashboard-movie-revenue-metric primary">
+                <HiOutlineCash />
+                <span>Tổng doanh thu</span>
+                <strong>
+                  {movieRevenueLoading
+                    ? "..."
+                    : currencyFormatter.format(movieRevenue.revenue)}
+                </strong>
+              </div>
+              <div className="dashboard-movie-revenue-metric">
+                <HiOutlineTicket />
+                <span>Vé đã bán</span>
+                <strong>
+                  {movieRevenueLoading
+                    ? "..."
+                    : numberFormatter.format(movieRevenue.ticketsSold)}
+                </strong>
+              </div>
+              <div className="dashboard-movie-revenue-metric">
+                <HiOutlineCheckCircle />
+                <span>Số booking</span>
+                <strong>
+                  {movieRevenueLoading
+                    ? "..."
+                    : numberFormatter.format(movieRevenue.bookingCount)}
+                </strong>
+              </div>
+              <div className="dashboard-movie-revenue-metric">
+                <HiOutlineClock />
+                <span>Số suất chiếu</span>
+                <strong>
+                  {movieRevenueLoading
+                    ? "..."
+                    : numberFormatter.format(movieRevenue.showtimeCount)}
+                </strong>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <div className="dashboard-grid">
         <section className="table-container dashboard-table">

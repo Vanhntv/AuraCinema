@@ -5,6 +5,7 @@ import {
   getDashboardOverview,
   getDashboardStats,
   getMonthlyRevenue,
+  getMovieRevenue,
   getTopMoviesRevenue,
   getTodayRevenue,
   getWeeklyRevenue,
@@ -20,5 +21,6 @@ router.get("/revenue/daily", adminOnly, getDailyRevenue);
 router.get("/revenue/weekly", adminOnly, getWeeklyRevenue);
 router.get("/revenue/monthly", adminOnly, getMonthlyRevenue);
 router.get("/movies/top-revenue", adminOnly, getTopMoviesRevenue);
+router.get("/movies/:movieId", adminOnly, getMovieRevenue);
 
 export default router;

@@ -40,3 +40,10 @@ export const getTopMoviesRevenue = async () => {
   const res = await axiosClient.get("/admin/dashboard/movies/top-revenue");
   return res.data;
 };
+
+export const getMovieRevenue = async (movieId, filters = {}) => {
+  const res = await axiosClient.get(`/admin/dashboard/movies/${movieId}`, {
+    params: filters,
+  });
+  return res.data;
+};

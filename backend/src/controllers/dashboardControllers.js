@@ -3,6 +3,7 @@ import Genre from "../models/Genre.js";
 import Movie from "../models/Movie.js";
 import Showtime from "../models/Showtime.js";
 import Booking from "../models/Booking.js";
+import mongoose from "mongoose";
 
 const DASHBOARD_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const REVENUE_BOOKING_STATUSES = ["confirmed", "checked_in"];
@@ -511,6 +512,131 @@ export const getTopMoviesRevenue = async (_req, res) => {
     return res.status(200).json({
       success: true,
       data: movies,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getMovieRevenue = async (req, res) => {
+  const { movieId } = req.params;
+  if (!mongoose.isValidObjectId(movieId)) {
+    return res.status(400).json({
+      success: false,
+      message: "ID phim không hợp lệ.",
+    });
+  }
+
+  const from = req.query?.from;
+  const to = req.query?.to;
+  if ((from && !to) || (!from && to)) {
+    return res.status(400).json({
+      success: false,
+      message: "Vui lòng cung cấp đầy đủ ngày bắt đầu và ngày kết thúc.",
+    });
+  }
+
+  let selectedRange = null;
+  if (from && to) {
+    const fromRange = getDateRange(from);
+    const toRange = getDateRange(to);
+    if (!fromRange || !toRange || fromRange.start > toRange.start) {
+      return res.status(400).json({
+        success: false,
+        message: "Khoảng ngày không hợp lệ.",
+      });
+    }
+    selectedRange = { start: fromRange.start, end: toRange.end };
+  }
+
+  try {
+    const movieObjectId = new mongoose.Types.ObjectId(movieId);
+    const movie = await Movie.findOne({
+      _id: movieObjectId,
+      deleted_at: null,
+    }).select("title");
+
+    if (!movie) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy phim.",
+      });
+    }
+
+    const bookingMatch = {
+      payment_status: "paid",
+      status: { $in: REVENUE_BOOKING_STATUSES },
+    };
+    if (selectedRange) {
+      bookingMatch.created_at = {
+        $gte: selectedRange.start,
+        $lt: selectedRange.end,
+      };
+    }
+
+    const showtimeFilter = {
+      movie_id: movieObjectId,
+      deleted_at: null,
+    };
+    if (selectedRange) {
+      showtimeFilter.start_time = {
+        $gte: selectedRange.start,
+        $lt: selectedRange.end,
+      };
+    }
+
+    const [bookingSummary, showtimeCount] = await Promise.all([
+      Booking.aggregate([
+        { $match: bookingMatch },
+        {
+          $lookup: {
+            from: "showtimes",
+            localField: "showtime_id",
+            foreignField: "_id",
+            as: "showtime",
+          },
+        },
+        { $unwind: "$showtime" },
+        {
+          $match: {
+            "showtime.movie_id": movieObjectId,
+            "showtime.deleted_at": null,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: "$total_price" },
+            ticketsSold: {
+              $sum: {
+                $size: { $ifNull: ["$showtime_seat_ids", []] },
+              },
+            },
+            bookingCount: { $sum: 1 },
+          },
+        },
+      ]),
+      Showtime.countDocuments(showtimeFilter),
+    ]);
+
+    const summary = bookingSummary?.[0] ?? {};
+    return res.status(200).json({
+      success: true,
+      data: {
+        movie: {
+          id: movie._id,
+          title: movie.title,
+        },
+        revenue: summary.revenue ?? 0,
+        ticketsSold: summary.ticketsSold ?? 0,
+        bookingCount: summary.bookingCount ?? 0,
+        showtimeCount,
+        from: from || null,
+        to: to || null,
+      },
     });
   } catch (error) {
     return res.status(500).json({
