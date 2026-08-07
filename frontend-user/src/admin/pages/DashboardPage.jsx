@@ -23,6 +23,7 @@ import {
   getWeeklyRevenue,
 } from "../services/dashboardService";
 import RevenueChart from "../components/dashboard/RevenueChart";
+import MovieSearch from "../components/dashboard/MovieSearch";
 import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
@@ -83,6 +84,7 @@ const DashboardPage = () => {
   });
   const [monthlyLoading, setMonthlyLoading] = useState(true);
   const [monthlyError, setMonthlyError] = useState("");
+  const [selectedMovie, setSelectedMovie] = useState(null);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -534,6 +536,20 @@ const DashboardPage = () => {
             Chưa có dữ liệu doanh thu theo phim.
           </div>
         )}
+      </section>
+
+      <section className="dashboard-movie-search-panel">
+        <div className="dashboard-panel-header">
+          <div>
+            <h2>Tìm kiếm phim</h2>
+            <p>Chọn một phim để xem thống kê chi tiết</p>
+          </div>
+          <HiOutlineFilm />
+        </div>
+        <MovieSearch
+          selectedMovie={selectedMovie}
+          onSelect={setSelectedMovie}
+        />
       </section>
 
       <div className="dashboard-grid">
