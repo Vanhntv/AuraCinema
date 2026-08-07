@@ -37,7 +37,7 @@ const RevenueChart = ({ data, loading = false }) => {
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
           data={data}
-          margin={{ top: 12, right: 12, bottom: 4, left: 8 }}
+          margin={{ top: 12, right: 12, bottom: 12, left: 12 }}
         >
           <CartesianGrid
             stroke="rgba(148, 163, 184, 0.12)"
@@ -47,16 +47,31 @@ const RevenueChart = ({ data, loading = false }) => {
           <XAxis
             axisLine={{ stroke: "rgba(148, 163, 184, 0.2)" }}
             dataKey="label"
+            height={42}
             interval={data.length > 15 ? 1 : 0}
+            label={{
+              value: "Ngày",
+              position: "insideBottom",
+              offset: -3,
+              fill: "#64748b",
+              fontSize: 11,
+            }}
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             tickLine={false}
           />
           <YAxis
             axisLine={false}
+            label={{
+              value: "Doanh thu",
+              angle: -90,
+              position: "insideLeft",
+              fill: "#64748b",
+              fontSize: 11,
+            }}
             tick={{ fill: "#94a3b8", fontSize: 11 }}
             tickFormatter={(value) => compactFormatter.format(value)}
             tickLine={false}
-            width={58}
+            width={68}
           />
           <Tooltip
             contentStyle={{

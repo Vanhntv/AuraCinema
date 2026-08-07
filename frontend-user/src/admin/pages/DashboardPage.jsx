@@ -181,12 +181,8 @@ const DashboardPage = () => {
       (sum, item) => sum + Number(item.revenue || 0),
       0,
     );
-    const maximum = Math.max(
-      ...weeklyRevenue.map((item) => Number(item.revenue || 0)),
-      0,
-    );
 
-    return { total, maximum };
+    return { total };
   }, [weeklyRevenue]);
 
   const fetchMonthlyRevenue = useCallback(async (month, year) => {
@@ -219,14 +215,6 @@ const DashboardPage = () => {
       fetchMonthlyRevenue(dashboardCurrentMonth, dashboardCurrentYear);
     }
   }, [fetchMonthlyRevenue, revenuePeriod]);
-
-  const monthlyMaximum = useMemo(
-    () => Math.max(
-      ...monthlyRevenue.days.map((item) => Number(item.revenue || 0)),
-      0,
-    ),
-    [monthlyRevenue.days],
-  );
 
   const dailyChartData = useMemo(() => {
     const date = revenuePeriod === "today" ? dashboardCurrentDate : selectedDate;
@@ -411,6 +399,7 @@ const DashboardPage = () => {
         {dailyError ? (
           <div className="dashboard-daily-error">{dailyError}</div>
         ) : (
+          <>
           <div className="dashboard-daily-results" aria-busy={dailyLoading}>
             <div className="dashboard-daily-metric">
               <span>Doanh thu</span>
@@ -431,6 +420,8 @@ const DashboardPage = () => {
               </strong>
             </div>
           </div>
+          <RevenueChart data={dailyChartData} loading={dailyLoading} />
+          </>
         )}
       </section>
       )}
@@ -451,50 +442,7 @@ const DashboardPage = () => {
         {weeklyError ? (
           <div className="dashboard-daily-error">{weeklyError}</div>
         ) : (
-          <div className="dashboard-weekly-chart-scroll">
-            <div
-              className="dashboard-weekly-chart"
-              aria-busy={weeklyLoading}
-              aria-label="Biểu đồ doanh thu theo tuần"
-              role="img"
-            >
-              {(weeklyLoading
-                ? Array.from({ length: 7 }, (_, index) => ({
-                    label: index === 6 ? "CN" : `T${index + 2}`,
-                    date: "",
-                    revenue: 0,
-                  }))
-                : weeklyRevenue
-              ).map((item) => {
-                const revenue = Number(item.revenue || 0);
-                const height = weeklyRevenueSummary.maximum
-                  ? Math.max((revenue / weeklyRevenueSummary.maximum) * 100, revenue ? 4 : 0)
-                  : 0;
-                const shortDate = item.date
-                  ? item.date.split("-").slice(1).reverse().join("/")
-                  : "--/--";
-
-                return (
-                  <div className="dashboard-weekly-column" key={`${item.label}-${item.date}`}>
-                    <span className="dashboard-weekly-value">
-                      {weeklyLoading ? "..." : `${compactNumberFormatter.format(revenue)} ₫`}
-                    </span>
-                    <div
-                      className="dashboard-weekly-track"
-                      title={`${item.label}: ${currencyFormatter.format(revenue)}`}
-                    >
-                      <div
-                        className="dashboard-weekly-bar"
-                        style={{ "--bar-height": `${height}%` }}
-                      />
-                    </div>
-                    <strong>{item.label}</strong>
-                    <small>{shortDate}</small>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <RevenueChart data={weeklyRevenue} loading={weeklyLoading} />
         )}
       </section>
       )}
@@ -515,53 +463,7 @@ const DashboardPage = () => {
         {monthlyError ? (
           <div className="dashboard-daily-error">{monthlyError}</div>
         ) : (
-          <div className="dashboard-monthly-chart-scroll">
-            <div
-              className="dashboard-monthly-chart"
-              aria-busy={monthlyLoading}
-              aria-label="Biểu đồ doanh thu theo tháng"
-              role="img"
-              style={{
-                gridTemplateColumns: `repeat(${Math.max(
-                  monthlyRevenue.days.length || 31,
-                  1,
-                )}, minmax(32px, 1fr))`,
-                minWidth: `${Math.max(
-                  760,
-                  (monthlyRevenue.days.length || 31) * 42,
-                )}px`,
-              }}
-            >
-              {(monthlyLoading
-                ? Array.from({ length: 31 }, (_, index) => ({
-                    label: String(index + 1).padStart(2, "0"),
-                    date: "",
-                    revenue: 0,
-                  }))
-                : monthlyRevenue.days
-              ).map((item) => {
-                const revenue = Number(item.revenue || 0);
-                const height = monthlyMaximum
-                  ? Math.max((revenue / monthlyMaximum) * 100, revenue ? 3 : 0)
-                  : 0;
-
-                return (
-                  <div className="dashboard-monthly-column" key={`${item.label}-${item.date}`}>
-                    <div
-                      className="dashboard-weekly-track"
-                      title={`Ngày ${item.label}: ${currencyFormatter.format(revenue)}`}
-                    >
-                      <div
-                        className="dashboard-weekly-bar"
-                        style={{ "--bar-height": `${height}%` }}
-                      />
-                    </div>
-                    <strong>{item.label}</strong>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <RevenueChart data={monthlyRevenue.days} loading={monthlyLoading} />
         )}
       </section>
       )}
