@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { getPublicVoucherById, getPublicVouchers } from "../services/voucherService";
+import { getPublicVoucherById } from "../services/voucherService";
 import {
   DEFAULT_PROMOTION_IMAGE,
   mapVoucherToPromotion,
@@ -8,7 +8,7 @@ import {
 
 function PromotionSkeleton() {
   return (
-    <div className="mx-auto w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)] py-8 text-white">
+    <div className="mx-auto w-[min(1120px,calc(100%_-_56px))] py-8 text-white max-sm:w-[calc(100%_-_28px)]">
       <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03] p-6 sm:p-8">
         <div className="h-4 w-36 animate-pulse rounded-full bg-white/10" />
         <div className="mt-4 h-12 w-[86%] animate-pulse rounded-2xl bg-white/10" />
@@ -46,7 +46,6 @@ function PromotionDetailPage() {
   const { slug } = useParams();
   const [isLoading, setIsLoading] = useState(true);
   const [promotion, setPromotion] = useState(null);
-  const [relatedPromotions, setRelatedPromotions] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -56,25 +55,16 @@ function PromotionDetailPage() {
       try {
         setIsLoading(true);
         setError("");
-        const [detailResponse, listResponse] = await Promise.all([
-          getPublicVoucherById(slug),
-          getPublicVouchers(),
-        ]);
+        const detailResponse = await getPublicVoucherById(slug);
         const detail = mapVoucherToPromotion(detailResponse.data);
-        const related = (listResponse.data || [])
-          .map(mapVoucherToPromotion)
-          .filter((item) => item.id !== detail.id)
-          .slice(0, 3);
 
         if (!active) return;
 
         setPromotion(detail);
-        setRelatedPromotions(related);
         document.title = `${detail.title} | AuraCinema`;
       } catch (requestError) {
         if (!active) return;
         setPromotion(null);
-        setRelatedPromotions([]);
         setError(
           requestError.response?.data?.message ||
             "Không thể tải chi tiết khuyến mãi.",
@@ -172,42 +162,6 @@ function PromotionDetailPage() {
               </div>
             </div>
           </article>
-        )}
-
-        {relatedPromotions.length > 0 && (
-          <section className="mt-10 rounded-[28px] border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-            <h2 className="text-2xl font-black uppercase text-white">Khuyến mãi khác</h2>
-            <div className="mt-5 grid gap-4 md:grid-cols-3">
-              {relatedPromotions.map((item) => (
-                <Link
-                  key={item.id}
-                  to={`/khuyen-mai/${item.id}`}
-                  className="group overflow-hidden rounded-[22px] border border-white/10 bg-[#111823] no-underline transition-all hover:border-[#ff6070]/30"
-                >
-                  <div className="p-4">
-                    <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#ff6070]">
-                      {item.startDate} - {item.endDate}
-                    </div>
-                    <h3 className="mt-2 line-clamp-3 text-sm font-bold leading-6 text-white group-hover:text-[#ff6070]">
-                      {item.title}
-                    </h3>
-                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-400">
-                      {item.summary}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <Link
-                to="/khuyen-mai"
-                className="inline-flex h-[46px] items-center rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-6 text-sm font-bold text-white shadow-[0_10px_25px_rgba(255,83,100,0.2)] no-underline transition-all duration-300 hover:opacity-90"
-              >
-                Xem khuyến mãi khác
-              </Link>
-            </div>
-          </section>
         )}
       </div>
     </main>
