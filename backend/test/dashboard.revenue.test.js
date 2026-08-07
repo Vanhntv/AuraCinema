@@ -8,6 +8,7 @@ import {
   getMonthRange,
   getMovieRevenue,
   getTopMoviesRevenue,
+  getTopSellingCombos,
   getTodayRange,
   getWeeklyRevenue,
   getWeekRange,
@@ -282,6 +283,49 @@ test("getTopMoviesRevenue joins showtimes and returns the five highest movies", 
   assert.deepEqual(receivedPipeline[6], { $sort: { revenue: -1, title: 1 } });
   assert.deepEqual(receivedPipeline[7], { $limit: 5 });
   assert.deepEqual(responseBody.data, topMovies);
+});
+
+test("getTopSellingCombos sums quantities from paid bookings and returns the top five", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+  const topCombos = [
+    { id: "combo-1", name: "Combo Big", quantitySold: 25, revenue: 1750000 },
+    { id: "combo-2", name: "Combo Couple", quantitySold: 18, revenue: 1440000 },
+  ];
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return topCombos;
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getTopSellingCombos({}, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.deepEqual(receivedPipeline[0], {
+    $match: { payment_status: "paid" },
+  });
+  assert.deepEqual(receivedPipeline[1], { $unwind: "$combos" });
+  assert.deepEqual(receivedPipeline[3].$group.quantitySold, {
+    $sum: "$combos.quantity",
+  });
+  assert.deepEqual(receivedPipeline[4], { $sort: { quantitySold: -1, name: 1 } });
+  assert.deepEqual(receivedPipeline[5], { $limit: 5 });
+  assert.deepEqual(responseBody.data, topCombos);
 });
 
 test("getMovieRevenue returns revenue metrics for one movie and date range", async () => {

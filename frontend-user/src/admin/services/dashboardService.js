@@ -41,6 +41,11 @@ export const getTopMoviesRevenue = async () => {
   return res.data;
 };
 
+export const getTopSellingCombos = async () => {
+  const res = await axiosClient.get("/admin/dashboard/combos/top-selling");
+  return res.data;
+};
+
 export const getMovieRevenue = async (movieId, filters = {}) => {
   const res = await axiosClient.get(`/admin/dashboard/movies/${movieId}`, {
     params: filters,

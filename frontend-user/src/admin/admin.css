@@ -821,6 +821,18 @@
   background: var(--color-bg-card);
 }
 
+.dashboard-ranking-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.dashboard-ranking-grid .dashboard-top-movies-panel {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 .dashboard-top-movies-header {
   margin-bottom: 10px;
 }
@@ -910,6 +922,16 @@
   border-radius: inherit;
   background: var(--gradient-primary);
   transition: width var(--transition-slow);
+}
+
+.dashboard-top-combo-bar {
+  background: linear-gradient(90deg, #ec4899, #f97316);
+}
+
+@media (max-width: 1199px) {
+  .dashboard-ranking-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-top-movie-info small {

@@ -553,6 +553,61 @@ export const getTopMoviesRevenue = async (_req, res) => {
   }
 };
 
+export const getTopSellingCombos = async (_req, res) => {
+  try {
+    const combos = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+        },
+      },
+      { $unwind: "$combos" },
+      {
+        $match: {
+          "combos.combo_id": { $ne: null },
+          "combos.quantity": { $gt: 0 },
+        },
+      },
+      {
+        $group: {
+          _id: "$combos.combo_id",
+          name: { $first: "$combos.name" },
+          quantitySold: { $sum: "$combos.quantity" },
+          revenue: {
+            $sum: {
+              $ifNull: [
+                "$combos.subtotal",
+                { $multiply: ["$combos.price", "$combos.quantity"] },
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { quantitySold: -1, name: 1 } },
+      { $limit: 5 },
+      {
+        $project: {
+          _id: 0,
+          id: "$_id",
+          name: 1,
+          quantitySold: 1,
+          revenue: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: combos,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 export const getMovieRevenue = async (req, res) => {
   const { movieId } = req.params;
   if (!mongoose.isValidObjectId(movieId)) {

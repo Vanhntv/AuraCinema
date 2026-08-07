@@ -23,6 +23,7 @@ import {
   getMonthlyRevenue,
   getMovieRevenue,
   getTopMoviesRevenue,
+  getTopSellingCombos,
   getTodayRevenue,
   getWeeklyRevenue,
 } from "../services/dashboardService";
@@ -47,6 +48,7 @@ const emptyDashboard = {
   recentBookings: [],
   todayShowtimes: [],
   topMovies: [],
+  topCombos: [],
 };
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
@@ -128,17 +130,20 @@ const DashboardPage = () => {
         overviewResponse,
         todayRevenueResponse,
         topMoviesResponse,
+        topCombosResponse,
       ] = await Promise.all([
         getDashboardStats(),
         getDashboardOverview(),
         getTodayRevenue(),
         getTopMoviesRevenue(),
+        getTopSellingCombos(),
       ]);
 
       setDashboard({
         ...emptyDashboard,
         ...(statsResponse.data || {}),
         topMovies: topMoviesResponse.data || [],
+        topCombos: topCombosResponse.data || [],
         stats: {
           ...emptyDashboard.stats,
           ...(statsResponse.data?.stats || {}),
@@ -278,6 +283,14 @@ const DashboardPage = () => {
       0,
     ),
     [dashboard.topMovies],
+  );
+
+  const topComboQuantityMax = useMemo(
+    () => Math.max(
+      ...dashboard.topCombos.map((combo) => Number(combo.quantitySold || 0)),
+      0,
+    ),
+    [dashboard.topCombos],
   );
 
   const fetchSelectedMovieRevenue = useCallback(async (movie, filters = {}) => {
@@ -588,6 +601,7 @@ const DashboardPage = () => {
       </section>
       )}
 
+      <div className="dashboard-ranking-grid">
       <section className="dashboard-top-movies-panel">
         <div className="dashboard-panel-header dashboard-top-movies-header">
           <div>
@@ -637,6 +651,55 @@ const DashboardPage = () => {
           </div>
         )}
       </section>
+
+      <section className="dashboard-top-movies-panel dashboard-top-combos-panel">
+        <div className="dashboard-panel-header dashboard-top-movies-header">
+          <div>
+            <h2>Top combo bán chạy</h2>
+            <p>Xếp hạng theo số lượng combo trong booking đã thanh toán</p>
+          </div>
+          <HiOutlineShoppingBag />
+        </div>
+
+        {loading ? (
+          <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
+        ) : dashboard.topCombos.length ? (
+          <div className="dashboard-top-movies-list">
+            {dashboard.topCombos.map((combo, index) => {
+              const quantitySold = Number(combo.quantitySold || 0);
+              const width = topComboQuantityMax
+                ? Math.max((quantitySold / topComboQuantityMax) * 100, 3)
+                : 0;
+
+              return (
+                <div className="dashboard-top-movie" key={combo.id || combo.name}>
+                  <span className={`dashboard-movie-rank rank-${index + 1}`}>
+                    {index + 1}
+                  </span>
+                  <div className="dashboard-top-movie-info">
+                    <div className="dashboard-top-movie-title-row">
+                      <strong>{combo.name || "Combo không xác định"}</strong>
+                      <span>{numberFormatter.format(quantitySold)} phần</span>
+                    </div>
+                    <div className="dashboard-top-movie-track">
+                      <div
+                        className="dashboard-top-movie-bar dashboard-top-combo-bar"
+                        style={{ width: `${width}%` }}
+                      />
+                    </div>
+                    <small>{currencyFormatter.format(combo.revenue || 0)} doanh thu</small>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="dashboard-empty-state">
+            Chưa có dữ liệu combo đã bán.
+          </div>
+        )}
+      </section>
+      </div>
 
       <section className="dashboard-movie-search-panel">
         <div className="dashboard-panel-header">
