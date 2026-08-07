@@ -4,8 +4,10 @@ import {
   createVoucherService,
   consumeVoucherQuantityService,
   deleteVoucherService,
+  getPublicVoucherByIdService,
   getVoucherByIdService,
   getVoucherStatsService,
+  listPublicVouchers,
   listVoucherUsageHistoryService,
   listVouchers,
   toggleVoucherStatusService,
@@ -155,6 +157,39 @@ export const getAllVouchers = async (req, res) => {
       success: true,
       data: result.data,
       pagination: result.pagination,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const getPublicVouchers = async (req, res) => {
+  try {
+    const vouchers = await listPublicVouchers();
+
+    return res.status(200).json({
+      success: true,
+      data: vouchers,
+    });
+  } catch (error) {
+    sendError(res, error);
+  }
+};
+
+export const getPublicVoucherById = async (req, res) => {
+  try {
+    const voucher = await getPublicVoucherByIdService(req.params.id);
+
+    if (!voucher) {
+      return res.status(404).json({
+        success: false,
+        message: VOUCHER_MESSAGES.NOT_FOUND,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: voucher,
     });
   } catch (error) {
     sendError(res, error);

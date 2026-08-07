@@ -4,6 +4,8 @@ import {
   consumeVoucherQuantity,
   deleteVoucher,
   getAllVouchers,
+  getPublicVoucherById,
+  getPublicVouchers,
   getVoucherById,
   getVoucherStats,
   getVoucherUsageHistory,
@@ -21,6 +23,8 @@ const customerOnly = [authMiddleware, authorizeRoles("user")];
 router.post("/verify", customerOnly, verifyVoucher);
 router.get("/verify", customerOnly, verifyVoucher);
 router.get("/my-wallet", customerOnly, getMyVoucherWallet);
+router.get("/public", getPublicVouchers);
+router.get("/public/:id", getPublicVoucherById);
 router.get("/", adminOnly, getAllVouchers);
 router.get("/stats", adminOnly, getVoucherStats);
 router.get("/:id/usages", adminOnly, getVoucherUsageHistory);

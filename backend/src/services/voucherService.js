@@ -770,6 +770,34 @@ export const listVouchers = async (query = {}) => {
   };
 };
 
+const buildPublicVoucherFilter = (now = new Date()) => ({
+  deleted_at: null,
+  status: true,
+  quantity: { $gt: 0 },
+  start_date: { $lte: now },
+  end_date: { $gte: now },
+});
+
+export const listPublicVouchers = async () => {
+  const vouchers = await Voucher.find(buildPublicVoucherFilter())
+    .sort({ start_date: -1, created_at: -1 });
+
+  return vouchers.map(toVoucherListItem);
+};
+
+export const getPublicVoucherByIdService = async (id) => {
+  const filter = buildPublicVoucherFilter();
+
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    filter._id = id;
+  } else {
+    filter.code = normalizeVoucherCode(id);
+  }
+
+  const voucher = await Voucher.findOne(filter);
+  return voucher ? normalizeVoucherForResponse(voucher) : null;
+};
+
 export const getVoucherByIdService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     const error = new Error(VOUCHER_MESSAGES.INVALID);
