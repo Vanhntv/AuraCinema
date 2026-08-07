@@ -637,7 +637,7 @@
   min-height: 108px;
   padding: 16px;
   gap: 12px;
-  grid-column: span 3;
+  grid-column: span 4;
 }
 
 .dashboard-page .stats-grid {

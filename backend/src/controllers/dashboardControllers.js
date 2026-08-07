@@ -253,6 +253,22 @@ export const getDashboardOverview = async (_req, res) => {
               },
             },
           ],
+          voucherStats: [
+            {
+              $match: {
+                "voucher.voucher_id": { $exists: true, $ne: null },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                usageCount: { $sum: 1 },
+                totalDiscount: {
+                  $sum: { $ifNull: ["$discount_amount", 0] },
+                },
+              },
+            },
+          ],
         },
       },
     ]);
@@ -266,6 +282,8 @@ export const getDashboardOverview = async (_req, res) => {
         ticketsSold: summary.tickets?.[0]?.total ?? 0,
         successfulBookings: summary.successfulBookings?.[0]?.total ?? 0,
         comboRevenue: summary.comboRevenue?.[0]?.total ?? 0,
+        voucherUsageCount: summary.voucherStats?.[0]?.usageCount ?? 0,
+        voucherDiscountAmount: summary.voucherStats?.[0]?.totalDiscount ?? 0,
       },
     });
   } catch (error) {

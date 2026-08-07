@@ -44,6 +44,8 @@ const emptyDashboard = {
     ticketsSold: 0,
     successfulBookings: 0,
     comboRevenue: 0,
+    voucherUsageCount: 0,
+    voucherDiscountAmount: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -152,6 +154,8 @@ const DashboardPage = () => {
           ticketsSold: overviewResponse.data?.ticketsSold ?? 0,
           successfulBookings: overviewResponse.data?.successfulBookings ?? 0,
           comboRevenue: overviewResponse.data?.comboRevenue ?? 0,
+          voucherUsageCount: overviewResponse.data?.voucherUsageCount ?? 0,
+          voucherDiscountAmount: overviewResponse.data?.voucherDiscountAmount ?? 0,
         },
       });
     } catch (err) {
@@ -389,6 +393,21 @@ const DashboardPage = () => {
         icon: <HiOutlineShoppingBag />,
         tone: "pink",
         hint: "Combo trong booking đã thanh toán",
+        isCurrency: true,
+      },
+      {
+        label: "Lượt sử dụng voucher",
+        value: dashboard.stats.voucherUsageCount,
+        icon: <HiOutlineTag />,
+        tone: "blue",
+        hint: "Booking đã thanh toán có voucher",
+      },
+      {
+        label: "Tổng tiền đã giảm",
+        value: dashboard.stats.voucherDiscountAmount,
+        icon: <HiOutlineCash />,
+        tone: "pink",
+        hint: "Ưu đãi từ voucher đã sử dụng",
         isCurrency: true,
       },
       {

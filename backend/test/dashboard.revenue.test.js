@@ -78,6 +78,7 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
       tickets: [{ total: 4 }],
       successfulBookings: [{ total: 2 }],
       comboRevenue: [{ total: 180000 }],
+      voucherStats: [{ usageCount: 3, totalDiscount: 75000 }],
     }];
   };
 
@@ -108,6 +109,8 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
   assert.equal(responseBody.data.ticketsSold, 4);
   assert.equal(responseBody.data.successfulBookings, 2);
   assert.equal(responseBody.data.comboRevenue, 180000);
+  assert.equal(responseBody.data.voucherUsageCount, 3);
+  assert.equal(responseBody.data.voucherDiscountAmount, 75000);
   assert.deepEqual(
     receivedPipeline[1].$facet.successfulBookings[0],
     { $match: { status: { $in: ["confirmed", "checked_in"] } } },
@@ -115,6 +118,18 @@ test("getDashboardOverview returns tickets and successful paid bookings", async 
   assert.deepEqual(
     receivedPipeline[1].$facet.comboRevenue[0].$group.total.$sum.$reduce.input,
     { $ifNull: ["$combos", []] },
+  );
+  assert.deepEqual(
+    receivedPipeline[1].$facet.voucherStats[0],
+    {
+      $match: {
+        "voucher.voucher_id": { $exists: true, $ne: null },
+      },
+    },
+  );
+  assert.deepEqual(
+    receivedPipeline[1].$facet.voucherStats[1].$group.totalDiscount,
+    { $sum: { $ifNull: ["$discount_amount", 0] } },
   );
 });
 
