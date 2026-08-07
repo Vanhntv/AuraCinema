@@ -9,3 +9,8 @@ export const getDashboardOverview = async () => {
   const res = await axiosClient.get("/admin/dashboard/overview");
   return res.data;
 };
+
+export const getTodayRevenue = async () => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/today");
+  return res.data;
+};

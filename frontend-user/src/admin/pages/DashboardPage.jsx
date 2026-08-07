@@ -11,7 +11,11 @@ import {
   HiOutlineTag,
   HiOutlineTicket,
 } from "react-icons/hi";
-import { getDashboardStats, getDashboardOverview } from "../services/dashboardService";
+import {
+  getDashboardOverview,
+  getDashboardStats,
+  getTodayRevenue,
+} from "../services/dashboardService";
 import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
@@ -23,6 +27,7 @@ const emptyDashboard = {
     todayShowtimes: 0,
     nowShowingMovies: 0,
     revenue: 0,
+    todayRevenue: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -46,9 +51,10 @@ const DashboardPage = () => {
     try {
       setLoading(true);
       setError("");
-      const [statsResponse, overviewResponse] = await Promise.all([
+      const [statsResponse, overviewResponse, todayRevenueResponse] = await Promise.all([
         getDashboardStats(),
         getDashboardOverview(),
+        getTodayRevenue(),
       ]);
 
       setDashboard({
@@ -58,6 +64,7 @@ const DashboardPage = () => {
           ...emptyDashboard.stats,
           ...(statsResponse.data?.stats || {}),
           revenue: overviewResponse.data?.revenue ?? 0,
+          todayRevenue: todayRevenueResponse.data?.revenue ?? 0,
         },
       });
     } catch (err) {
@@ -74,6 +81,14 @@ const DashboardPage = () => {
 
   const statCards = useMemo(
     () => [
+      {
+        label: "Doanh thu hôm nay",
+        value: dashboard.stats.todayRevenue,
+        icon: <HiOutlineCash />,
+        tone: "teal",
+        hint: "Booking đã thanh toán hôm nay",
+        isCurrency: true,
+      },
       {
         label: "Tổng doanh thu",
         value: dashboard.stats.revenue,

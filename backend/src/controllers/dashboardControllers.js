@@ -4,23 +4,25 @@ import Movie from "../models/Movie.js";
 import Showtime from "../models/Showtime.js";
 import Booking from "../models/Booking.js";
 
-const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  timeZone: "Asia/Jakarta",
+const DASHBOARD_TIME_ZONE = "Asia/Ho_Chi_Minh";
+const REVENUE_BOOKING_STATUSES = ["confirmed", "checked_in"];
+
+const dashboardTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: DASHBOARD_TIME_ZONE,
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
 });
 
-const getTodayRange = () => {
-  const now = new Date();
-  const jakartaDay = now.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Jakarta",
+export const getTodayRange = (now = new Date()) => {
+  const localDay = now.toLocaleDateString("en-CA", {
+    timeZone: DASHBOARD_TIME_ZONE,
   });
 
-  const start = new Date(`${jakartaDay}T00:00:00.000+07:00`);
-  const end = new Date(`${jakartaDay}T23:59:59.999+07:00`);
+  const start = new Date(`${localDay}T00:00:00.000+07:00`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
 
-  return { start, end };
+  return { start, end, localDay };
 };
 
 const formatTime = (value) => {
@@ -28,7 +30,7 @@ const formatTime = (value) => {
     return null;
   }
 
-  return jakartaTimeFormatter.format(new Date(value));
+  return dashboardTimeFormatter.format(new Date(value));
 };
 
 export const getDashboardStats = async (_req, res) => {
@@ -44,14 +46,14 @@ export const getDashboardStats = async (_req, res) => {
         deleted_at: null,
         start_time: {
           $gte: todayRange.start,
-          $lte: todayRange.end,
+          $lt: todayRange.end,
         },
       }),
       Showtime.find({
         deleted_at: null,
         start_time: {
           $gte: todayRange.start,
-          $lte: todayRange.end,
+          $lt: todayRange.end,
         },
       })
         .populate("movie_id", "title")
@@ -117,6 +119,44 @@ export const getDashboardOverview = async (_req, res) => {
       success: true,
       data: {
         revenue: overview?.[0]?.revenue ?? 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getTodayRevenue = async (_req, res) => {
+  try {
+    const { start, end, localDay } = getTodayRange();
+    const result = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: {
+            $gte: start,
+            $lt: end,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          revenue: { $sum: "$total_price" },
+        },
+      },
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        revenue: result?.[0]?.revenue ?? 0,
+        date: localDay,
+        timezone: DASHBOARD_TIME_ZONE,
       },
     });
   } catch (error) {
