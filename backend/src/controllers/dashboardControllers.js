@@ -607,22 +607,49 @@ export const getMovieRevenue = async (req, res) => {
           },
         },
         {
-          $group: {
-            _id: null,
-            revenue: { $sum: "$total_price" },
-            ticketsSold: {
-              $sum: {
-                $size: { $ifNull: ["$showtime_seat_ids", []] },
+          $facet: {
+            summary: [
+              {
+                $group: {
+                  _id: null,
+                  revenue: { $sum: "$total_price" },
+                  ticketsSold: {
+                    $sum: {
+                      $size: { $ifNull: ["$showtime_seat_ids", []] },
+                    },
+                  },
+                  bookingCount: { $sum: 1 },
+                },
               },
-            },
-            bookingCount: { $sum: 1 },
+            ],
+            dailyRevenue: [
+              {
+                $group: {
+                  _id: {
+                    $dateToString: {
+                      format: "%Y-%m-%d",
+                      date: "$created_at",
+                      timezone: DASHBOARD_TIME_ZONE,
+                    },
+                  },
+                  revenue: { $sum: "$total_price" },
+                },
+              },
+              { $sort: { _id: 1 } },
+            ],
           },
         },
       ]),
       Showtime.countDocuments(showtimeFilter),
     ]);
 
-    const summary = bookingSummary?.[0] ?? {};
+    const movieRevenueResult = bookingSummary?.[0] ?? {};
+    const summary = movieRevenueResult.summary?.[0] ?? {};
+    const dailyRevenue = (movieRevenueResult.dailyRevenue || []).map((item) => ({
+      date: item._id,
+      label: `${item._id.slice(8, 10)}/${item._id.slice(5, 7)}`,
+      revenue: item.revenue,
+    }));
     return res.status(200).json({
       success: true,
       data: {
@@ -634,6 +661,7 @@ export const getMovieRevenue = async (req, res) => {
         ticketsSold: summary.ticketsSold ?? 0,
         bookingCount: summary.bookingCount ?? 0,
         showtimeCount,
+        dailyRevenue,
         from: from || null,
         to: to || null,
       },

@@ -72,6 +72,7 @@ const emptyMovieRevenue = {
   ticketsSold: 0,
   bookingCount: 0,
   showtimeCount: 0,
+  dailyRevenue: [],
 };
 
 const DashboardPage = () => {
@@ -676,6 +677,7 @@ const DashboardPage = () => {
           {movieRevenueError ? (
             <div className="dashboard-daily-error">{movieRevenueError}</div>
           ) : (
+            <>
             <div className="dashboard-movie-revenue-grid" aria-busy={movieRevenueLoading}>
               <div className="dashboard-movie-revenue-metric primary">
                 <HiOutlineCash />
@@ -714,6 +716,17 @@ const DashboardPage = () => {
                 </strong>
               </div>
             </div>
+            <div className="dashboard-movie-daily-chart">
+              <div className="dashboard-movie-chart-heading">
+                <h3>Doanh thu phim theo ngày</h3>
+                <p>So sánh hiệu quả bán vé của phim giữa các ngày</p>
+              </div>
+              <RevenueChart
+                data={movieRevenue.dailyRevenue}
+                loading={movieRevenueLoading}
+              />
+            </div>
+            </>
           )}
         </section>
       )}

@@ -289,7 +289,13 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
 
   Booking.aggregate = async (pipeline) => {
     bookingPipeline = pipeline;
-    return [{ revenue: 48500000, ticketsSold: 425, bookingCount: 238 }];
+    return [{
+      summary: [{ revenue: 48500000, ticketsSold: 425, bookingCount: 238 }],
+      dailyRevenue: [
+        { _id: "2026-08-01", revenue: 12000000 },
+        { _id: "2026-08-02", revenue: 36500000 },
+      ],
+    }];
   };
   Movie.findOne = () => ({
     select: async () => ({ _id: movieId, title: "Avengers: Endgame" }),
@@ -333,6 +339,10 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     "2026-08-07T17:00:00.000Z",
   );
   assert.equal(showtimeFilter.start_time.$lt.toISOString(), "2026-08-07T17:00:00.000Z");
+  assert.equal(
+    bookingPipeline[4].$facet.dailyRevenue[0].$group._id.$dateToString.timezone,
+    "Asia/Ho_Chi_Minh",
+  );
   assert.deepEqual(
     {
       revenue: responseBody.data.revenue,
@@ -342,4 +352,8 @@ test("getMovieRevenue returns revenue metrics for one movie and date range", asy
     },
     { revenue: 48500000, ticketsSold: 425, bookingCount: 238, showtimeCount: 27 },
   );
+  assert.deepEqual(responseBody.data.dailyRevenue, [
+    { date: "2026-08-01", label: "01/08", revenue: 12000000 },
+    { date: "2026-08-02", label: "02/08", revenue: 36500000 },
+  ]);
 });

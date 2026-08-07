@@ -1123,6 +1123,27 @@
   white-space: nowrap;
 }
 
+.dashboard-movie-daily-chart {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-movie-chart-heading {
+  margin-bottom: 12px;
+}
+
+.dashboard-movie-chart-heading h3 {
+  color: var(--color-text-primary);
+  font-size: 15px;
+}
+
+.dashboard-movie-chart-heading p {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1024px) {
   .dashboard-movie-revenue-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

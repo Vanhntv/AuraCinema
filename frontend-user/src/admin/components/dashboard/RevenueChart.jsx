@@ -48,7 +48,7 @@ const RevenueChart = ({ data, loading = false }) => {
             axisLine={{ stroke: "rgba(148, 163, 184, 0.2)" }}
             dataKey="label"
             height={42}
-            interval={data.length > 15 ? 1 : 0}
+            interval={Math.max(Math.ceil(data.length / 12) - 1, 0)}
             label={{
               value: "Ngày",
               position: "insideBottom",
