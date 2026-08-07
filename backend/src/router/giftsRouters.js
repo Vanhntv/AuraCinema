@@ -1,0 +1,22 @@
+import express from "express";
+import {
+  createGift,
+  deleteGift,
+  getAllGifts,
+  getGiftById,
+  toggleGiftStatus,
+  updateGift,
+} from "../controllers/giftControllers.js";
+import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
+
+const router = express.Router();
+const adminOnly = [authMiddleware, authorizeRoles("admin")];
+
+router.get("/", adminOnly, getAllGifts);
+router.get("/:id", adminOnly, getGiftById);
+router.post("/", adminOnly, createGift);
+router.put("/:id", adminOnly, updateGift);
+router.patch("/:id/status", adminOnly, toggleGiftStatus);
+router.delete("/:id", adminOnly, deleteGift);
+
+export default router;

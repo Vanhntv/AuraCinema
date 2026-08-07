@@ -21,12 +21,16 @@ import adminBookingsRoute from "./router/adminBookingsRouters.js";
 import usersRoute from "./router/usersRouters.js";
 import settingsRoute from "./router/settingsRouters.js";
 import combosRoute from "./router/combosRouters.js";
+<<<<<<< HEAD
 import marketingContentRoute from "./router/marketingContentRouters.js";
 import adminMarketingContentRoute from "./router/adminMarketingContentRouters.js";
 import paymentsRoute from "./router/paymentsRouters.js";
 import sepayWebhookRoute from "./router/sepayWebhookRouters.js";
 import ticketsRoute from "./router/ticketsRouters.js";
 import adminTicketsRoute from "./router/adminTicketsRouters.js";
+=======
+import giftsRoute from "./router/giftsRouters.js";
+>>>>>>> fix/admin/dashboard
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -72,6 +76,7 @@ app.use("/api/cinemas", cinemasRoute);
 app.use("/api/rooms", roomsRoute);
 app.use("/api/trailers", trailersRoute);
 app.use("/api/dashboard", dashboardRoute);
+app.use("/api/admin/dashboard", dashboardRoute);
 app.use("/api/seat-types", seatTypesRoute);
 app.use("/seat-types", seatTypesRoute);
 app.use("/api/seats", seatsRoute);
@@ -85,12 +90,16 @@ app.use("/api/admin/bookings", adminBookingsRoute);
 app.use("/api/users", usersRoute);
 app.use("/api/settings", settingsRoute);
 app.use("/api/combos", combosRoute);
+<<<<<<< HEAD
 app.use("/api/marketing-content", marketingContentRoute);
 app.use("/api/admin/marketing-content", adminMarketingContentRoute);
 app.use("/api/payments", paymentsRoute);
 app.use("/api/sepay", sepayWebhookRoute);
 app.use("/api/tickets", ticketsRoute);
 app.use("/api/admin/tickets", adminTicketsRoute);
+=======
+app.use("/api/gifts", giftsRoute);
+>>>>>>> fix/admin/dashboard
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

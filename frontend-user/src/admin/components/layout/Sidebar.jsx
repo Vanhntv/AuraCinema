@@ -1,8 +1,6 @@
 import { NavLink } from "react-router-dom";
 import {
   HiOutlineFilm,
-  HiOutlineClipboardList,
-  HiOutlineQrcode,
   HiOutlineShoppingBag,
   HiOutlineTag,
   HiOutlineTicket,
@@ -27,14 +25,33 @@ const menuItems = [
     items: [
       { path: "/admin/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/admin/movies", icon: <HiOutlineFilm />, label: "Phim" },
-      { path: "/admin/rooms", icon: <HiOutlineViewGrid />, label: "Phòng chiếu" },
-      { path: "/admin/showtimes", icon: <HiOutlineTicket />, label: "Suất chiếu" },
+      {
+        path: "/admin/rooms",
+        icon: <HiOutlineViewGrid />,
+        label: "Phòng chiếu",
+      },
+      {
+        path: "/admin/showtimes",
+        icon: <HiOutlineTicket />,
+        label: "Suất chiếu",
+      },
       { path: "/admin/bookings", icon: <HiOutlineTicket />, label: "Đơn vé" },
-      { path: "/admin/ticket-scanner", icon: <HiOutlineQrcode />, label: "Quét vé QR" },
-      { path: "/admin/ticket-scan-history", icon: <HiOutlineClipboardList />, label: "Lịch sử quét QR" },
-      { path: "/admin/concessions", icon: <HiOutlineShoppingBag />, label: "Bắp Nước" },
+      {
+        path: "/admin/ticket-scanner",
+        icon: <HiOutlineQrcode />,
+        label: "Quét vé QR",
+      },
+      {
+        path: "/admin/ticket-scan-history",
+        icon: <HiOutlineClipboardList />,
+        label: "Lịch sử quét QR",
+      },
+      {
+        path: "/admin/concessions",
+        icon: <HiOutlineShoppingBag />,
+        label: "Bắp Nước",
+      },
       { path: "/admin/vouchers", icon: <HiOutlineTag />, label: "Mã giảm giá" },
-      { path: "/admin/marketing", icon: <HiOutlineTag />, label: "Marketing CMS" },
     ],
   },
   {
