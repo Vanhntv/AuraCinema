@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
+  HiOutlineCheckCircle,
   HiOutlineFilm,
   HiOutlineLogout,
   HiOutlineOfficeBuilding,
@@ -29,6 +30,7 @@ const emptyDashboard = {
     revenue: 0,
     todayRevenue: 0,
     ticketsSold: 0,
+    successfulBookings: 0,
   },
   recentBookings: [],
   todayShowtimes: [],
@@ -67,6 +69,7 @@ const DashboardPage = () => {
           revenue: overviewResponse.data?.revenue ?? 0,
           todayRevenue: todayRevenueResponse.data?.revenue ?? 0,
           ticketsSold: overviewResponse.data?.ticketsSold ?? 0,
+          successfulBookings: overviewResponse.data?.successfulBookings ?? 0,
         },
       });
     } catch (err) {
@@ -107,11 +110,11 @@ const DashboardPage = () => {
         hint: `${numberFormatter.format(dashboard.stats.nowShowingMovies)} đang chiếu`,
       },
       {
-        label: "Thể loại",
-        value: dashboard.stats.genres,
-        icon: <HiOutlineTag />,
+        label: "Đơn thành công",
+        value: dashboard.stats.successfulBookings,
+        icon: <HiOutlineCheckCircle />,
         tone: "purple",
-        hint: "Danh mục phim",
+        hint: "Đã thanh toán và xác nhận",
       },
       {
         label: "Rạp phim",

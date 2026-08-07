@@ -22,14 +22,18 @@ test("getTodayRange rolls over at midnight in Ho Chi Minh City", () => {
   assert.equal(range.end.toISOString(), "2026-08-08T17:00:00.000Z");
 });
 
-test("getDashboardOverview returns the total seats from paid bookings", async () => {
+test("getDashboardOverview returns tickets and successful paid bookings", async () => {
   const originalAggregate = Booking.aggregate;
   let receivedPipeline;
   let responseBody;
 
   Booking.aggregate = async (pipeline) => {
     receivedPipeline = pipeline;
-    return [{ revenue: [{ total: 500000 }], tickets: [{ total: 4 }] }];
+    return [{
+      revenue: [{ total: 500000 }],
+      tickets: [{ total: 4 }],
+      successfulBookings: [{ total: 2 }],
+    }];
   };
 
   const response = {
@@ -57,4 +61,9 @@ test("getDashboardOverview returns the total seats from paid bookings", async ()
     { $sum: { $size: { $ifNull: ["$showtime_seat_ids", []] } } },
   );
   assert.equal(responseBody.data.ticketsSold, 4);
+  assert.equal(responseBody.data.successfulBookings, 2);
+  assert.deepEqual(
+    receivedPipeline[1].$facet.successfulBookings[0],
+    { $match: { status: { $in: ["confirmed", "checked_in"] } } },
+  );
 });

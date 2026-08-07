@@ -133,6 +133,16 @@ export const getDashboardOverview = async (_req, res) => {
               },
             },
           ],
+          successfulBookings: [
+            {
+              $match: {
+                status: { $in: REVENUE_BOOKING_STATUSES },
+              },
+            },
+            {
+              $count: "total",
+            },
+          ],
         },
       },
     ]);
@@ -144,6 +154,7 @@ export const getDashboardOverview = async (_req, res) => {
       data: {
         revenue: summary.revenue?.[0]?.total ?? 0,
         ticketsSold: summary.tickets?.[0]?.total ?? 0,
+        successfulBookings: summary.successfulBookings?.[0]?.total ?? 0,
       },
     });
   } catch (error) {
