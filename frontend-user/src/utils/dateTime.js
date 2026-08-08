@@ -102,4 +102,60 @@ export const buildRelativeDateOptions = (days = 7) =>
 export const getShowtimeDateValue = (showtime) =>
   getDateKey(showtime?.date || showtime?.showtime_date || showtime?.start_time || showtime?.startTime);
 
+export const getShowtimeStartDate = (showtime) => {
+  const startValue = showtime?.start_time || showtime?.startDateTime || showtime?.start_datetime;
+  const directDate = toDate(startValue);
+  if (directDate) return directDate;
+
+  const displayTime = String(showtime?.startTime || "").trim();
+  if (displayTime.includes("T")) return toDate(displayTime);
+
+  const dateValue = getShowtimeDateValue(showtime);
+  const timeMatch = displayTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!dateValue || !timeMatch) return null;
+
+  const [, hour, minute] = timeMatch;
+  return toDate(`${dateValue}T${hour.padStart(2, "0")}:${minute}:00+07:00`);
+};
+
+export const isShowtimeUpcoming = (showtime, currentTime = Date.now()) => {
+  const startDate = getShowtimeStartDate(showtime);
+  return Boolean(startDate && startDate.getTime() > Number(currentTime));
+};
+
+const getEntityId = (value) => {
+  if (value && typeof value === "object") return value._id || value.id || "";
+  return value || "";
+};
+
+export const deduplicateShowtimes = (showtimes = [], preferredShowtimeId = "") => {
+  const uniqueShowtimes = new Map();
+  const preferredId = String(preferredShowtimeId || "");
+
+  showtimes.forEach((showtime) => {
+    const startDate = getShowtimeStartDate(showtime);
+    const startKey = startDate
+      ? String(startDate.getTime())
+      : `${getShowtimeDateValue(showtime)}-${showtime?.startTime || ""}`;
+    const cinemaKey = String(
+      getEntityId(showtime?.cinema_id || showtime?.cinemaId) ||
+        showtime?.cinemaName ||
+        "cinema",
+    );
+    const roomKey = String(
+      getEntityId(showtime?.room_id || showtime?.roomId) ||
+        showtime?.roomName ||
+        "room",
+    );
+    const key = `${startKey}|${cinemaKey}|${roomKey}`;
+    const currentId = String(showtime?.id || showtime?._id || "");
+
+    if (!uniqueShowtimes.has(key) || (preferredId && currentId === preferredId)) {
+      uniqueShowtimes.set(key, showtime);
+    }
+  });
+
+  return Array.from(uniqueShowtimes.values());
+};
+
 export const formatDate = formatDisplayDate;

@@ -344,6 +344,9 @@ export const createBooking = async (req, res) => {
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
     }
+    if (new Set(showtime_seat_ids.map(String)).size !== showtime_seat_ids.length) {
+      return res.status(400).json({ success: false, message: "Danh sách ghế bị trùng lặp" });
+    }
 
     const createdBooking = await runWithOptionalTransaction(async (session) => {
       const [user, showtime, seats] = await Promise.all([
@@ -566,7 +569,6 @@ export const cancelBooking = async (req, res) => {
   try {
     const { id } = req.params;
     const cancelledBy = "customer";
-    const refundVoucher = cancelledBy === "cinema" || req.body?.refund_voucher === true;
 
     const cancelledBooking = await runWithOptionalTransaction(async (session) => {
       const booking = await Booking.findOne({
@@ -582,33 +584,26 @@ export const cancelBooking = async (req, res) => {
         throw Object.assign(new Error("Booking da duoc huy truoc do"), { statusCode: 409 });
       }
 
-      const wasPaid = booking.payment_status === "paid";
+      if (booking.status !== "pending" || booking.payment_status !== "pending") {
+        throw Object.assign(
+          new Error("Vé đã thanh toán thành công không thể tự hủy hoặc đổi."),
+          { statusCode: 409 },
+        );
+      }
+
       booking.status = "cancelled";
       booking.cancelled_by = cancelledBy;
       booking.cancellation_reason = String(req.body?.reason || "").trim();
       booking.cancelled_at = new Date();
-      if (refundVoucher && wasPaid) {
-        booking.payment_status = "refunded";
-      } else if (!wasPaid) {
-        booking.payment_status = "cancelled";
-      }
+      booking.payment_status = "cancelled";
       await booking.save({ session });
 
-      if (booking.payment_status === "refunded") {
-        await refundVoucherUsageForBooking({
-          bookingId: booking._id,
-          refundUsage: true,
-          finalStatus: "refunded",
-          session,
-        });
-      } else {
-        await refundVoucherUsageForBooking({
-          bookingId: booking._id,
-          refundUsage: false,
-          finalStatus: "cancelled",
-          session,
-        });
-      }
+      await refundVoucherUsageForBooking({
+        bookingId: booking._id,
+        refundUsage: false,
+        finalStatus: "cancelled",
+        session,
+      });
 
       await ShowtimeSeat.updateMany(
         { _id: { $in: booking.showtime_seat_ids }, status: { $in: ["reserved", "booked"] } },
@@ -622,9 +617,7 @@ export const cancelBooking = async (req, res) => {
 
     return res.json({
       success: true,
-      message: refundVoucher
-        ? "Da huy booking va hoan luot ma giam gia"
-        : "Da huy booking theo chinh sach khong hoan luot ma",
+      message: "Đã hủy đơn đang chờ thanh toán.",
       data: cancelledBooking,
     });
   } catch (error) {

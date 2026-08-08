@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { HiOutlineCalendarDays, HiOutlineClock, HiOutlinePlay } from 'react-icons/hi2'
 import { getMovieById } from '../services/movieService'
 import { getShowtimesByMovie } from '../services/showtimeService'
 import { getTrailersByMovie } from '../services/trailerService'
 import BookingModal from '../components/BookingModal'
+import useCurrentTime from '../hooks/useCurrentTime'
 import {
   formatDayOfMonth,
   formatDisplayDate,
   formatMonthNumber,
   formatShowtimeTime,
   formatWeekdayShort,
+  deduplicateShowtimes,
   getDateKey,
+  isShowtimeUpcoming,
 } from '../utils/dateTime'
 
 const fallbackPoster =
@@ -32,6 +35,10 @@ function youtubeEmbed(url) {
 
 export default function MovieDetailPage() {
   const { movieId } = useParams()
+  const [searchParams] = useSearchParams()
+  const currentTime = useCurrentTime()
+  const requestedShowtimeId = searchParams.get('showtime') || ''
+  const requestedDate = searchParams.get('date') || ''
   const [movie, setMovie] = useState(null)
   const [showtimes, setShowtimes] = useState([])
   const [trailer, setTrailer] = useState(null)
@@ -50,8 +57,20 @@ export default function MovieDetailPage() {
     ])
       .then(([movieData, showtimeData, trailers]) => {
         if (!active) return
+        const nextShowtimes = showtimeData?.data || showtimeData || []
+        const requestedShowtime = nextShowtimes.find(
+          (item) => String(item.id || item._id) === requestedShowtimeId && isShowtimeUpcoming(item),
+        ) || null
         setMovie(movieData)
-        setShowtimes(showtimeData?.data || showtimeData || [])
+        setShowtimes(nextShowtimes)
+        setSelectedShowtime(requestedShowtime)
+        setSelectedDate(
+          requestedShowtime
+            ? getDateKey(requestedShowtime.start_time)
+            : nextShowtimes.some((item) => getDateKey(item.start_time) === requestedDate)
+              ? requestedDate
+              : '',
+        )
         setTrailer(
           movieData?.trailer_url
             ? { title: `${movieData.title} - Trailer`, youtube_url: movieData.trailer_url }
@@ -62,19 +81,35 @@ export default function MovieDetailPage() {
       .catch((err) => active && setError(err.message || 'Không tìm thấy phim'))
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [movieId])
+  }, [movieId, requestedDate, requestedShowtimeId])
+
+  useEffect(() => {
+    if (loading || !requestedShowtimeId || !selectedShowtime) return undefined
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById('lich-chieu')?.scrollIntoView({ block: 'start' })
+    })
+    return () => window.cancelAnimationFrame(frameId)
+  }, [loading, requestedShowtimeId, selectedShowtime])
 
   const dates = useMemo(() => {
     const unique = new Map()
-    showtimes.forEach((item) => {
+    showtimes.filter((item) => isShowtimeUpcoming(item, currentTime)).forEach((item) => {
       const key = getDateKey(item.start_time)
       if (key && !unique.has(key)) unique.set(key, item.start_time)
     })
     return [...unique.entries()].sort((a, b) => new Date(a[1]) - new Date(b[1]))
-  }, [showtimes])
+  }, [currentTime, showtimes])
 
-  const activeDate = selectedDate || dates[0]?.[0] || ''
-  const visibleShowtimes = showtimes.filter((item) => getDateKey(item.start_time) === activeDate)
+  const activeDate = dates.some(([key]) => key === selectedDate) ? selectedDate : dates[0]?.[0] || ''
+  const visibleShowtimes = deduplicateShowtimes(
+    showtimes.filter(
+      (item) => getDateKey(item.start_time) === activeDate && isShowtimeUpcoming(item, currentTime),
+    ),
+    selectedShowtime?.id || selectedShowtime?._id,
+  )
+  const selectedShowtimeIsAvailable = visibleShowtimes.some(
+    (item) => String(item.id || item._id) === String(selectedShowtime?.id || selectedShowtime?._id),
+  )
   const backdrop = movie?.banner || movie?.banners?.[0] || movie?.poster
   const embedUrl = youtubeEmbed(trailer?.youtube_url)
 
@@ -120,7 +155,7 @@ export default function MovieDetailPage() {
         </div>
       </section>
 
-      <section className="mx-auto min-h-[360px] w-[min(1240px,calc(100%_-_40px))] py-14">
+      <section id="lich-chieu" className="mx-auto min-h-[360px] w-[min(1240px,calc(100%_-_40px))] scroll-mt-24 py-14">
         <div>
           <p className="text-xs font-black uppercase tracking-[.22em] text-[#ff6070]">Chọn suất chiếu</p>
           <h2 className="mt-2 text-3xl font-black">Lịch chiếu phim</h2>
@@ -151,7 +186,7 @@ export default function MovieDetailPage() {
                 ))}
               </div>
             </div>
-            {selectedShowtime && (
+            {selectedShowtime && selectedShowtimeIsAvailable && (
               <BookingModal
                 key={selectedShowtime.id || selectedShowtime._id}
                 movie={movie}

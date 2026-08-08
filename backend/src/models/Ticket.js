@@ -89,6 +89,15 @@ const ticketSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    printedAt: {
+      type: Date,
+      default: null,
+    },
+    printedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

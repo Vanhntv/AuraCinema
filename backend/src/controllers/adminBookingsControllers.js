@@ -3,6 +3,10 @@ import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import {
+  cancelValidTicketsForBooking,
+  createTicketsForPaidBooking,
+} from "../services/ticketService.js";
+import {
   refundVoucherUsageForBooking,
 } from "../services/voucherService.js";
 
@@ -212,6 +216,13 @@ export const updateAdminBookingPayment = async (req, res) => {
     const wasCancelled = booking.status === "cancelled";
     const previousPaymentStatus = booking.payment_status;
 
+    if (previousPaymentStatus === "paid" && !["paid", "cancelled", "refunded"].includes(paymentStatus)) {
+      return res.status(409).json({
+        success: false,
+        message: "Không thể đưa đơn đã thanh toán về trạng thái chưa thanh toán",
+      });
+    }
+
     if (booking.status === "cancelled" && !["cancelled", "refunded"].includes(paymentStatus)) {
       return res.status(409).json({ success: false, message: "Không thể đổi đơn đã hủy về trạng thái đang bán" });
     }
@@ -229,9 +240,14 @@ export const updateAdminBookingPayment = async (req, res) => {
     Object.assign(booking, updates);
     await booking.save();
 
+    if (booking.status === "confirmed" && booking.payment_status === "paid") {
+      await createTicketsForPaidBooking(booking._id);
+    }
+
     if (["cancelled", "refunded"].includes(paymentStatus) && !wasCancelled) {
       await releaseBookingSeats(booking);
       await restoreComboStock({ combos: booking.combos });
+      await cancelValidTicketsForBooking(booking._id);
     }
 
     if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
@@ -264,16 +280,18 @@ export const cancelAdminBooking = async (req, res) => {
       return res.status(409).json({ success: false, message: "Đơn vé đã được hủy trước đó" });
     }
 
-    const refundPayment = req.body?.refund_payment === true || booking.payment_status === "paid";
+    const refundPayment = req.body?.refund_payment === true;
+    const wasPaid = booking.payment_status === "paid";
     booking.status = "cancelled";
     booking.cancelled_by = "cinema";
     booking.cancellation_reason = String(req.body?.reason || "").trim();
     booking.cancelled_at = new Date();
-    booking.payment_status = refundPayment ? "refunded" : "cancelled";
+    booking.payment_status = refundPayment ? "refunded" : (wasPaid ? "paid" : "cancelled");
     await booking.save();
 
     await releaseBookingSeats(booking);
     await restoreComboStock({ combos: booking.combos });
+    await cancelValidTicketsForBooking(booking._id);
     await refundVoucherUsageForBooking({
       bookingId: booking._id,
       refundUsage: refundPayment,

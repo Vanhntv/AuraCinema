@@ -4,12 +4,64 @@ import {
   cancelBooking,
   createSepayPgCheckout,
   createVnpayPaymentUrl,
+  getBookingDetail,
   getBookingPaymentStatus,
 } from "../services/bookingService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
 function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
+}
+
+function formatBookingDate(value) {
+  if (!value) return "Đang cập nhật";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Đang cập nhật";
+  return date.toLocaleDateString("vi-VN");
+}
+
+function formatBookingTime(value) {
+  if (!value) return "Đang cập nhật";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Đang cập nhật";
+  return date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function mapBookingToSummary(booking, current = {}) {
+  const existing = current || {};
+  const showtime = booking?.showtime_id || {};
+  const movie = showtime.movie_id || {};
+  const room = showtime.room_id || {};
+  const cinema = room.cinema_id || {};
+  const seats = booking?.showtime_seat_ids || [];
+  const combos = booking?.combos || [];
+  const comboTotal = combos.reduce((total, item) => total + Number(item.subtotal || 0), 0);
+  const subtotal = Number(booking?.subtotal_price || 0);
+
+  return {
+    ...existing,
+    bookingId: booking?._id || existing.bookingId,
+    bookingCode: booking?.booking_code || existing.bookingCode,
+    movieTitle: movie.title || existing.movieTitle,
+    ageClassification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
+    cinemaName: cinema.name || existing.cinemaName || "Đang cập nhật",
+    roomName: room.name || existing.roomName || "Đang cập nhật",
+    dateLabel: formatBookingDate(showtime.start_time),
+    showtimeLabel: formatBookingTime(showtime.start_time),
+    seatLabels: seats.map((item) => {
+      const seat = item.seat_id || {};
+      return `${seat.seat_row || ""}${seat.seat_number || ""}`;
+    }).filter(Boolean),
+    seatType: [...new Set(seats.map((item) => item.seat_id?.seat_type_id?.name).filter(Boolean))].join(", ") || existing.seatType || "Đang cập nhật",
+    concessionItems: combos,
+    concessionTotal: comboTotal,
+    seatTotal: Math.max(subtotal - comboTotal, 0),
+    voucherCode: booking?.voucher?.code || "",
+    discountAmount: Number(booking?.discount_amount || 0),
+    finalTotal: Number(booking?.total_price || 0),
+    total_price: Number(booking?.total_price || 0),
+    paymentStatus: booking?.payment_status || existing.paymentStatus || "pending",
+  };
 }
 
 function submitPaymentForm({ checkoutUrl, fields }) {
@@ -68,6 +120,7 @@ function PaymentPage() {
   const [isPaying, setIsPaying] = useState(false);
   const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const [hasConfirmedBooking, setHasConfirmedBooking] = useState(false);
 
   const amount = useMemo(
     () => Number(summary?.finalTotal || summary?.total_price || 0),
@@ -109,6 +162,23 @@ function PaymentPage() {
     return () => {
       isActive = false;
       window.clearInterval(intervalId);
+    };
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (!bookingId) return undefined;
+    let active = true;
+
+    getBookingDetail(bookingId)
+      .then((response) => {
+        if (active) setSummary((current) => mapBookingToSummary(response.data, current));
+      })
+      .catch((requestError) => {
+        if (active) setPaymentError(getApiErrorMessage(requestError, "Không thể tải chi tiết đơn vé."));
+      });
+
+    return () => {
+      active = false;
     };
   }, [bookingId]);
 
@@ -223,9 +293,13 @@ function PaymentPage() {
         <div className="mx-auto mt-6 w-full max-w-[560px] rounded-[var(--aura-radius-md)] bg-[var(--aura-surface)] p-5">
           <div className="grid gap-4">
             <DetailRow label="Phim" value={summary?.movieTitle || "Thanh toán đơn vé"} strong />
-            <DetailRow label="Rạp & Phòng" value={summary?.roomName || "Đang cập nhật"} />
+            <DetailRow label="Phân loại độ tuổi" value={summary?.ageClassification || "P"} strong />
+            <DetailRow label="Rạp" value={summary?.cinemaName || "Đang cập nhật"} />
+            <DetailRow label="Phòng" value={summary?.roomName || "Đang cập nhật"} />
             <DetailRow label="Thời gian" value={`${summary?.showtimeLabel || "Đang cập nhật"} - ${summary?.dateLabel || ""}`} />
             <DetailRow label={`Ghế đã chọn (${summary?.seatLabels?.length || 0})`} value={summary?.seatLabels?.join(", ") || "Đang cập nhật"} />
+            <DetailRow label="Loại ghế" value={summary?.seatType || "Đang cập nhật"} />
+            <DetailRow label="Combo" value={summary?.concessionItems?.length ? summary.concessionItems.map((item) => `${item.name} ×${item.quantity}`).join(", ") : "Không có"} />
           </div>
 
           <div className="mt-7 grid gap-3 border-t border-white/5 pt-5">
@@ -268,6 +342,16 @@ function PaymentPage() {
             <span className="text-sm text-slate-400">Tổng thanh toán</span>
             <strong className="text-3xl font-black text-[var(--aura-coral)]">{formatCurrency(amount)}</strong>
           </div>
+
+          <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-100">
+            <p className="font-bold">Vui lòng kiểm tra kỹ thông tin phim, suất chiếu, phòng và ghế trước khi thanh toán.</p>
+            <p className="mt-2 text-amber-100/80">Vé đã thanh toán thành công không hỗ trợ khách hàng tự hủy, đổi hoặc hoàn vé, trừ trường hợp được rạp xử lý theo chính sách.</p>
+          </div>
+
+          <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+            <input className="mt-1 h-5 w-5 accent-[var(--aura-coral)]" type="checkbox" checked={hasConfirmedBooking} onChange={(event) => setHasConfirmedBooking(event.target.checked)} />
+            <span>Tôi đã kiểm tra và xác nhận thông tin đặt vé.</span>
+          </label>
         </div>
 
         {paymentError && <p className="mx-auto mt-4 max-w-[560px] rounded-md border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
@@ -285,7 +369,7 @@ function PaymentPage() {
             className="h-11 rounded-[var(--aura-radius-sm)] bg-[var(--aura-coral)] px-5 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             onClick={completeSelectedPayment}
-            disabled={isPaying || isCancellingBooking || !amount}
+            disabled={isPaying || isCancellingBooking || !amount || !hasConfirmedBooking}
           >
             {isPaying ? selectedPaymentLoadingText : selectedPaymentButtonText}
           </button>

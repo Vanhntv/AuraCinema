@@ -184,11 +184,30 @@ const formatTime = (value) => {
   return dashboardTimeFormatter.format(new Date(value));
 };
 
+const formatRecentBookingStatus = (booking) => {
+  if (booking?.payment_status === "refunded") return "Đã hoàn tiền";
+  if (booking?.status === "cancelled" || booking?.payment_status === "cancelled") {
+    return "Đã hủy";
+  }
+  if (booking?.payment_status === "paid") return "Đã thanh toán";
+  if (booking?.payment_status === "failed") return "Thanh toán thất bại";
+  return "Chờ thanh toán";
+};
+
 export const getDashboardStats = async (_req, res) => {
   try {
     const todayRange = getTodayRange();
 
-    const [genres, movies, cinemas, nowShowingMovies, todayShowtimesCount, todayShowtimes] = await Promise.all([
+    const [
+      genres,
+      movies,
+      cinemas,
+      nowShowingMovies,
+      todayShowtimesCount,
+      todayShowtimes,
+      bookings,
+      recentBookings,
+    ] = await Promise.all([
       Genre.countDocuments({ deleted_at: null }),
       Movie.countDocuments({ deleted_at: null }),
       Cinema.countDocuments({ deleted_at: null }),
@@ -218,6 +237,19 @@ export const getDashboardStats = async (_req, res) => {
         })
         .sort({ start_time: 1 })
         .limit(5),
+      Booking.countDocuments({}),
+      Booking.find({})
+        .populate({
+          path: "showtime_id",
+          select: "movie_id",
+          populate: {
+            path: "movie_id",
+            select: "title",
+          },
+        })
+        .sort({ created_at: -1 })
+        .limit(5)
+        .lean(),
     ]);
 
     res.status(200).json({
@@ -227,11 +259,20 @@ export const getDashboardStats = async (_req, res) => {
           genres,
           movies,
           cinemas,
-          bookings: 0,
+          bookings,
           todayShowtimes: todayShowtimesCount,
           nowShowingMovies,
         },
-        recentBookings: [],
+        recentBookings: recentBookings.map((booking) => ({
+          id: booking._id,
+          code: booking.booking_code,
+          customerName: booking.customer_name || "Khách hàng",
+          movieTitle:
+            booking.showtime_id?.movie_id?.title || "Phim không còn tồn tại",
+          totalAmount: Number(booking.total_price || 0),
+          status: formatRecentBookingStatus(booking),
+          createdAt: booking.created_at,
+        })),
         todayShowtimes: todayShowtimes.map((showtime) => ({
           id: showtime._id,
           movieTitle: showtime.movie_id?.title ?? null,

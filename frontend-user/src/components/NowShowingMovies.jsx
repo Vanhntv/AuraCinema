@@ -3,8 +3,6 @@ import { HiOutlineSearch, HiOutlineX } from 'react-icons/hi'
 import { useNavigate } from 'react-router-dom'
 import { getMovies } from '../services/movieService'
 import { getShowtimes } from '../services/showtimeService'
-import BookingModal from './BookingModal'
-import MovieDetailModal from './MovieDetailModal'
 
 const fallbackPoster =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22 viewBox=%220 0 300 450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22225%22 fill=%22%23f8fafc%22 font-family=%22Arial%22 font-size=%2222%22 text-anchor=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E'
@@ -183,7 +181,7 @@ function buildScheduledMovies(showtimes, movies) {
   return Array.from(scheduledMovies.values())
 }
 
-function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
+function MovieCard({ movie, onOpenDetail }) {
   const year = getReleaseYear(movie.release_date || movie.releaseDate)
 
   return (
@@ -227,7 +225,7 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
           type="button"
           onClick={(event) => {
             event.stopPropagation()
-            onOpenBooking(movie)
+            onOpenDetail(movie)
           }}
         >
           Đặt vé
@@ -237,7 +235,7 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
   )
 }
 
-function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
+function MovieGroup({ title, movies, emptyText, onOpenDetail }) {
   return (
     <div className="mt-10 first:mt-0">
       <div className="mb-5 flex items-center justify-between gap-4">
@@ -260,7 +258,6 @@ function MovieGroup({ title, movies, emptyText, onOpenDetail, onOpenBooking }) {
               key={movie._id}
               movie={movie}
               onOpenDetail={onOpenDetail}
-              onOpenBooking={onOpenBooking}
             />
           ))}
         </div>
@@ -328,8 +325,6 @@ function NowShowingMovies() {
   const navigate = useNavigate()
   const [movies, setMovies] = useState([])
   const [scheduledShowtimes, setScheduledShowtimes] = useState([])
-  const [selectedMovie, setSelectedMovie] = useState(null)
-  const [bookingMovie, setBookingMovie] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -369,11 +364,6 @@ function NowShowingMovies() {
       isMounted = false
     }
   }, [])
-
-  const openBooking = (movie) => {
-    setSelectedMovie(null)
-    setBookingMovie(movie)
-  }
 
   const clearFilters = () => {
     setSearchTerm('')
@@ -495,7 +485,6 @@ function NowShowingMovies() {
                   movies={filteredNowShowingMovies.slice(0, 4)}
                   emptyText="Chưa có phim đang chiếu."
                   onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-                  onOpenBooking={openBooking}
                 />
               ) : null}
               {shouldShowComingSoon ? (
@@ -504,20 +493,12 @@ function NowShowingMovies() {
                   movies={filteredComingSoonMovies}
                   emptyText="Chưa có phim sắp chiếu."
                   onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
-                  onOpenBooking={openBooking}
                 />
               ) : null}
             </>
           )}
         </>
       )}
-
-      <MovieDetailModal
-        movie={selectedMovie}
-        onClose={() => setSelectedMovie(null)}
-        onBook={openBooking}
-      />
-      <BookingModal movie={bookingMovie} onClose={() => setBookingMovie(null)} />
     </section>
   )
 }

@@ -4,6 +4,8 @@ import Booking from "../models/Booking.js";
 import Ticket from "../models/Ticket.js";
 
 const QR_TOKEN_ENCRYPTION_VERSION = "v1";
+export const TICKET_QR_PREFIX = "AURA_TICKET:";
+const MAX_QR_PAYLOAD_LENGTH = 512;
 
 const normalizeText = (value = "") => String(value || "").trim();
 
@@ -30,6 +32,17 @@ const getEncryptionKey = () => {
 
 export const hashQrToken = (token) =>
   crypto.createHash("sha256").update(String(token || ""), "utf8").digest("hex");
+
+export const buildTicketQrPayload = (token) => `${TICKET_QR_PREFIX}${String(token || "").trim()}`;
+
+export const parseTicketQrPayload = (value) => {
+  if (typeof value !== "string") return "";
+  const payload = value.trim();
+  if (!payload || payload.length > MAX_QR_PAYLOAD_LENGTH || !payload.startsWith(TICKET_QR_PREFIX)) {
+    return "";
+  }
+  return payload.slice(TICKET_QR_PREFIX.length).trim();
+};
 
 export const encryptQrToken = (token) => {
   const iv = crypto.randomBytes(12);
@@ -244,10 +257,22 @@ export const createTicketsForPaidBooking = async (bookingOrId, options = {}) => 
         ticketId: ticket._id,
         ticketCode: ticket.ticketCode,
         seatLabel: ticket.seatLabel,
-        qrToken: decryptQrToken(ticket.qrTokenEncrypted),
+        qrPayload: buildTicketQrPayload(decryptQrToken(ticket.qrTokenEncrypted)),
       }))
       : [],
   };
+};
+
+export const cancelValidTicketsForBooking = async (bookingId, options = {}) => {
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw Object.assign(new Error("bookingId khong hop le"), { statusCode: 400 });
+  }
+
+  return Ticket.updateMany(
+    { bookingId, status: "VALID" },
+    { $set: { status: "CANCELLED" } },
+    { session: options.session || null },
+  );
 };
 
 export const getTicketQrPayloadsForBooking = async ({ bookingId, userId }) => {

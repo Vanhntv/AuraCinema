@@ -12,7 +12,8 @@ import {
 import { getAvailableConcessions } from "../services/concessionService";
 import { verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
-import { buildRelativeDateOptions, getShowtimeDateValue } from "../utils/dateTime";
+import useCurrentTime from "../hooks/useCurrentTime";
+import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, isShowtimeUpcoming } from "../utils/dateTime";
 
 const SEAT_TYPES = {
   normal: { label: "Ghe thuong", color: "bg-slate-600", selected: "bg-sky-500" },
@@ -197,16 +198,6 @@ function validateSeatSpacing(nextSelectedSeats, allSeats) {
   return "";
 }
 
-function validateSingleSeatType(nextSelectedSeats) {
-  const selectedTypes = new Set(nextSelectedSeats.map((seat) => getSeatType(seat)));
-
-  if (selectedTypes.size > 1) {
-    return "Không được chọn nhiều loại ghế khác nhau trong cùng một lần đặt vé.";
-  }
-
-  return "";
-}
-
 function resolveImageUrl(image) {
   if (!image) return "";
   if (/^https?:\/\//i.test(image)) return image;
@@ -249,15 +240,22 @@ function submitPaymentForm({ checkoutUrl, fields }) {
 
 function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal" }) {
   const navigate = useNavigate();
+  const currentTime = useCurrentTime();
   const location = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
+  const isPageVariant = variant === "page";
+  const isInlineVariant = variant === "inline";
+  const isEmbeddedVariant = isPageVariant || isInlineVariant;
   const [dateOptions] = useState(() => buildRelativeDateOptions(4));
-  const [selectedDate, setSelectedDate] = useState(dateOptions[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const initialDateValue = getShowtimeDateValue(initialShowtime);
+    return dateOptions.find((option) => option.value === initialDateValue) || dateOptions[0];
+  });
   const [showtimes, setShowtimes] = useState([]);
-  const [selectedShowtime, setSelectedShowtime] = useState(null);
+  const [selectedShowtime, setSelectedShowtime] = useState(initialShowtime);
   const [showtimeSeats, setShowtimeSeats] = useState([]);
   const [selectedSeats, setSelectedSeats] = useState([]);
-  const [step, setStep] = useState("select-showtime");
+  const [step, setStep] = useState(initialShowtime ? "select-seat" : "select-showtime");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
   const [error, setError] = useState("");
@@ -288,7 +286,16 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const initialShowtimeDateValue = getShowtimeDateValue(initialShowtime);
   const shouldLoadInitialShowtime = Boolean(
     initialShowtimeId &&
-      (!initialRequestedDate || initialRequestedDate === initialShowtimeDateValue),
+      (isInlineVariant ||
+        !initialRequestedDate ||
+        initialRequestedDate === initialShowtimeDateValue),
+  );
+  const availableShowtimes = useMemo(
+    () => deduplicateShowtimes(
+      showtimes.filter((showtime) => isShowtimeUpcoming(showtime, currentTime)),
+      initialShowtimeId,
+    ),
+    [currentTime, initialShowtimeId, showtimes],
   );
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
@@ -361,7 +368,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     setSelectedDate(nextDate);
     setShowtimes([]);
-    setSelectedShowtime(null);
+    setSelectedShowtime(shouldLoadInitialShowtime ? initialShowtime : null);
     setShowtimeSeats([]);
     setSelectedSeats([]);
     setStep(shouldLoadInitialShowtime ? "select-seat" : "select-showtime");
@@ -381,6 +388,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     initialRequestedDate,
     initialShowtimeDateValue,
     initialShowtimeId,
+    initialShowtime,
+    isInlineVariant,
     movie?._id,
     shouldLoadInitialShowtime,
     dateOptions,
@@ -701,9 +710,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       const nextSelectedSeats = selectedSeats.filter(
         (item) => !releaseIds.includes(item._id),
       );
-      const selectionError =
-        validateSingleSeatType(nextSelectedSeats) ||
-        validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+      const selectionError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
       if (selectionError) {
         setSeatError(selectionError);
         return;
@@ -739,9 +746,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     const newSeats = seatsToToggle.filter((item) => !selectedSeatIds.has(item._id));
     const nextSelectedSeats = [...selectedSeats, ...newSeats];
-    const selectionError =
-      validateSingleSeatType(nextSelectedSeats) ||
-      validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+    const selectionError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
     if (selectionError) {
       setSeatError(selectionError);
       return;
@@ -885,6 +890,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
       const bookingSummary = {
         movieTitle: movie.title,
+        ageClassification: Number(movie.age_limit || movie.ageLimit) > 0 ? `T${movie.age_limit || movie.ageLimit}` : "P",
         dateLabel: `${selectedDate.fullLabel || selectedDate.label} · ${selectedDate.displayDate}`,
         showtimeLabel: selectedShowtime?.startTime || "Chưa chọn",
         roomName: selectedShowtime?.roomName || "Chưa chọn",
@@ -1032,9 +1038,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     await finalizeBooking();
   };
 
-  const isPageVariant = variant === "page";
-  const isInlineVariant = variant === "inline";
-  const isEmbeddedVariant = isPageVariant || isInlineVariant;
+  const ageLimit = Number(movie?.age_limit || movie?.ageLimit || 0);
+  const ageClassification = ageLimit > 0 ? `T${ageLimit}` : "P";
   const shellClassName = isPageVariant
     ? "mx-auto w-[min(1320px,calc(100%_-_40px))] py-10 max-sm:w-[calc(100%_-_28px)]"
     : isInlineVariant
@@ -1105,16 +1110,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const bookingIsPaid = bookingResult?.payment_status === "paid" || confirmedBookingSummary?.paymentStatus === "paid";
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
   const selectedPaymentLoadingText = selectedPaymentMethod === "sepay" ? "Đang mở SePay..." : "Đang mở VNPay...";
+  const showSeatSelection = isInlineVariant || step === "select-seat";
 
   if (!movie) return null;
 
   return (
     <div ref={dialogRef} className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-labelledby={isEmbeddedVariant ? undefined : "booking-title"} tabIndex={isEmbeddedVariant ? undefined : -1}>
       <div className={panelClassName} onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-5">
-          <div><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">Đặt vé</p><h2 id="booking-title" className="mt-2 text-3xl font-black text-white max-sm:text-2xl">{movie.title}</h2></div>
+        {!isInlineVariant && <div className="flex items-start justify-between gap-5">
+          <div><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">Đặt vé</p><div className="mt-2 flex flex-wrap items-center gap-3"><h2 id="booking-title" className="text-3xl font-black text-white max-sm:text-2xl">{movie.title}</h2><span className="rounded-full bg-[var(--aura-coral)] px-3 py-1 text-xs font-black text-[var(--aura-coral-ink)]">{ageClassification}</span></div>{ageLimit > 0 && <p className="mt-2 max-w-2xl text-sm leading-6 text-amber-200">Phim dành cho khán giả từ đủ {ageLimit} tuổi. Nhân viên rạp có thể yêu cầu giấy tờ để đối chiếu khi check-in.</p>}</div>
           <button className="grid h-11 shrink-0 place-items-center rounded-full bg-white/10 px-4 text-sm font-black text-white hover:bg-[#ff6070] hover:text-[var(--aura-coral-ink)]" type="button" aria-label={isPageVariant ? "Quay lại lịch chiếu" : "Đóng đặt vé"} onClick={handleClose}>{isPageVariant ? "← Lịch chiếu" : "×"}</button>
-        </div>
+        </div>}
 
         {bookingResult && confirmedBookingSummary ? (
           <div className="mt-8">
@@ -1240,16 +1246,16 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
           </div>
         ) : (
-        <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className={`${isInlineVariant ? "mt-0" : "mt-8"} grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]`}>
           <div className="grid content-start gap-7">
             {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} aria-pressed={selectedDate.value === option.value} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.fullLabel} · {option.displayDate}</button>)}</div></div>}
 
-            <div><h3 className="text-lg font-black text-white">{step === "select-seat" ? "Chọn ghế" : "Chọn suất chiếu"}</h3>
-              {step === "select-showtime" ? <div className="mt-4 space-y-3">
+            <div><h3 className="text-lg font-black text-white">{showSeatSelection ? "Chọn ghế" : "Chọn suất chiếu"}</h3>
+              {!showSeatSelection ? <div className="mt-4 space-y-3">
                 {isLoading && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Đang tải suất chiếu...</p>}
                 {!isLoading && error && <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-                {!isLoading && !error && !showtimes.length && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Không có suất chiếu cho ngày này.</p>}
-                <div className="flex flex-wrap gap-3">{showtimes.map((showtime) => <button key={showtime.id} type="button" onClick={() => handleShowtimeSelect(showtime)} className="rounded-full bg-white/10 px-5 py-3 text-sm font-extrabold text-slate-200 hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]">{showtime.startTime} · {showtime.roomName}</button>)}</div>
+                {!isLoading && !error && !availableShowtimes.length && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Không còn suất chiếu khả dụng cho ngày này.</p>}
+                <div className="flex flex-wrap gap-3">{availableShowtimes.map((showtime) => <button key={showtime.id} type="button" onClick={() => handleShowtimeSelect(showtime)} className="rounded-full bg-white/10 px-5 py-3 text-sm font-extrabold text-slate-200 hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]">{showtime.startTime} · {showtime.roomName}</button>)}</div>
               </div> : <div className="mt-4 space-y-4">
                 {!isEmbeddedVariant && (
                   <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-[#ff6070]" type="button" onClick={async () => { await releaseHeldSeats(); setStep("select-showtime"); setSelectedSeats([]); setSeatError(""); }}>← Chọn suất khác</button>
@@ -1279,7 +1285,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
               </div>}
             </div>
 
-            {step === "select-seat" && (
+            {showSeatSelection && (
               <div>
                 <div className="flex items-center justify-between gap-4">
                   <div>

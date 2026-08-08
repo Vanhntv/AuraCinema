@@ -5341,6 +5341,40 @@
   margin-top: 16px;
 }
 
+.ticket-code-lookup {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+
+.ticket-code-lookup-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.ticket-code-lookup-copy label {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ticket-code-lookup-copy span {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.ticket-code-lookup-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.ticket-code-lookup-controls .form-input {
+  min-width: 0;
+}
+
 .ticket-scanner-message {
   margin-top: 14px;
   padding: 12px 14px;
@@ -5510,6 +5544,15 @@
 
   .ticket-action-panel .btn,
   .ticket-scanner-actions .btn {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .ticket-code-lookup-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-code-lookup-controls .btn {
     justify-content: center;
     width: 100%;
   }

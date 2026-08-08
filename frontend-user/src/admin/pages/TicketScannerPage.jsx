@@ -6,11 +6,17 @@ import {
   HiOutlinePhotograph,
   HiOutlinePrinter,
   HiOutlineRefresh,
+  HiOutlineSearch,
   HiOutlineStop,
   HiOutlineTicket,
   HiOutlineXCircle,
 } from "react-icons/hi";
-import { checkInTicketQr, verifyTicketQr } from "../services/ticketAdminService";
+import {
+  checkInTicketQr,
+  claimTicketPrint,
+  lookupTicketByCode,
+  verifyTicketQr,
+} from "../services/ticketAdminService";
 import { showToast } from "../../utils/toast";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
@@ -99,6 +105,8 @@ const TicketScannerPage = () => {
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [printingTicket, setPrintingTicket] = useState(false);
+  const [lookingUpTicket, setLookingUpTicket] = useState(false);
+  const [ticketCodeQuery, setTicketCodeQuery] = useState("");
   const [currentQrToken, setCurrentQrToken] = useState("");
   const [verifyResult, setVerifyResult] = useState(null);
   const [checkInResult, setCheckInResult] = useState(null);
@@ -249,21 +257,74 @@ const TicketScannerPage = () => {
     setVerifyResult(null);
     setCheckInResult(null);
     setCurrentQrToken("");
+    setTicketCodeQuery("");
     lastQrTokenRef.current = "";
     handlingQrRef.current = false;
     await startScanner();
   };
 
+  const handleTicketCodeLookup = async (event) => {
+    event.preventDefault();
+    const ticketCode = ticketCodeQuery.trim().toUpperCase();
+    if (!ticketCode || lookingUpTicket) return;
+
+    try {
+      setLookingUpTicket(true);
+      setCheckInResult(null);
+      setVerifyResult(null);
+      setCurrentQrToken("");
+      await stopScanner();
+
+      const response = await lookupTicketByCode(ticketCode);
+      setTicketCodeQuery(ticketCode);
+      setCurrentQrToken(response.qrPayload || "");
+      setVerifyResult(response);
+      setCameraMessage(response.message || "Đã tìm thấy vé.");
+      showToast("success", response.message || "Đã tìm thấy vé.");
+    } catch (error) {
+      const response = error?.response?.data || {};
+      const message = response.message || "Không thể tra cứu mã vé.";
+      setTicketCodeQuery(ticketCode);
+      setCurrentQrToken(response.qrPayload || "");
+      setVerifyResult({
+        success: false,
+        message,
+        data: response.data || null,
+      });
+      setCameraMessage(message);
+      showToast("error", message);
+    } finally {
+      setLookingUpTicket(false);
+    }
+  };
+
   const handlePrintTicket = async () => {
-    if (!ticket || printingTicket) return;
+    if (!ticket || printingTicket || ticket.canPrint === false || ticket.printedAt) return;
 
     try {
       setPrintingTicket(true);
-      const { downloadTicketPdf } = await import("../utils/ticketPdf");
-      await downloadTicketPdf(ticket, currentQrToken);
-      showToast("success", "Đã tải file PDF của vé.");
+      const claimResponse = await claimTicketPrint(currentQrToken);
+      const printableTicket = claimResponse.data || ticket;
+
+      if (checkInResult?.data) {
+        setCheckInResult((current) => ({ ...current, data: printableTicket }));
+      } else {
+        setVerifyResult((current) => ({ ...current, data: printableTicket }));
+      }
+
+      const { printTicketPdf } = await import("../../utils/ticketPdf");
+      await printTicketPdf(printableTicket, currentQrToken);
+      showToast("success", "Đã mở hộp thoại in vé.");
     } catch (error) {
-      showToast("error", getApiMessage(error, "Không thể tạo file PDF của vé."));
+      const latestTicket = error?.response?.data?.data;
+      if (latestTicket) {
+        if (checkInResult?.data) {
+          setCheckInResult((current) => ({ ...current, data: latestTicket }));
+        } else {
+          setVerifyResult((current) => ({ ...current, data: latestTicket }));
+        }
+      }
+      showToast("error", getApiMessage(error, "Không thể mở hộp thoại in vé."));
     } finally {
       setPrintingTicket(false);
     }
@@ -341,8 +402,8 @@ const TicketScannerPage = () => {
     <div className="ticket-scanner-page">
       <div className="page-header">
         <div className="page-header-info">
-          <h1>Quét vé QR</h1>
-          <p>Quét mã QR để xem thông tin, xuất file PDF hoặc check-in vé.</p>
+          <h1>Quét & tra cứu vé</h1>
+          <p>Quét mã QR hoặc nhập mã vé để in và check-in.</p>
         </div>
         <button className="btn btn-secondary" onClick={handleScanNext} type="button">
           <HiOutlineRefresh />
@@ -373,7 +434,7 @@ const TicketScannerPage = () => {
           <div id="ticket-qr-file-reader" className="ticket-file-reader" />
 
           <div className="ticket-scanner-actions">
-            <button className="btn btn-primary" disabled={cameraActive || processing} onClick={startScanner} type="button">
+            <button className="btn btn-primary" disabled={cameraActive || processing || lookingUpTicket} onClick={startScanner} type="button">
               <HiOutlineCamera />
               Bật camera
             </button>
@@ -381,7 +442,7 @@ const TicketScannerPage = () => {
               <HiOutlineStop />
               Dừng camera
             </button>
-            <button className="btn btn-secondary" disabled={processing} onClick={() => fileInputRef.current?.click()} type="button">
+            <button className="btn btn-secondary" disabled={processing || lookingUpTicket} onClick={() => fileInputRef.current?.click()} type="button">
               <HiOutlinePhotograph />
               Tải ảnh QR
             </button>
@@ -394,16 +455,42 @@ const TicketScannerPage = () => {
             />
           </div>
 
-          <div className={`ticket-scanner-message ${processing ? "loading" : ""}`}>
-            {processing ? "Đang xử lý mã QR..." : cameraMessage}
+          <form className="ticket-code-lookup" onSubmit={handleTicketCodeLookup}>
+            <div className="ticket-code-lookup-copy">
+              <label htmlFor="ticket-code-lookup">Tra cứu mã vé</label>
+              <span>Dùng khi camera hoặc mã QR không đọc được.</span>
+            </div>
+            <div className="ticket-code-lookup-controls">
+              <input
+                id="ticket-code-lookup"
+                className="form-input"
+                value={ticketCodeQuery}
+                onChange={(event) => setTicketCodeQuery(event.target.value.toUpperCase())}
+                placeholder="Ví dụ: AURA111020904957-E4"
+                minLength={6}
+                maxLength={64}
+                autoComplete="off"
+                spellCheck="false"
+                disabled={lookingUpTicket || processing}
+                required
+              />
+              <button className="btn btn-secondary" disabled={lookingUpTicket || processing || !ticketCodeQuery.trim()} type="submit">
+                <HiOutlineSearch />
+                {lookingUpTicket ? "Đang tìm..." : "Tra cứu"}
+              </button>
+            </div>
+          </form>
+
+          <div className={`ticket-scanner-message ${processing || lookingUpTicket ? "loading" : ""}`} aria-live="polite">
+            {processing ? "Đang xử lý mã QR..." : lookingUpTicket ? "Đang tra cứu mã vé..." : cameraMessage}
           </div>
         </section>
 
         <section className={`ticket-scanner-panel ticket-result-panel ${verificationTone}`}>
           <div className="ticket-scanner-panel-header">
             <div>
-              <h2>Kết quả quét vé</h2>
-              <p>Thông tin vé sau khi quét, sẵn sàng để in hoặc check-in.</p>
+              <h2>Kết quả xác minh vé</h2>
+              <p>Thông tin vé sau khi quét hoặc tra cứu, sẵn sàng để in và check-in.</p>
             </div>
             <HiOutlineTicket />
           </div>
@@ -443,23 +530,24 @@ const TicketScannerPage = () => {
           <div className="ticket-scanner-panel-header">
             <div>
               <h2>Hành động</h2>
-              <p>Chọn in vé PDF hoặc check-in vé vừa quét.</p>
+              <p>In vé theo mẫu điện tử hoặc check-in vé vừa xác minh.</p>
             </div>
           </div>
 
           <button
             className="btn btn-primary ticket-print-btn"
-            disabled={!ticket || processing || checkingIn || printingTicket}
+            disabled={!ticket || !currentQrToken || processing || lookingUpTicket || checkingIn || printingTicket || ticket?.canPrint === false || Boolean(ticket?.printedAt)}
+            title={ticket?.printedAt ? "Vé này đã được in và không thể in lại." : "In vé điện tử"}
             onClick={handlePrintTicket}
             type="button"
           >
             <HiOutlinePrinter />
-            {printingTicket ? "Đang tạo PDF..." : "In vé PDF"}
+            {printingTicket ? "Đang chuẩn bị..." : ticket?.printedAt ? "Đã in" : "In vé"}
           </button>
 
           <button
             className="btn btn-success ticket-checkin-btn"
-            disabled={!ticket || processing || printingTicket || checkingIn || ticket.status !== "VALID"}
+            disabled={!ticket || !currentQrToken || processing || lookingUpTicket || printingTicket || checkingIn || ticket.status !== "VALID"}
             onClick={handleCheckIn}
             type="button"
           >

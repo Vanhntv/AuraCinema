@@ -38,6 +38,9 @@ export const holdShowtimeSeats = async (req, res) => {
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui long chon ghe can giu" });
     }
+    if (new Set(showtime_seat_ids.map(String)).size !== showtime_seat_ids.length) {
+      return res.status(400).json({ success: false, message: "Danh sach ghe bi trung lap" });
+    }
     const now = new Date();
     await ShowtimeSeat.updateMany(
       { status: "held", hold_expires_at: { $lte: now } },
@@ -59,10 +62,45 @@ export const holdShowtimeSeats = async (req, res) => {
     );
     if (!canHold) return res.status(409).json({ success: false, message: "Mot hoac nhieu ghe dang duoc nguoi khac giu" });
     const expiresAt = new Date(Date.now() + HOLD_DURATION_MS);
-    await ShowtimeSeat.updateMany(
-      { _id: { $in: showtime_seat_ids } },
-      { $set: { status: "held", held_by: req.user.id, hold_expires_at: expiresAt } },
-    );
+    const acquiredSeats = [];
+
+    for (const seatId of showtime_seat_ids) {
+      const previousSeat = await ShowtimeSeat.findOneAndUpdate(
+        {
+          _id: seatId,
+          showtime_id,
+          deleted_at: null,
+          $or: [
+            { status: "available" },
+            { status: "held", held_by: req.user.id },
+          ],
+        },
+        { $set: { status: "held", held_by: req.user.id, hold_expires_at: expiresAt } },
+        { new: false },
+      );
+
+      if (!previousSeat) {
+        await Promise.all(acquiredSeats.map(({ seat }) => ShowtimeSeat.updateOne(
+          {
+            _id: seat._id,
+            status: "held",
+            held_by: req.user.id,
+            hold_expires_at: expiresAt,
+          },
+          seat.status === "available"
+            ? { $set: { status: "available", held_by: null, hold_expires_at: null } }
+            : { $set: { status: "held", held_by: seat.held_by, hold_expires_at: seat.hold_expires_at } },
+        )));
+
+        return res.status(409).json({
+          success: false,
+          message: "Một hoặc nhiều ghế vừa được người khác giữ. Vui lòng tải lại sơ đồ ghế.",
+        });
+      }
+
+      acquiredSeats.push({ seat: previousSeat });
+    }
+
     return res.json({ success: true, data: { expires_at: expiresAt } });
   } catch (error) { return sendError(res, error); }
 };

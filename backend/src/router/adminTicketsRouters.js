@@ -2,6 +2,8 @@ import express from "express";
 import {
   checkInAdminTicketQr,
   getAdminTicketScanLogs,
+  lookupAdminTicketCode,
+  printAdminTicketQr,
   verifyAdminTicketQr,
 } from "../controllers/adminTicketControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
@@ -18,7 +20,9 @@ const qrActionRateLimit = createRateLimitMiddleware({
 router.use(authMiddleware, authorizeRoles("admin"));
 
 router.get("/scan-logs", getAdminTicketScanLogs);
+router.post("/lookup", qrActionRateLimit, lookupAdminTicketCode);
 router.post("/verify", qrActionRateLimit, verifyAdminTicketQr);
+router.post("/print", qrActionRateLimit, printAdminTicketQr);
 router.post("/check-in", qrActionRateLimit, checkInAdminTicketQr);
 
 export default router;
