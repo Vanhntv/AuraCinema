@@ -559,7 +559,7 @@ function AccountPage() {
             Đổi mật khẩu
           </button>
           <button
-            className="h-12 rounded-full bg-gradient-to-b from-[#ff7b39] to-[#ff321d] px-8 font-extrabold text-white shadow-[0_18px_45px_rgba(255,70,30,0.28)] disabled:opacity-60"
+            className="h-12 rounded-full bg-[var(--aura-coral)] px-8 font-extrabold text-[var(--aura-coral-ink)] transition-colors hover:bg-[var(--aura-coral-hover)] disabled:opacity-60"
             disabled={savingProfile}
             type="submit"
           >
@@ -760,7 +760,7 @@ function AccountPage() {
       >
         <div className="aspect-[3/4] bg-[#0f141c] sm:aspect-auto">
           {poster ? (
-            <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} />
+            <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} loading="lazy" decoding="async" />
           ) : (
             <div className="grid h-full min-h-40 place-items-center text-sm font-black text-slate-600">AuraCinema</div>
           )}
@@ -922,7 +922,7 @@ function AccountPage() {
                   </button>
                   {Array.from({ length: ticketTotalPages }, (_, index) => index + 1).map((page) => (
                     <button
-                      className={`h-9 min-w-9 rounded-xl border px-3 font-black ${page === normalizedTicketPage ? "border-[#ff6070] bg-[#ff5364] text-white" : "border-white/10 bg-white/[0.05] text-slate-300 hover:border-[#ff6070]/70"}`}
+                      className={`h-11 min-w-11 rounded-xl border px-3 font-black ${page === normalizedTicketPage ? "border-[var(--aura-coral)] bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : "border-white/10 bg-white/[0.05] text-slate-300 hover:border-[#ff6070]/70"}`}
                       type="button"
                       key={page}
                       onClick={() => setTicketPage(page)}
@@ -957,14 +957,14 @@ function AccountPage() {
     const poster = resolveImageUrl(ticket.movie?.poster);
 
     return (
-      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Chi tiết vé ${ticket.ticketCode}`} onClick={() => setSelectedTicketDetail(null)}>
-        <div className="max-h-[90vh] w-[min(720px,100%)] overflow-y-auto rounded-2xl border border-white/10 bg-[#10141c] shadow-[0_30px_90px_rgba(0,0,0,0.65)]" onClick={(event) => event.stopPropagation()}>
+      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/85 px-4 py-8" role="dialog" aria-modal="true" aria-label={`Chi tiết vé ${ticket.ticketCode}`} onClick={() => setSelectedTicketDetail(null)}>
+        <div className="max-h-[90vh] w-[min(720px,100%)] overflow-y-auto rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] shadow-[var(--aura-shadow-floating)]" onClick={(event) => event.stopPropagation()}>
           <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff5364]">AuraCinema</p>
               <h2 className="mt-1 text-xl font-black text-white">Vé điện tử</h2>
             </div>
-            <button className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364]" type="button" onClick={() => setSelectedTicketDetail(null)} aria-label="Đóng chi tiết">
+            <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364] hover:text-[var(--aura-coral-ink)]" type="button" onClick={() => setSelectedTicketDetail(null)} aria-label="Đóng chi tiết">
               ×
             </button>
           </div>
@@ -976,7 +976,7 @@ function AccountPage() {
               <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171717]">
                 <div className="grid gap-5 p-5 sm:grid-cols-[120px_minmax(0,1fr)]">
                   <div className="aspect-[3/4] overflow-hidden rounded-xl bg-white/[0.04]">
-                    {poster ? <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} /> : null}
+                    {poster ? <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} loading="lazy" decoding="async" /> : null}
                   </div>
                   <div>
                     <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${status.className}`}>
@@ -1011,7 +1011,7 @@ function AccountPage() {
                     <>
                       <img className="mx-auto h-48 w-48 object-contain" src={ticketQrDataUrl} alt={`QR vé ${ticket.ticketCode}`} />
                       <button
-                        className="mt-4 rounded-full bg-[#ff5364] px-5 py-2 text-sm font-black text-white hover:bg-[#ff6b78]"
+                        className="mt-4 rounded-full bg-[var(--aura-coral)] px-5 py-2 text-sm font-black text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
                         type="button"
                         onClick={() => downloadTicketQr(ticket)}
                       >
@@ -1066,7 +1066,7 @@ function AccountPage() {
               <button
                 className={`whitespace-nowrap rounded-full border px-4 py-2 text-sm font-bold transition ${
                   voucherFilter === status
-                    ? "border-[#ff6070] bg-[#ff5364] text-white"
+                    ? "border-[var(--aura-coral)] bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]"
                     : "border-white/10 bg-white/[0.04] text-slate-300 hover:border-[#ff6070]/60"
                 }`}
                 key={status}
@@ -1154,7 +1154,7 @@ function AccountPage() {
                 <button
                   className={`flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
                     selected
-                      ? "bg-gradient-to-r from-[#ff321d] to-[#7b4652] text-white shadow-[0_15px_35px_rgba(255,62,29,0.22)]"
+                      ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]"
                       : "text-slate-200 hover:bg-white/[0.04] hover:text-white"
                   }`}
                   key={tab.id}

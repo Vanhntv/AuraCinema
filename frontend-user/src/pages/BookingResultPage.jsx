@@ -137,7 +137,7 @@ function BookingResultPage({ result = "success" }) {
             <div className="p-5">
               <div className="flex gap-4">
                 <div className="h-28 w-20 shrink-0 overflow-hidden rounded-lg bg-white/5">
-                  {ticket.poster ? <img className="h-full w-full object-cover" src={ticket.poster} alt={ticket.movieTitle} /> : null}
+                  {ticket.poster ? <img className="h-full w-full object-cover" src={ticket.poster} alt={ticket.movieTitle} loading="lazy" decoding="async" /> : null}
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-[#ff5364]">Vé xem phim</p>

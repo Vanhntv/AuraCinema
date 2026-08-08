@@ -113,6 +113,8 @@ function ImageGrid({ images, columnsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-
           <img
             src={image.src}
             alt={image.title}
+            loading="lazy"
+            decoding="async"
             className="aspect-[16/10] w-full object-cover transition-transform duration-200 group-hover:scale-[1.025]"
           />
           <figcaption className="p-3.5">
@@ -183,6 +185,8 @@ function AboutPage() {
             <img
               src={service.src}
               alt={service.title}
+              loading="lazy"
+              decoding="async"
               className="aspect-[16/9] w-full object-cover md:h-full md:min-h-[170px]"
             />
             <div className="p-5">

@@ -72,14 +72,14 @@ function TrailerModal({ trailer, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[70] grid place-items-center bg-black/80 px-5 py-8 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] grid place-items-center bg-black/90 px-5 py-8"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`Trailer ${trailer.title}`}
     >
       <div
-        className="relative w-[min(920px,100%)] overflow-hidden rounded-3xl border border-white/10 bg-[#0b1018] shadow-[0_30px_90px_rgba(0,0,0,0.65)]"
+        className="relative w-[min(920px,100%)] overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] shadow-[var(--aura-shadow-floating)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -87,7 +87,7 @@ function TrailerModal({ trailer, onClose }) {
             {trailer.title || 'Trailer'}
           </h3>
           <button
-            className="grid h-10 w-10 place-items-center rounded-full bg-white/10 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+            className="grid h-11 w-11 place-items-center rounded-full bg-white/10 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070] hover:text-[var(--aura-coral-ink)]"
             type="button"
             aria-label="Đóng trailer"
             onClick={onClose}
@@ -234,18 +234,18 @@ function MovieDetailModal({ movie, onClose, onBook }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-5 py-8 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/85 px-5 py-8"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`Chi tiết phim ${movie.title}`}
     >
       <div
-        className="relative max-h-[90vh] w-[min(980px,100%)] overflow-y-auto rounded-3xl border border-white/10 bg-[#101722] shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+        className="relative max-h-[90vh] w-[min(980px,100%)] overflow-y-auto rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] shadow-[var(--aura-shadow-floating)]"
         onClick={(event) => event.stopPropagation()}
       >
         <button
-          className="absolute right-4 top-4 z-20 grid h-10 w-10 place-items-center rounded-full bg-black/45 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070]"
+          className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-full bg-black/70 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-xl font-black text-white transition-colors hover:bg-[#ff6070] hover:text-[var(--aura-coral-ink)]"
           type="button"
           aria-label="Đóng chi tiết phim"
           onClick={onClose}
@@ -270,6 +270,8 @@ function MovieDetailModal({ movie, onClose, onBook }) {
                   className="h-full w-full object-cover"
                   src={movie.poster}
                   alt={movie.title}
+                  loading="lazy"
+                  decoding="async"
                 />
               )}
             </div>
@@ -306,7 +308,7 @@ function MovieDetailModal({ movie, onClose, onBook }) {
 
             <div className="mt-8 flex gap-3 max-sm:flex-col">
               <button
-                className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-8 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
+                className="h-12 rounded-full bg-[var(--aura-coral)] px-8 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
                 type="button"
                 onClick={() => onBook(movie)}
               >

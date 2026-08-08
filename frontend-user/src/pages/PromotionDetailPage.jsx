@@ -111,6 +111,7 @@ function PromotionDetailPage() {
                 <img
                   src={promotion.thumbnail}
                   alt={promotion.title}
+                  decoding="async"
                   className="h-full min-h-[260px] w-full object-cover"
                   onError={(event) => {
                     event.currentTarget.src = DEFAULT_PROMOTION_IMAGE;

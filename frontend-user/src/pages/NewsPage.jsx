@@ -41,11 +41,10 @@ function NewsPage() {
   return (
     <div className="w-full pb-24 pt-6 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-white">
       <div className="mx-auto w-[min(1760px,calc(100%_-_96px))] max-xl:w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
-        <div className="mb-10 flex items-center justify-between border-b border-white/5 pb-6">
-          <h1 className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-2xl font-extrabold uppercase tracking-wider text-transparent md:text-3xl">
+        <div className="mb-10 border-b border-white/10 pb-6">
+          <h1 className="text-2xl font-extrabold uppercase tracking-wider text-[var(--aura-projector-white)] md:text-3xl">
             Tin tức
           </h1>
-          <span className="text-sm text-slate-400 max-sm:hidden">Cập nhật theo thời gian thực</span>
         </div>
 
         {isLoading && (
@@ -85,7 +84,7 @@ function NewsPage() {
               <Link
                 key={article.id || article.slug}
                 to={`/tin-tuc/${article.slug}`}
-                className="group flex flex-col overflow-hidden rounded-[20px] border border-white/5 bg-white/[0.02] backdrop-blur-sm transition-all duration-500 hover:border-[#ff6070]/30 hover:shadow-[0_20px_50px_rgba(255,96,112,0.08)]"
+                className="group flex flex-col overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] transition duration-200 hover:-translate-y-0.5 hover:border-[#ff6070]/40 hover:bg-[var(--aura-surface-raised)]"
               >
                 <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
                   <img
@@ -93,6 +92,7 @@ function NewsPage() {
                     alt={article.title}
                     className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
                     loading="lazy"
+                    decoding="async"
                   />
                 </div>
 

@@ -293,6 +293,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
   const bookingResultRef = useRef(null);
+  const dialogRef = useRef(null);
+  const previousFocusRef = useRef(null);
 
   useEffect(() => {
     selectedSeatsRef.current = selectedSeats;
@@ -381,6 +383,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     initialShowtimeId,
     movie?._id,
     shouldLoadInitialShowtime,
+    dateOptions,
   ]);
 
   useEffect(() => {
@@ -571,7 +574,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setAppliedVoucher(null);
     setVoucherMessage("");
     setVoucherError("Tổng đơn đã thay đổi. Vui lòng áp dụng lại mã giảm giá.");
-  }, [seatTotal, concessionTotal]);
+  }, [seatTotal, concessionTotal, appliedVoucher]);
 
   const seatPriceNotes = useMemo(() => {
     const priceByType = new Map();
@@ -616,8 +619,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       ),
     [showtimeSeats],
   );
-
-  if (!movie) return null;
 
   const handleDateChange = async (dateOption) => {
     await releaseHeldSeats();
@@ -1038,16 +1039,58 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     ? "mx-auto w-[min(1320px,calc(100%_-_40px))] py-10 max-sm:w-[calc(100%_-_28px)]"
     : isInlineVariant
       ? "w-full pt-8"
-    : "fixed inset-0 z-[60] grid place-items-center bg-black/75 px-5 py-8 backdrop-blur-sm";
+    : "fixed inset-0 z-[60] grid place-items-center bg-black/80 px-5 py-8";
   const panelClassName = isPageVariant
-    ? "min-h-[calc(100vh_-_180px)] rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-[0_30px_90px_rgba(0,0,0,0.35)] md:p-8"
+    ? "min-h-[calc(100vh_-_180px)] rounded-[var(--aura-radius-lg)] bg-[#101722] p-7 md:p-8"
     : isInlineVariant
-      ? "rounded-3xl border border-white/10 bg-[#101722] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] md:p-7"
-    : "max-h-[90vh] w-[min(1000px,100%)] overflow-y-auto rounded-3xl border border-white/10 bg-[#101722] p-7 shadow-[0_30px_90px_rgba(0,0,0,0.55)] md:p-8";
-  const handleClose = async () => {
+      ? "rounded-[var(--aura-radius-lg)] bg-[#101722] p-5 md:p-7"
+    : "max-h-[90vh] w-[min(1000px,100%)] overflow-y-auto rounded-[var(--aura-radius-lg)] bg-[#101722] p-7 shadow-[var(--aura-shadow-floating)] md:p-8";
+  const handleClose = useCallback(async () => {
     await releaseHeldSeats();
     onClose?.();
-  };
+  }, [onClose, releaseHeldSeats]);
+
+  useEffect(() => {
+    if (isEmbeddedVariant) return undefined;
+
+    previousFocusRef.current = document.activeElement;
+    const dialog = dialogRef.current;
+    const focusableSelector = "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+    const focusableItems = () => Array.from(dialog?.querySelectorAll(focusableSelector) || []);
+    focusableItems()[0]?.focus();
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        void handleClose();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      const items = focusableItems();
+      if (!items.length) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleDialogKeyDown);
+      previousFocusRef.current?.focus?.();
+    };
+  }, [handleClose, isEmbeddedVariant]);
   const viewMyTickets = () => {
     navigate("/tai-khoan?tab=tickets");
   };
@@ -1063,12 +1106,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
   const selectedPaymentLoadingText = selectedPaymentMethod === "sepay" ? "Đang mở SePay..." : "Đang mở VNPay...";
 
+  if (!movie) return null;
+
   return (
-    <div className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-label={`Đặt vé phim ${movie.title}`}>
+    <div ref={dialogRef} className={shellClassName} onClick={isEmbeddedVariant ? undefined : handleClose} role={isEmbeddedVariant ? undefined : "dialog"} aria-modal={isEmbeddedVariant ? undefined : "true"} aria-labelledby={isEmbeddedVariant ? undefined : "booking-title"} tabIndex={isEmbeddedVariant ? undefined : -1}>
       <div className={panelClassName} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-5">
-          <div><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">Đặt vé</p><h2 className="mt-2 text-3xl font-black text-white max-sm:text-2xl">{movie.title}</h2></div>
-          <button className="grid h-10 shrink-0 place-items-center rounded-full bg-white/10 px-4 text-sm font-black text-white hover:bg-[#ff6070]" type="button" aria-label={isPageVariant ? "Quay lại lịch chiếu" : "Đóng đặt vé"} onClick={handleClose}>{isPageVariant ? "← Lịch chiếu" : "×"}</button>
+          <div><p className="text-sm font-bold uppercase tracking-[0.2em] text-[#ff6070]">Đặt vé</p><h2 id="booking-title" className="mt-2 text-3xl font-black text-white max-sm:text-2xl">{movie.title}</h2></div>
+          <button className="grid h-11 shrink-0 place-items-center rounded-full bg-white/10 px-4 text-sm font-black text-white hover:bg-[#ff6070] hover:text-[var(--aura-coral-ink)]" type="button" aria-label={isPageVariant ? "Quay lại lịch chiếu" : "Đóng đặt vé"} onClick={handleClose}>{isPageVariant ? "← Lịch chiếu" : "×"}</button>
         </div>
 
         {bookingResult && confirmedBookingSummary ? (
@@ -1126,9 +1171,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                     <p className="text-sm font-black text-white">Chọn phương thức thanh toán</p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <button
-                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "sepay" ? "border-[#ff5364] bg-[#ff5364]/15" : "border-white/10 bg-black/20 hover:border-white/25"}`}
                         type="button"
                         onClick={() => setSelectedPaymentMethod("sepay")}
+                        aria-pressed={selectedPaymentMethod === "sepay"}
                       >
                         <span className="grid place-items-center gap-2">
                           <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-xs font-black text-[#2f73df]">SePay</span>
@@ -1139,9 +1185,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                         </span>
                       </button>
                       <button
-                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15 shadow-[0_0_0_1px_rgba(255,83,100,0.2)]" : "border-white/10 bg-black/20 hover:border-white/25"}`}
+                        className={`min-h-[92px] rounded-2xl border p-4 text-center transition ${selectedPaymentMethod === "vnpay" ? "border-[#ff5364] bg-[#ff5364]/15" : "border-white/10 bg-black/20 hover:border-white/25"}`}
                         type="button"
                         onClick={() => setSelectedPaymentMethod("vnpay")}
+                        aria-pressed={selectedPaymentMethod === "vnpay"}
                       >
                         <span className="grid place-items-center gap-2">
                           <span className="grid h-11 w-11 place-items-center rounded-xl bg-white text-[11px] font-black text-[#075ea8]"><span><span className="text-[#ed1c24]">VN</span>PAY</span></span>
@@ -1165,7 +1212,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
               <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-3">
                   {bookingIsPaid ? (
-                    <button className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white" type="button" onClick={viewMyTickets}>
+                    <button className="h-12 rounded-full bg-[var(--aura-coral)] px-7 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]" type="button" onClick={viewMyTickets}>
                       Xem vé của tôi
                     </button>
                   ) : null}
@@ -1180,7 +1227,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 </div>
                 {!bookingIsPaid && (
                   <button
-                    className="h-12 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-12 rounded-full bg-[var(--aura-coral)] px-7 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-60"
                     type="button"
                     onClick={completeSelectedPayment}
                     disabled={isPaying || isCancellingBooking}
@@ -1195,14 +1242,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         ) : (
         <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid content-start gap-7">
-            {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[#ff6070] text-white" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.fullLabel} · {option.displayDate}</button>)}</div></div>}
+            {!isInlineVariant && <div><h3 className="text-lg font-black text-white">Chọn ngày</h3><div className="mt-4 flex flex-wrap gap-3">{dateOptions.map((option) => <button key={option.value} type="button" onClick={() => handleDateChange(option)} aria-pressed={selectedDate.value === option.value} className={`rounded-full px-5 py-3 text-sm font-extrabold ${selectedDate.value === option.value ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : "bg-white/10 text-slate-200 hover:bg-white/15"}`}>{option.fullLabel} · {option.displayDate}</button>)}</div></div>}
 
             <div><h3 className="text-lg font-black text-white">{step === "select-seat" ? "Chọn ghế" : "Chọn suất chiếu"}</h3>
               {step === "select-showtime" ? <div className="mt-4 space-y-3">
                 {isLoading && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Đang tải suất chiếu...</p>}
                 {!isLoading && error && <p className="rounded-2xl bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
                 {!isLoading && !error && !showtimes.length && <p className="rounded-2xl bg-white/[0.03] px-4 py-3 text-sm text-slate-300">Không có suất chiếu cho ngày này.</p>}
-                <div className="flex flex-wrap gap-3">{showtimes.map((showtime) => <button key={showtime.id} type="button" onClick={() => handleShowtimeSelect(showtime)} className="rounded-full bg-white/10 px-5 py-3 text-sm font-extrabold text-slate-200 hover:bg-[#ff6070] hover:text-white">{showtime.startTime} · {showtime.roomName}</button>)}</div>
+                <div className="flex flex-wrap gap-3">{showtimes.map((showtime) => <button key={showtime.id} type="button" onClick={() => handleShowtimeSelect(showtime)} className="rounded-full bg-white/10 px-5 py-3 text-sm font-extrabold text-slate-200 hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]">{showtime.startTime} · {showtime.roomName}</button>)}</div>
               </div> : <div className="mt-4 space-y-4">
                 {!isEmbeddedVariant && (
                   <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-[#ff6070]" type="button" onClick={async () => { await releaseHeldSeats(); setStep("select-showtime"); setSelectedSeats([]); setSeatError(""); }}>← Chọn suất khác</button>
@@ -1223,9 +1270,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   <p className="-mt-5 mb-6 text-center text-[10px] uppercase tracking-[0.25em] text-slate-500">Màn hình</p>
                   {isLoadingSeats && <p className="py-8 text-center text-sm text-slate-400">Đang tải sơ đồ ghế...</p>}
                   {!isLoadingSeats && !showtimeSeats.length && <p className="py-8 text-center text-sm text-slate-400">Chưa có dữ liệu ghế cho suất chiếu.</p>}
-                  <div className="grid min-w-[520px] gap-3">{seatsByRow.map(([row, seats]) => <div key={row} className="flex items-center justify-center gap-3"><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${seatColumnCount}, 40px)` }}>{seats.map((seat, seatIndex) => {
+                  <div className="grid min-w-[560px] gap-3">{seatsByRow.map(([row, seats]) => <div key={row} className="flex items-center justify-center gap-3"><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${seatColumnCount}, 44px)` }}>{seats.map((seat, seatIndex) => {
                     const type = getSeatType(seat); const config = SEAT_TYPES[type]; const status = getSeatStatus(seat); const selected = selectedSeats.some((item) => item._id === seat._id); const seatHolderId = getSeatHolderId(seat); const heldByOther = isHeldSeat(seat) && (!currentUserId || !seatHolderId || seatHolderId !== currentUserId); const booked = isBookedSeat(seat); const unavailable = (status !== "available" && !selected) || type === "broken";
-                    return <button key={seat._id} type="button" disabled={unavailable} onClick={() => toggleSeat(seat)} title={`${config.label} - ${Number(seat.price).toLocaleString("vi-VN")}đ`} className={`h-9 w-10 rounded-lg text-[11px] font-black text-white transition ${getCoupleSeatClass({ type, seats, seatIndex })} ${selected ? "bg-[#ff5364] shadow-[0_0_0_1px_rgba(255,255,255,0.16),0_10px_22px_rgba(255,83,100,0.25)]" : heldByOther ? "cursor-not-allowed bg-[#ff8a96]/60 text-white/80 shadow-[0_0_0_1px_rgba(255,138,150,0.28)]" : booked ? "cursor-not-allowed bg-slate-800 opacity-40" : unavailable ? "cursor-not-allowed bg-slate-700/70 opacity-60" : `${config.color} hover:brightness-125`}`}>{row}{seat.seat_id?.seat_number}</button>;
+                    const seatLabel = `${row}${seat.seat_id?.seat_number}, ${config.label}, ${Number(seat.price).toLocaleString("vi-VN")}đ`;
+                    return <button key={seat._id} type="button" disabled={unavailable} onClick={() => toggleSeat(seat)} title={seatLabel} aria-label={seatLabel} aria-pressed={selected} className={`h-11 w-11 rounded-lg text-[11px] font-black transition ${getCoupleSeatClass({ type, seats, seatIndex })} ${selected ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : heldByOther ? "cursor-not-allowed bg-[#ff8a96]/60 text-[#0a0e1a]" : booked ? "cursor-not-allowed bg-slate-800 text-white opacity-40" : unavailable ? "cursor-not-allowed bg-slate-700/70 text-white opacity-60" : `${config.color} text-white hover:brightness-125`}`}>{row}{seat.seat_id?.seat_number}</button>;
                   })}</div><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span></div>)}</div>
                 </div>
               </div>}
@@ -1276,7 +1324,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                       >
                         <div className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-black/20 text-slate-500">
                           {item.image ? (
-                            <img className="h-full w-full object-cover" src={resolveImageUrl(item.image)} alt={item.name} />
+                            <img className="h-full w-full object-cover" src={resolveImageUrl(item.image)} alt={item.name} loading="lazy" decoding="async" />
                           ) : (
                             "BN"
                           )}
@@ -1308,7 +1356,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                             <span className="min-w-8 text-center text-sm font-black text-white">{quantity}</span>
                             <button
                               type="button"
-                              className="grid h-8 w-8 place-items-center rounded-full bg-[#ff6070] text-lg font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+                              className="grid h-11 w-11 place-items-center rounded-full bg-[var(--aura-coral)] text-lg font-black text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-40"
                               disabled={isSoldOut || quantity >= stock}
                               onClick={() => updateConcessionQuantity(item, quantity + 1)}
                             >
@@ -1356,7 +1404,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   {appliedVoucher ? (
                     <button type="button" className="rounded-full bg-white/10 px-4 text-sm font-extrabold text-white hover:bg-white/15" onClick={removeVoucher}>Bỏ</button>
                   ) : (
-                    <button type="button" className="rounded-full bg-[#ff6070] px-4 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" onClick={applyVoucher} disabled={isApplyingVoucher}>{isApplyingVoucher ? "..." : "Áp dụng"}</button>
+                    <button type="button" className="rounded-full bg-[var(--aura-coral)] px-4 text-sm font-extrabold text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-50" onClick={applyVoucher} disabled={isApplyingVoucher}>{isApplyingVoucher ? "..." : "Áp dụng"}</button>
                   )}
                 </div>
                 {voucherError && <p className="mt-2 text-xs font-semibold text-amber-200">{voucherError}</p>}
@@ -1381,14 +1429,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 Đăng nhập để đặt vé
               </button>
             )}
-            <button className="mt-6 h-12 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+            <button className="mt-6 h-12 w-full rounded-full bg-[var(--aura-coral)] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
 	        </div>
         )}
       </div>
       {showLoginNotice && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/70 px-4 backdrop-blur-sm">
-          <section className="relative w-[min(420px,100%)] rounded-2xl border border-white/10 bg-[#151b26] p-6 text-white shadow-[0_28px_90px_rgba(0,0,0,0.45)]">
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/80 px-4" role="dialog" aria-modal="true" aria-labelledby="login-notice-title">
+          <section className="relative w-[min(420px,100%)] rounded-[var(--aura-radius-lg)] bg-[var(--aura-surface)] p-6 text-white shadow-[var(--aura-shadow-floating)]">
             <button
               aria-label="Đóng thông báo"
               className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-xl font-black text-slate-300 hover:border-[#ff6070] hover:text-white"
@@ -1397,7 +1445,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
             >
               ×
             </button>
-            <p className="pr-10 text-lg font-black text-white">Cần đăng nhập để đặt vé</p>
+            <p id="login-notice-title" className="pr-10 text-lg font-black text-white">Cần đăng nhập để đặt vé</p>
             <p className="mt-3 text-sm leading-6 text-slate-300">
               Vui lòng quay về trang đăng nhập để tiếp tục đặt vé. Sau khi đăng nhập, hệ thống sẽ đưa bạn trở lại trang đặt vé hiện tại.
             </p>
@@ -1410,7 +1458,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 Hủy
               </button>
               <button
-                className="h-11 rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-6 text-sm font-extrabold text-white"
+                className="h-11 rounded-full bg-[var(--aura-coral)] px-6 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
                 type="button"
                 onClick={redirectToLogin}
               >

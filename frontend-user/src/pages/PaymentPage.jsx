@@ -33,9 +33,10 @@ function submitPaymentForm({ checkoutUrl, fields }) {
 function PaymentMethodButton({ active, logo, title, subtitle, onClick }) {
   return (
     <button
-      className={`min-h-[78px] rounded-lg border p-3 text-center transition ${active ? "border-[#f2374a] bg-[#351215] shadow-[0_0_0_1px_rgba(242,55,74,0.35)]" : "border-white/10 bg-[#151515] hover:border-white/25"}`}
+      className={`min-h-[78px] rounded-[var(--aura-radius-md)] border p-3 text-center transition ${active ? "border-[var(--aura-coral)] bg-[#ff5364]/15" : "border-white/10 bg-[var(--aura-surface)] hover:border-white/25"}`}
       type="button"
       onClick={onClick}
+      aria-pressed={active}
     >
       <span className="grid place-items-center gap-2">
         {logo}
@@ -207,15 +208,19 @@ function PaymentPage() {
     }
   };
 
+  const closePayment = () => {
+    navigate("/tai-khoan?tab=tickets");
+  };
+
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
   const selectedPaymentLoadingText = selectedPaymentMethod === "sepay" ? "Đang mở SePay..." : "Đang mở VNPay...";
 
   return (
     <main className="mx-auto min-h-[70vh] w-[min(960px,calc(100%_-_32px))] py-10 text-white">
-      <section className="rounded-lg border border-white/10 bg-[#0b0b0b] p-5 shadow-[0_28px_80px_rgba(0,0,0,0.5)]">
+      <section className="rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-ink)] p-5 shadow-[var(--aura-shadow-floating)]">
         <h1 className="text-center text-xl font-black text-white">Xác nhận đơn hàng</h1>
 
-        <div className="mx-auto mt-6 w-full max-w-[560px] rounded-lg bg-[#171717] p-5">
+        <div className="mx-auto mt-6 w-full max-w-[560px] rounded-[var(--aura-radius-md)] bg-[var(--aura-surface)] p-5">
           <div className="grid gap-4">
             <DetailRow label="Phim" value={summary?.movieTitle || "Thanh toán đơn vé"} strong />
             <DetailRow label="Rạp & Phòng" value={summary?.roomName || "Đang cập nhật"} />
@@ -232,7 +237,7 @@ function PaymentPage() {
           </div>
 
           <div className="mt-5 rounded-md bg-black/35 p-3">
-            <div className="rounded bg-[#050505] px-3 py-2 text-xs text-slate-500">Mã giảm giá</div>
+            <div className="rounded bg-[var(--aura-midnight)] px-3 py-2 text-xs text-[var(--aura-text-muted)]">Mã giảm giá</div>
             <div className="mt-2 flex items-center justify-between rounded bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-300">
               <span>{summary?.voucherCode ? `Đã áp dụng mã: ${summary.voucherCode}` : "Chưa áp dụng mã giảm giá"}</span>
               <span>- {formatCurrency(summary?.discountAmount)}</span>
@@ -261,7 +266,7 @@ function PaymentPage() {
 
           <div className="mt-7 flex items-end justify-between border-t border-white/5 pt-5">
             <span className="text-sm text-slate-400">Tổng thanh toán</span>
-            <strong className="text-3xl font-black text-[#ff5364]">{formatCurrency(amount)}</strong>
+            <strong className="text-3xl font-black text-[var(--aura-coral)]">{formatCurrency(amount)}</strong>
           </div>
         </div>
 
@@ -269,15 +274,15 @@ function PaymentPage() {
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-3">
-            <button className="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-xs font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
+            <button className="h-11 rounded-[var(--aura-radius-sm)] border border-red-400/30 bg-red-500/10 px-4 text-sm font-bold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
               {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
             </button>
-            <button className="h-10 rounded-md border border-white/15 bg-white/[0.04] px-4 text-xs font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
-              {isCancellingBooking ? "Đang hủy..." : "Đóng"}
+            <button className="h-11 rounded-[var(--aura-radius-sm)] border border-white/15 bg-white/[0.04] px-4 text-sm font-bold text-white hover:border-white/30" type="button" onClick={closePayment}>
+              Đóng
             </button>
           </div>
           <button
-            className="h-10 rounded-md bg-[#e72f42] px-5 text-xs font-bold text-white shadow-[0_12px_30px_rgba(231,47,66,0.28)] hover:bg-[#ff4054] disabled:cursor-not-allowed disabled:opacity-60"
+            className="h-11 rounded-[var(--aura-radius-sm)] bg-[var(--aura-coral)] px-5 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             onClick={completeSelectedPayment}
             disabled={isPaying || isCancellingBooking || !amount}

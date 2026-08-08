@@ -54,6 +54,7 @@ const MovieModal = ({
   initialData,
   isLoading,
   apiErrors,
+  onClearApiError,
 }) => {
   const [formData, setFormData] = useState(emptyFormData);
   const [selectedGenres, setSelectedGenres] = useState([]);
@@ -173,8 +174,7 @@ const MovieModal = ({
       setErrors((prev) => ({ ...prev, [field]: "" }));
     }
     if (apiErrors && apiErrors[field]) {
-      // clear API error for this field when user edits it
-      if (apiErrors[field]) apiErrors[field] = "";
+      onClearApiError?.(field);
     }
   };
 
