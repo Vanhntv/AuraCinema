@@ -3,13 +3,34 @@
 
 @layer base {
   :root {
-    --text: #b0b6c2;
-    --text-h: #f3f4f6;
-    --bg: #0f141c;
-    --panel-bg: #191c23;
-    --input-bg: #111318;
-    --border: #303542;
-    --accent: #ff5364;
+    --aura-midnight: #0a0e1a;
+    --aura-ink: #0f141c;
+    --aura-surface: #151b26;
+    --aura-surface-raised: #1d2633;
+    --aura-projector-white: #f3f4f6;
+    --aura-text-secondary: #a6afbf;
+    --aura-text-muted: #7f8998;
+    --aura-coral: #ff5364;
+    --aura-coral-hover: #ff6b78;
+    --aura-coral-ink: #0a0e1a;
+    --aura-violet: #8b5cf6;
+    --aura-border: rgba(255, 255, 255, 0.1);
+    --aura-border-strong: rgba(255, 255, 255, 0.18);
+    --aura-focus: #ff9aa5;
+    --aura-radius-sm: 10px;
+    --aura-radius-md: 14px;
+    --aura-radius-lg: 16px;
+    --aura-radius-pill: 9999px;
+    --aura-shadow-raised: 0 16px 40px rgba(0, 0, 0, 0.28);
+    --aura-shadow-floating: 0 28px 80px rgba(0, 0, 0, 0.5);
+
+    --text: var(--aura-text-secondary);
+    --text-h: var(--aura-projector-white);
+    --bg: var(--aura-ink);
+    --panel-bg: var(--aura-surface);
+    --input-bg: #111823;
+    --border: var(--aura-border);
+    --accent: var(--aura-coral);
     --accent-bg: rgba(255, 83, 100, 0.16);
     --error-bg: #451c21;
     --error-text: #ffc4c4;
@@ -88,6 +109,11 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid var(--aura-focus);
+    outline-offset: 3px;
+  }
+
   button,
   a {
     letter-spacing: -0.01em;
@@ -122,5 +148,19 @@
 
   .news-content li {
     color: #d8dee9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

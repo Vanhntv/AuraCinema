@@ -10,18 +10,17 @@
   padding: 48px 16px;
   box-sizing: border-box;
   background:
-    radial-gradient(circle at 18% 8%, rgba(255, 83, 100, 0.22), transparent 30%),
-    radial-gradient(circle at 82% 0%, rgba(255, 145, 77, 0.16), transparent 28%),
-    linear-gradient(135deg, rgba(20, 18, 43, 0.96), rgba(15, 20, 28, 0.98));
+    radial-gradient(circle at 18% 8%, rgba(255, 83, 100, 0.12), transparent 32%),
+    linear-gradient(180deg, var(--aura-midnight), var(--aura-ink));
 }
 
 .auth-panel,
 .home-panel {
   width: min(100%, 460px);
-  border: 1px solid #374151;
-  border-radius: 24px;
-  background: #14122b;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--aura-border);
+  border-radius: var(--aura-radius-lg);
+  background: var(--aura-surface);
+  box-shadow: var(--aura-shadow-raised);
   padding: 32px;
   box-sizing: border-box;
   text-align: left;
@@ -45,7 +44,7 @@
 .home-kicker {
   display: block;
   margin-bottom: 10px;
-  color: #fb923c;
+  color: var(--aura-coral);
   font-size: 14px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -57,12 +56,12 @@
   margin: 0 0 8px;
   font-size: 32px;
   line-height: 1.15;
-  color: #fff;
+  color: var(--aura-projector-white);
 }
 
 .auth-brand p,
 .home-panel p {
-  color: #9ca3af;
+  color: var(--aura-text-secondary);
 }
 
 .auth-form {
@@ -90,10 +89,10 @@
 
 .auth-form input {
   width: 100%;
-  border: 1px solid #374151;
-  border-radius: 12px;
-  background: #1d1b38;
-  color: #fff;
+  border: 1px solid var(--aura-border);
+  border-radius: var(--aura-radius-sm);
+  background: var(--aura-midnight);
+  color: var(--aura-projector-white);
   font: inherit;
   font-size: 16px;
   padding: 13px 16px;
@@ -132,7 +131,7 @@
 }
 
 .auth-password-toggle:focus-visible {
-  outline: 2px solid #f97316;
+  outline: 3px solid var(--aura-focus);
   outline-offset: 2px;
 }
 
@@ -142,12 +141,11 @@
 }
 
 .auth-form input::placeholder {
-  color: #6b7280;
+  color: var(--aura-text-muted);
 }
 
 .auth-form input:focus {
-  border-color: #f97316;
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  border-color: var(--aura-coral);
 }
 
 .auth-form-link {
@@ -156,7 +154,7 @@
 }
 
 .auth-form-link a {
-  color: #f97316;
+  color: var(--aura-coral);
   font-size: 14px;
   font-weight: 700;
   text-decoration: none;
@@ -170,8 +168,8 @@
 .secondary-button {
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(90deg, #ef4444, #f97316);
-  color: #fff;
+  background: var(--aura-coral);
+  color: var(--aura-coral-ink);
   cursor: pointer;
   font: inherit;
   font-size: 18px;
@@ -195,7 +193,9 @@
 
 .secondary-button {
   width: fit-content;
-  background: var(--text-h);
+  border: 1px solid var(--aura-border);
+  background: var(--aura-surface-raised);
+  color: var(--aura-projector-white);
 }
 
 .auth-error,
@@ -221,11 +221,11 @@
 .auth-loading {
   margin-top: 24px;
   text-align: center;
-  color: #9ca3af;
+  color: var(--aura-text-secondary);
 }
 
 .auth-switch a {
-  color: #f97316;
+  color: var(--aura-coral);
   font-weight: 700;
   text-decoration: none;
 }

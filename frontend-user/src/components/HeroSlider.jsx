@@ -46,6 +46,7 @@ function HeroSlider() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [bannerSlides, setBannerSlides] = useState([]);
   const [slideIntervalMs, setSlideIntervalMs] = useState(DEFAULT_SLIDE_INTERVAL_MS);
+  const [isPaused, setIsPaused] = useState(false);
   const timerRef = useRef(null);
   const activeSlides = bannerSlides.length ? bannerSlides : slides;
   const slide = activeSlides[activeSlide] || activeSlides[0];
@@ -89,7 +90,7 @@ function HeroSlider() {
   }, []);
 
   useEffect(() => {
-    if (!activeSlides.length) return undefined;
+    if (!activeSlides.length || isPaused) return undefined;
 
     timerRef.current = window.setInterval(() => {
       setActiveSlide((current) => (current + 1) % activeSlides.length);
@@ -98,7 +99,16 @@ function HeroSlider() {
     return () => {
       window.clearInterval(timerRef.current);
     };
-  }, [activeSlides.length, slideIntervalMs]);
+  }, [activeSlides.length, isPaused, slideIntervalMs]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncMotionPreference = () => setIsPaused(mediaQuery.matches);
+
+    syncMotionPreference();
+    mediaQuery.addEventListener?.("change", syncMotionPreference);
+    return () => mediaQuery.removeEventListener?.("change", syncMotionPreference);
+  }, []);
 
   const goToPrevious = () => {
     if (!canNavigate) return;
@@ -113,11 +123,12 @@ function HeroSlider() {
   };
 
   return (
-    <section className="relative mx-auto mt-3 aspect-[16/6] h-[480px] max-h-[56vh] min-h-[420px] w-[min(1280px,calc(100%_-_40px))] overflow-hidden rounded-[32px] border border-white/10 bg-[#121923] max-md:h-[420px] max-md:min-h-[380px] max-sm:h-[360px] max-sm:min-h-[340px] max-sm:w-[calc(100%_-_28px)]">
+    <section className="relative mx-auto mt-3 aspect-[16/6] h-[480px] max-h-[56vh] min-h-[420px] w-[min(1280px,calc(100%_-_40px))] overflow-hidden rounded-[var(--aura-radius-lg)] bg-[#121923] max-md:h-[420px] max-md:min-h-[380px] max-sm:h-[360px] max-sm:min-h-[340px] max-sm:w-[calc(100%_-_28px)]" aria-roledescription="carousel" aria-label="Phim nổi bật">
       <img
         className="absolute inset-0 h-full w-full object-cover"
         src={slide.imageUrl}
         alt={slide.title}
+        fetchPriority="high"
       />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,12,18,0.96)_0%,rgba(8,12,18,0.72)_42%,rgba(8,12,18,0.1)_75%),linear-gradient(0deg,rgba(8,12,18,0.75),transparent_50%)]" />
       {canNavigate ? (
@@ -126,7 +137,7 @@ function HeroSlider() {
             type="button"
             aria-label="Banner trước"
             onClick={goToPrevious}
-            className="absolute left-5 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/35 text-3xl leading-none text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#ff5364]/60 hover:bg-[#ff5364]/80 max-sm:left-3 max-sm:h-9 max-sm:w-9 max-sm:text-2xl"
+            className="absolute left-5 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/50 text-3xl leading-none text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition hover:border-[#ff5364]/60 hover:bg-[#ff5364]/80 max-sm:left-3 max-sm:text-2xl"
           >
             ‹
           </button>
@@ -134,7 +145,7 @@ function HeroSlider() {
             type="button"
             aria-label="Banner tiếp theo"
             onClick={goToNext}
-            className="absolute right-5 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/35 text-3xl leading-none text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] backdrop-blur transition hover:border-[#ff5364]/60 hover:bg-[#ff5364]/80 max-sm:right-3 max-sm:h-9 max-sm:w-9 max-sm:text-2xl"
+            className="absolute right-5 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/15 bg-black/50 text-3xl leading-none text-white shadow-[0_12px_28px_rgba(0,0,0,0.35)] transition hover:border-[#ff5364]/60 hover:bg-[#ff5364]/80 max-sm:right-3 max-sm:text-2xl"
           >
             ›
           </button>
@@ -153,29 +164,33 @@ function HeroSlider() {
         <div className="mt-7 flex flex-wrap gap-3">
           <Link
             to="/lich-chieu"
-            className="rounded-full bg-[#ff5364] px-6 py-3 text-sm font-extrabold text-white no-underline shadow-[0_14px_35px_rgba(255,83,100,0.3)]"
+            className="rounded-full bg-[var(--aura-coral)] px-6 py-3 text-sm font-extrabold text-[var(--aura-coral-ink)] no-underline"
           >
             Xem lịch chiếu
           </Link>
           <Link
             to="/gia-ve"
-            className="rounded-full border border-white/15 bg-black/20 px-6 py-3 text-sm font-bold text-white no-underline backdrop-blur"
+            className="rounded-full border border-white/15 bg-black/45 px-6 py-3 text-sm font-bold text-white no-underline"
           >
             Bảng giá vé
           </Link>
         </div>
       </div>
-      <div className="absolute bottom-6 right-7 z-20 flex gap-2 max-sm:right-5">
+      <button type="button" className="absolute bottom-5 left-6 z-20 h-11 rounded-full border border-white/15 bg-black/55 px-4 text-xs font-bold text-white hover:border-white/30 max-sm:left-4" onClick={() => setIsPaused((current) => !current)} aria-pressed={isPaused}>
+        {isPaused ? "Phát banner" : "Tạm dừng"}
+      </button>
+      <div className="absolute bottom-5 right-6 z-20 flex gap-1 max-sm:right-4">
         {activeSlides.map((item, index) => (
           <button
             key={item.id}
             type="button"
             aria-label={`Chuyển đến slide ${index + 1}`}
             onClick={() => setActiveSlide(index)}
-            className={`h-2 rounded-full transition-all ${
-              index === activeSlide ? "w-8 bg-[#ff5364]" : "w-2 bg-white/40"
-            }`}
-          />
+            className="grid h-11 w-11 place-items-center rounded-full"
+            aria-current={index === activeSlide ? "true" : undefined}
+          >
+            <span className={`h-2 rounded-full transition-all ${index === activeSlide ? "w-7 bg-[var(--aura-coral)]" : "w-2 bg-white/50"}`} />
+          </button>
         ))}
       </div>
     </section>

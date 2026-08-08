@@ -100,6 +100,7 @@ function MovieSchedule() {
                 <button
                   key={option.value}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => {
                     setIsLoading(true);
                     setError("");
@@ -108,7 +109,7 @@ function MovieSchedule() {
                   }}
                   className={`h-[46px] min-w-[130px] rounded-lg border px-4 text-[17px] font-bold transition max-sm:min-w-[116px] max-sm:text-sm ${
                     active
-                      ? "border-[#ff6070] bg-[#ff5364] text-white shadow-[0_12px_30px_rgba(255,83,100,.28)]"
+                      ? "border-[var(--aura-coral)] bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]"
                       : "border-[#283241] bg-[#151b24] text-white hover:border-[#ff6070]"
                   }`}
                 >
@@ -159,6 +160,8 @@ function MovieSchedule() {
                   <img
                     src={movie.poster}
                     alt={movie.title}
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-cover transition duration-500 hover:scale-105"
                     onError={(event) => {
                       event.currentTarget.src = FALLBACK_POSTER;
@@ -193,7 +196,7 @@ function MovieSchedule() {
                         key={showtime.id || showtime._id}
                         type="button"
                         onClick={() => navigate(`/dat-ve/${showtime.id || showtime._id}?date=${selectedDate}`)}
-                        className="min-w-[74px] rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-[16px] font-bold text-white transition hover:border-[#ff6070] hover:bg-[#ff5364]"
+                        className="min-h-11 min-w-[74px] rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-[16px] font-bold text-white transition hover:border-[var(--aura-coral)] hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]"
                         title={`${showtime.cinemaName || "Rạp chiếu"} · ${showtime.roomName || "Phòng chiếu"}`}
                       >
                         {showtime.startTime}

@@ -1,29 +1,30 @@
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { lazy, Suspense, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
 import NowShowingMovies from './components/NowShowingMovies';
-import MovieSchedule from './pages/MovieSchedule';
-import BookingPage from './pages/BookingPage';
-import NewsPage from './pages/NewsPage';
-import NewsDetailPage from './pages/NewsDetailPage';
-import PromotionPage from './pages/PromotionPage';
-import PromotionDetailPage from './pages/PromotionDetailPage';
-import TicketPricePage from './pages/ticket-price/TicketPricePage';
-import AboutPage from './pages/about/AboutPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import AccountPage from './pages/AccountPage';
-import SupportInfoPage from './pages/SupportInfoPage';
-import MovieDetailPage from './pages/MovieDetailPage';
-import VnpayReturnPage from './pages/VnpayReturnPage';
-import SepayPgReturnPage from './pages/SepayPgReturnPage';
-import PaymentPage from './pages/PaymentPage';
-import BookingResultPage from './pages/BookingResultPage';
 import ProtectedRoute from './routes/ProtectedRoute';
+
+const MovieSchedule = lazy(() => import('./pages/MovieSchedule'));
+const BookingPage = lazy(() => import('./pages/BookingPage'));
+const NewsPage = lazy(() => import('./pages/NewsPage'));
+const NewsDetailPage = lazy(() => import('./pages/NewsDetailPage'));
+const PromotionPage = lazy(() => import('./pages/PromotionPage'));
+const PromotionDetailPage = lazy(() => import('./pages/PromotionDetailPage'));
+const TicketPricePage = lazy(() => import('./pages/ticket-price/TicketPricePage'));
+const AboutPage = lazy(() => import('./pages/about/AboutPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const AccountPage = lazy(() => import('./pages/AccountPage'));
+const SupportInfoPage = lazy(() => import('./pages/SupportInfoPage'));
+const MovieDetailPage = lazy(() => import('./pages/MovieDetailPage'));
+const VnpayReturnPage = lazy(() => import('./pages/VnpayReturnPage'));
+const SepayPgReturnPage = lazy(() => import('./pages/SepayPgReturnPage'));
+const PaymentPage = lazy(() => import('./pages/PaymentPage'));
+const BookingResultPage = lazy(() => import('./pages/BookingResultPage'));
 
 const AdminLayout = lazy(() => import('./admin/components/layout/AdminLayout'));
 const AdminRoute = lazy(() => import('./admin/routes/AdminRoute'));
@@ -56,11 +57,11 @@ function HomePage() {
   return (
     <>
       <HeroSlider />
-      <section className="mx-auto mt-6 grid w-[min(1280px,calc(100%_-_40px))] grid-cols-2 gap-4 max-sm:w-[calc(100%_-_28px)] max-sm:grid-cols-1">
-        <a href="/lich-chieu" className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[#ff5364]/5"><strong className="block text-lg">Lịch chiếu hôm nay</strong><span className="mt-1 block text-sm text-slate-400">Chọn phim, rạp và khung giờ phù hợp</span></a>
-        <a href="/khuyen-mai" className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[#ff5364]/5"><strong className="block text-lg">Ưu đãi nổi bật</strong><span className="mt-1 block text-sm text-slate-400">Khám phá chương trình dành riêng cho bạn</span></a>
-      </section>
       <NowShowingMovies />
+      <nav aria-label="Lối tắt đặt vé" className="mx-auto mb-16 grid w-[min(1280px,calc(100%_-_40px))] grid-cols-2 gap-4 max-sm:w-[calc(100%_-_28px)] max-sm:grid-cols-1">
+        <Link to="/lich-chieu" className="rounded-2xl border border-white/10 bg-[var(--aura-surface)] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[var(--aura-surface-raised)]"><strong className="block text-lg">Xem lịch chiếu</strong><span className="mt-1 block text-sm text-slate-400">Chọn ngày và khung giờ phù hợp</span></Link>
+        <Link to="/khuyen-mai" className="rounded-2xl border border-white/10 bg-[var(--aura-surface)] p-5 text-white no-underline transition hover:border-[#ff6070]/50 hover:bg-[var(--aura-surface-raised)]"><strong className="block text-lg">Xem ưu đãi</strong><span className="mt-1 block text-sm text-slate-400">Kiểm tra mã giảm giá đang áp dụng</span></Link>
+      </nav>
     </>
   );
 }
@@ -70,15 +71,15 @@ function App() {
   const isAdminRoute = location.pathname.startsWith('/admin');
 
   return (
-    <main className="min-h-screen bg-[#0f141c] text-white">
+    <div className="min-h-screen bg-[var(--aura-ink)] text-white">
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 3600,
           style: {
-            background: '#151b26',
-            border: '1px solid rgba(255,255,255,0.1)',
-            color: '#f8fafc',
+            background: 'var(--aura-surface)',
+            border: '1px solid var(--aura-border)',
+            color: 'var(--aura-projector-white)',
             fontWeight: 700,
           },
           success: {
@@ -97,7 +98,8 @@ function App() {
       />
       <ScrollToTop />
       {!isAdminRoute && <Header />}
-      <Routes>
+      <Suspense fallback={<main className="grid min-h-[55vh] place-items-center"><p className="text-sm font-bold text-slate-400">Đang tải nội dung...</p></main>}>
+        <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/lich-chieu" element={<MovieSchedule />} />
         <Route path="/phim/:movieId" element={<MovieDetailPage />} />
@@ -172,9 +174,10 @@ function App() {
           <Route path="settings" element={<Navigate to="/admin/movies" replace />} />
         </Route>
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
-      </Routes>
+        </Routes>
+      </Suspense>
       {!isAdminRoute && <Footer />}
-    </main>
+    </div>
   );
 }
 

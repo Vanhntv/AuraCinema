@@ -73,11 +73,8 @@ export default function MovieDetailPage() {
     return [...unique.entries()].sort((a, b) => new Date(a[1]) - new Date(b[1]))
   }, [showtimes])
 
-  useEffect(() => {
-    if (dates.length && !selectedDate) setSelectedDate(dates[0][0])
-  }, [dates, selectedDate])
-
-  const visibleShowtimes = showtimes.filter((item) => getDateKey(item.start_time) === selectedDate)
+  const activeDate = selectedDate || dates[0]?.[0] || ''
+  const visibleShowtimes = showtimes.filter((item) => getDateKey(item.start_time) === activeDate)
   const backdrop = movie?.banner || movie?.banners?.[0] || movie?.poster
   const embedUrl = youtubeEmbed(trailer?.youtube_url)
 
@@ -85,25 +82,24 @@ export default function MovieDetailPage() {
   if (error || !movie) return <div className="mx-auto min-h-[60vh] w-[min(1180px,calc(100%_-_40px))] py-20 text-center"><h1 className="text-2xl font-black">Không thể tải chi tiết phim</h1><p className="mt-3 text-slate-400">{error}</p></div>
 
   return (
-    <div className="bg-[#0d121a]">
+    <div className="bg-[var(--aura-midnight)]">
       <section className="relative overflow-hidden border-y border-white/5">
-        <div className="absolute inset-0 scale-105 bg-cover bg-center opacity-25 blur-[2px]" style={{ backgroundImage: `url("${backdrop}")` }} />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#090e15] via-[#0b1119]/90 to-[#0b1119]/65" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0d121a] via-transparent to-[#0d121a]/50" />
+        <div className="absolute inset-0 scale-[1.02] bg-cover bg-center opacity-30" style={{ backgroundImage: `url("${backdrop}")` }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-[var(--aura-midnight)] via-[#0a0e1a]/90 to-[#0a0e1a]/60" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--aura-midnight)] via-transparent to-[#0a0e1a]/55" />
         <div className="relative mx-auto grid min-h-[610px] w-[min(1240px,calc(100%_-_40px))] grid-cols-[300px_minmax(0,1fr)] items-center gap-12 py-14 max-md:grid-cols-1 max-md:gap-7 max-md:py-9">
           <div className="relative max-md:mx-auto max-md:w-[230px]">
-            <div className="absolute -inset-3 rounded-[28px] bg-gradient-to-b from-[#ff6070]/35 to-transparent blur-xl" />
-            <img className="relative aspect-[2/3] w-full rounded-[22px] border border-white/15 object-cover shadow-[0_30px_80px_rgba(0,0,0,.65)]" src={movie.poster || fallbackPoster} alt={movie.title} onError={(e) => { e.currentTarget.src = fallbackPoster }} />
+            <img className="relative aspect-[2/3] w-full rounded-[var(--aura-radius-lg)] border border-white/15 object-cover shadow-[var(--aura-shadow-elevated)]" src={movie.poster || fallbackPoster} alt={movie.title} fetchPriority="high" onError={(e) => { e.currentTarget.src = fallbackPoster }} />
           </div>
-          <div className="rounded-[28px] border border-white/10 bg-[#0a1018]/65 p-8 shadow-[0_30px_90px_rgba(0,0,0,.28)] backdrop-blur-md max-sm:p-5">
+          <div className="rounded-[var(--aura-radius-lg)] border border-white/10 bg-[#0f141c]/90 p-8 shadow-[var(--aura-shadow-elevated)] max-sm:p-5">
             <div className="mb-5 flex flex-wrap items-center gap-2.5">
               <span className="rounded-full border border-white/15 bg-white/[0.07] px-4 py-1.5 text-xs font-black uppercase tracking-wider text-slate-100">{movie.format || '2D'}</span>
               <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-1.5 text-xs font-bold text-emerald-300">Đang chiếu</span>
-              {(movie.age_limit || movie.ageLimit) && <span className="rounded-full bg-[#ff5364] px-4 py-1.5 text-xs font-black shadow-[0_8px_20px_rgba(255,83,100,.25)]">T{movie.age_limit || movie.ageLimit}</span>}
+              {(movie.age_limit || movie.ageLimit) && <span className="rounded-full bg-[var(--aura-coral)] px-4 py-1.5 text-xs font-black text-[var(--aura-coral-ink)]">T{movie.age_limit || movie.ageLimit}</span>}
             </div>
             <div className="flex items-stretch gap-4">
-              <span className="w-1 shrink-0 rounded-full bg-gradient-to-b from-[#ff7c89] to-[#ff4256] shadow-[0_0_18px_rgba(255,83,100,.45)]" aria-hidden="true" />
-              <h1 className="max-w-4xl bg-gradient-to-r from-white via-white to-[#ffc2c8] bg-clip-text font-[Montserrat,'Be_Vietnam_Pro',sans-serif] text-[42px] font-extrabold leading-[1.22] tracking-[-.035em] text-transparent drop-shadow-[0_3px_18px_rgba(0,0,0,.45)] max-lg:text-[34px] max-sm:text-[27px] max-sm:leading-[1.3]">
+              <span className="w-1 shrink-0 rounded-full bg-[var(--aura-coral)]" aria-hidden="true" />
+              <h1 className="max-w-4xl font-[Montserrat,'Be_Vietnam_Pro',sans-serif] text-[42px] font-extrabold leading-[1.22] tracking-[-.035em] text-[var(--aura-projector-white)] max-lg:text-[34px] max-sm:text-[27px] max-sm:leading-[1.3]">
                 {movie.title}
               </h1>
             </div>
@@ -119,7 +115,7 @@ export default function MovieDetailPage() {
             <h2 className="mt-6 text-sm font-black uppercase tracking-[.18em] text-[#ff7180]">Nội dung phim</h2>
             <p className="mt-3 max-w-4xl text-[15px] leading-7 text-slate-300">{movie.description || 'Nội dung phim đang được cập nhật.'}</p>
             {(movie.age_limit || movie.ageLimit) && <p className="mt-4 rounded-xl border border-[#ff6070]/20 bg-[#ff5364]/10 px-4 py-3 text-sm font-semibold text-[#ff9aa5]">Khuyến cáo: Phim dành cho khán giả từ đủ {movie.age_limit || movie.ageLimit} tuổi trở lên.</p>}
-            {trailer?.youtube_url && <button type="button" onClick={() => setTrailerOpen(true)} className="mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-gradient-to-b from-[#ff7180] to-[#ff5364] px-7 font-extrabold text-white shadow-[0_14px_35px_rgba(255,83,100,.3)] transition hover:-translate-y-0.5 hover:brightness-110"><span className="grid h-7 w-7 place-items-center rounded-full bg-white/20"><HiOutlinePlay className="text-lg" /></span> Xem trailer</button>}
+            {trailer?.youtube_url && <button type="button" onClick={() => setTrailerOpen(true)} className="mt-6 inline-flex h-12 items-center gap-3 rounded-full bg-[var(--aura-coral)] px-7 font-extrabold text-[var(--aura-coral-ink)] transition hover:-translate-y-0.5 hover:bg-[var(--aura-coral-hover)]"><span className="grid h-7 w-7 place-items-center rounded-full bg-black/10"><HiOutlinePlay className="text-lg" /></span> Xem trailer</button>}
           </div>
         </div>
       </section>
@@ -134,7 +130,7 @@ export default function MovieDetailPage() {
           <>
             <div className="mt-7 flex gap-3 overflow-x-auto border-b border-white/10 pb-5">
               {dates.map(([key, date]) => (
-                <button key={key} type="button" onClick={() => { setSelectedDate(key); setSelectedShowtime(null) }} className={`min-w-[104px] rounded-2xl border px-4 py-3.5 text-center transition ${selectedDate === key ? 'border-[#ff6070] bg-gradient-to-b from-[#ff6877] to-[#e93c50] text-white shadow-[0_12px_28px_rgba(255,83,100,.22)]' : 'border-white/10 bg-white/[0.035] text-slate-300 hover:border-[#ff6070]/60 hover:bg-white/[0.06]'}`}>
+                <button key={key} type="button" aria-pressed={activeDate === key} onClick={() => { setSelectedDate(key); setSelectedShowtime(null) }} className={`min-w-[104px] rounded-2xl border px-4 py-3.5 text-center transition ${activeDate === key ? 'border-[var(--aura-coral)] bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]' : 'border-white/10 bg-white/[0.035] text-slate-300 hover:border-[#ff6070]/60 hover:bg-white/[0.06]'}`}>
                   <span className="block text-[11px] font-bold uppercase">{formatWeekdayShort(date)}</span>
                   <strong className="my-0.5 block text-2xl">{formatDayOfMonth(date)}</strong>
                   <span className="text-[11px]">Tháng {formatMonthNumber(date)}</span>
@@ -148,7 +144,7 @@ export default function MovieDetailPage() {
               </div>
               <div className="flex flex-wrap gap-3">
                 {visibleShowtimes.map((showtime) => (
-                  <button key={showtime.id || showtime._id} type="button" onClick={() => setSelectedShowtime(showtime)} className={`group min-w-[145px] rounded-xl border px-6 py-3 text-left transition hover:-translate-y-0.5 hover:border-[#ff6070] hover:bg-[#ff5364]/10 ${String(selectedShowtime?.id || selectedShowtime?._id) === String(showtime.id || showtime._id) ? 'border-[#ff6070] bg-[#ff5364]/10' : 'border-white/10 bg-[#121a25]'}`}>
+                  <button key={showtime.id || showtime._id} type="button" aria-pressed={String(selectedShowtime?.id || selectedShowtime?._id) === String(showtime.id || showtime._id)} onClick={() => setSelectedShowtime(showtime)} className={`group min-w-[145px] rounded-xl border px-6 py-3 text-left transition hover:-translate-y-0.5 hover:border-[#ff6070] hover:bg-[#ff5364]/10 ${String(selectedShowtime?.id || selectedShowtime?._id) === String(showtime.id || showtime._id) ? 'border-[#ff6070] bg-[#ff5364]/10' : 'border-white/10 bg-[#121a25]'}`}>
                     <strong className="block text-lg text-white group-hover:text-[#ff7180]">{showtime.startTime || formatShowtimeTime(showtime.start_time)}</strong>
                     <span className="mt-0.5 block text-[11px] font-medium text-slate-500">{showtime.roomName || 'Phòng chiếu'} · Chọn ghế</span>
                   </button>
@@ -169,9 +165,9 @@ export default function MovieDetailPage() {
       </section>
 
       {trailerOpen && (
-        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/85 p-5 backdrop-blur-sm" onClick={() => setTrailerOpen(false)}>
-          <div className="w-[min(960px,100%)] overflow-hidden rounded-2xl border border-white/10 bg-black" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4"><strong>{trailer.title || 'Trailer'}</strong><button type="button" className="h-10 w-10 rounded-full bg-white/10 text-xl" onClick={() => setTrailerOpen(false)}>×</button></div>
+        <div className="fixed inset-0 z-[80] grid place-items-center bg-black/90 p-5" role="dialog" aria-modal="true" aria-labelledby="trailer-title" onClick={() => setTrailerOpen(false)}>
+          <div className="w-[min(960px,100%)] overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-black shadow-[var(--aura-shadow-floating)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4"><strong id="trailer-title">{trailer.title || 'Trailer'}</strong><button type="button" aria-label="Đóng trailer" className="h-11 w-11 rounded-full bg-white/10 text-xl" onClick={() => setTrailerOpen(false)}>×</button></div>
             <div className="aspect-video">{embedUrl ? <iframe className="h-full w-full" src={embedUrl} title={trailer.title || 'Trailer'} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen /> : <div className="grid h-full place-items-center text-slate-400">Trailer không hợp lệ</div>}</div>
           </div>
         </div>

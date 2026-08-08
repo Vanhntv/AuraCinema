@@ -460,6 +460,7 @@ const MoviesPage = () => {
         initialData={editingMovie}
         isLoading={submitting}
         apiErrors={apiErrors}
+        onClearApiError={(field) => setApiErrors((current) => ({ ...current, [field]: "" }))}
       />
 
       <ConfirmDialog

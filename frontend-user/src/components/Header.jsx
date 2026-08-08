@@ -30,7 +30,8 @@ function Header() {
             <Link
               key={item.name}
               to={item.path}
-              className={`relative whitespace-nowrap font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
+              aria-current={isActive ? "page" : undefined}
+              className={`relative inline-flex min-h-11 items-center whitespace-nowrap font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-[15px] font-bold text-slate-100 no-underline transition-colors hover:text-[#ff6070] max-xl:text-[13px] ${
                 isActive
                   ? 'text-[#ff6070] after:absolute after:-bottom-3 after:left-0 after:right-0 after:h-0.5 after:bg-[#ff6070] after:content-[""]'
                   : ""
@@ -42,7 +43,7 @@ function Header() {
         })}
       </nav>
 
-      <div className="flex flex-nowrap justify-end gap-3.5 overflow-x-auto max-sm:col-span-full max-sm:w-full">
+      <div className="flex flex-nowrap justify-end gap-3.5 overflow-x-auto max-sm:col-span-full max-sm:w-full max-sm:justify-start">
         {isAuthenticated ? (
           <>
             <button
@@ -74,7 +75,7 @@ function Header() {
             <button
               type="button"
               onClick={() => navigate("/dang-nhap")}
-              className="h-[54px] min-w-fit whitespace-nowrap rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-white shadow-[0_16px_40px_rgba(255,83,100,0.36)]"
+              className="h-[54px] min-w-fit whitespace-nowrap rounded-full bg-[var(--aura-coral)] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-[var(--aura-coral-ink)] transition-colors hover:bg-[var(--aura-coral-hover)]"
             >
               Đăng nhập
             </button>

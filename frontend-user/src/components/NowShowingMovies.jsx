@@ -188,19 +188,22 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
 
   return (
     <article
-      className="group cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_18px_45px_rgba(0,0,0,0.22)] transition-transform duration-300 hover:-translate-y-1"
-      onClick={() => onOpenDetail(movie)}
+      className="group overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-white/[0.04] transition duration-200 hover:-translate-y-0.5 hover:border-white/20"
     >
-      <div className="aspect-[2/3] overflow-hidden bg-[#151b26]">
-        <img
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          src={movie.poster || fallbackPoster}
-          alt={movie.title}
-          onError={(event) => {
-            event.currentTarget.src = fallbackPoster
-          }}
-        />
-      </div>
+      <button type="button" className="block w-full cursor-pointer overflow-hidden bg-[var(--aura-surface)] text-left" onClick={() => onOpenDetail(movie)} aria-label={`Xem chi tiết phim ${movie.title}`}>
+        <span className="block aspect-[2/3] overflow-hidden">
+          <img
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+            src={movie.poster || fallbackPoster}
+            alt={movie.title}
+            loading="lazy"
+            decoding="async"
+            onError={(event) => {
+              event.currentTarget.src = fallbackPoster
+            }}
+          />
+        </span>
+      </button>
 
       <div className="p-5">
         <h3 className="line-clamp-2 min-h-14 font-[Montserrat,Arial,sans-serif] text-lg font-black text-white">
@@ -220,7 +223,7 @@ function MovieCard({ movie, onOpenDetail, onOpenBooking }) {
           ) : null}
         </div>
         <button
-          className="mt-5 h-11 w-full rounded-full bg-gradient-to-b from-[#ff6f7b] to-[#ff5364] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-white shadow-[0_14px_30px_rgba(255,83,100,0.24)]"
+          className="mt-5 h-11 w-full rounded-full bg-[var(--aura-coral)] font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
           type="button"
           onClick={(event) => {
             event.stopPropagation()
@@ -275,13 +278,14 @@ function MovieSearchBox({ value, onChange, onClear }) {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Tìm kiếm phim..."
+        aria-label="Tìm kiếm phim"
         className="h-12 w-full rounded-full border border-white/10 bg-white/[0.04] pl-11 pr-11 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-white outline-none transition duration-200 placeholder:text-slate-500 hover:border-white/20 focus:border-[#ff6070]/50 focus:bg-white/[0.06]"
       />
       {value ? (
         <button
           type="button"
           onClick={onClear}
-          className="absolute right-3 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-slate-300 transition duration-200 hover:border-[#ff6070]/35 hover:text-white"
+          className="absolute right-1 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full text-slate-300 transition duration-200 hover:text-white"
           aria-label="Xóa tìm kiếm"
         >
           <HiOutlineX className="h-4 w-4" />
