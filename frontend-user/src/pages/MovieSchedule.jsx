@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getShowtimes } from "../services/showtimeService";
-import { buildRelativeDateOptions, formatDate } from "../utils/dateTime";
+import useCurrentTime from "../hooks/useCurrentTime";
+import { buildRelativeDateOptions, deduplicateShowtimes, formatDate, isShowtimeUpcoming } from "../utils/dateTime";
 
 const FALLBACK_POSTER =
   "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80";
@@ -47,6 +48,7 @@ function groupShowtimes(showtimes) {
 
 function MovieSchedule() {
   const navigate = useNavigate();
+  const currentTime = useCurrentTime();
   const [searchParams, setSearchParams] = useSearchParams();
   const [dateOptions] = useState(() => buildRelativeDateOptions(7));
   const dateQuery = searchParams.get("date");
@@ -83,7 +85,12 @@ function MovieSchedule() {
     };
   }, [selectedDate]);
 
-  const movies = useMemo(() => groupShowtimes(showtimes), [showtimes]);
+  const movies = useMemo(
+    () => groupShowtimes(deduplicateShowtimes(
+      showtimes.filter((showtime) => isShowtimeUpcoming(showtime, currentTime)),
+    )),
+    [currentTime, showtimes],
+  );
 
   return (
     <main className="min-h-[72vh] pb-24 pt-5 text-white sm:pt-7">
@@ -145,11 +152,11 @@ function MovieSchedule() {
         )}
 
         {!isLoading && !error && movies.length > 0 && (
-          <section className="grid grid-cols-2 items-start gap-x-7 gap-y-8 max-xl:grid-cols-1">
+          <section className="grid auto-rows-fr grid-cols-2 items-stretch gap-x-7 gap-y-8 max-xl:grid-cols-1">
             {movies.map((movie) => (
               <article
                 key={movie._id}
-                className="relative flex min-h-[365px] overflow-hidden rounded-2xl border border-[#344050] bg-[#10151d] max-sm:flex-col"
+                className="relative flex h-full min-h-[365px] overflow-hidden rounded-2xl border border-[#344050] bg-[#10151d] max-sm:flex-col"
               >
                 <button
                   type="button"
@@ -195,11 +202,14 @@ function MovieSchedule() {
                       <button
                         key={showtime.id || showtime._id}
                         type="button"
-                        onClick={() => navigate(`/dat-ve/${showtime.id || showtime._id}?date=${selectedDate}`)}
-                        className="min-h-11 min-w-[74px] rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-[16px] font-bold text-white transition hover:border-[var(--aura-coral)] hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]"
+                        onClick={() => navigate(`/phim/${movie._id}?showtime=${showtime.id || showtime._id}&date=${selectedDate}#lich-chieu`)}
+                        className="group min-h-11 min-w-[112px] rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-[16px] font-bold text-white transition hover:border-[var(--aura-coral)] hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]"
                         title={`${showtime.cinemaName || "Rạp chiếu"} · ${showtime.roomName || "Phòng chiếu"}`}
                       >
-                        {showtime.startTime}
+                        <span className="block">{showtime.startTime}</span>
+                        <span className="mt-1 block text-[11px] font-semibold text-slate-400 group-hover:text-[var(--aura-coral-ink)]">
+                          {showtime.roomName || "Phòng chiếu"} · {formatRoomType(showtime.roomType)}
+                        </span>
                       </button>
                     ))}
                   </div>

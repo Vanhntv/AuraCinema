@@ -89,6 +89,7 @@ test("hold seats releases expired holds before validating a new hold", async () 
   const seatId = new mongoose.Types.ObjectId().toString();
   const userId = new mongoose.Types.ObjectId().toString();
   const updateCalls = [];
+  let atomicHoldFilter = null;
 
   await withPatched([
     [ShowtimeSeat, "updateMany", async (filter, update) => {
@@ -98,6 +99,10 @@ test("hold seats releases expired holds before validating a new hold", async () 
     [ShowtimeSeat, "find", async () => [
       { _id: seatId, status: "available", held_by: null },
     ]],
+    [ShowtimeSeat, "findOneAndUpdate", async (filter) => {
+      atomicHoldFilter = filter;
+      return { _id: seatId, status: "available", held_by: null, hold_expires_at: null };
+    }],
   ], async () => {
     const req = {
       user: { id: userId },
@@ -109,7 +114,7 @@ test("hold seats releases expired holds before validating a new hold", async () 
 
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.equal(res.body.success, true);
-    assert.equal(updateCalls.length, 2);
+    assert.equal(updateCalls.length, 1);
     assert.deepEqual(updateCalls[0].filter.status, "held");
     assert.ok(updateCalls[0].filter.hold_expires_at.$lte instanceof Date);
     assert.deepEqual(updateCalls[0].update.$set, {
@@ -117,8 +122,49 @@ test("hold seats releases expired holds before validating a new hold", async () 
       held_by: null,
       hold_expires_at: null,
     });
-    assert.deepEqual(updateCalls[1].filter, { _id: { $in: [seatId] } });
-    assert.equal(String(updateCalls[1].update.$set.held_by), userId);
+    assert.equal(String(atomicHoldFilter._id), seatId);
+    assert.equal(String(atomicHoldFilter.$or[1].held_by), userId);
+  });
+});
+
+test("hold seats rolls back partial acquisition when another user wins a seat", async () => {
+  const showtimeId = new mongoose.Types.ObjectId().toString();
+  const seatIds = [new mongoose.Types.ObjectId().toString(), new mongoose.Types.ObjectId().toString()];
+  const userId = new mongoose.Types.ObjectId().toString();
+  let atomicCall = 0;
+  let rollbackFilter = null;
+  let rollbackUpdate = null;
+
+  await withPatched([
+    [ShowtimeSeat, "updateMany", async () => ({ modifiedCount: 0 })],
+    [ShowtimeSeat, "find", async () => seatIds.map((id) => ({
+      _id: id,
+      status: "available",
+      held_by: null,
+      hold_expires_at: null,
+    }))],
+    [ShowtimeSeat, "findOneAndUpdate", async () => {
+      atomicCall += 1;
+      if (atomicCall === 2) return null;
+      return { _id: seatIds[0], status: "available", held_by: null, hold_expires_at: null };
+    }],
+    [ShowtimeSeat, "updateOne", async (filter, update) => {
+      rollbackFilter = filter;
+      rollbackUpdate = update;
+      return { modifiedCount: 1 };
+    }],
+  ], async () => {
+    const req = {
+      user: { id: userId },
+      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds },
+    };
+    const res = makeResponse();
+    await holdShowtimeSeats(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.equal(String(rollbackFilter._id), seatIds[0]);
+    assert.equal(String(rollbackFilter.held_by), userId);
+    assert.equal(rollbackUpdate.$set.status, "available");
   });
 });
 

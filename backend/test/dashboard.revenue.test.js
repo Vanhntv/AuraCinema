@@ -4,6 +4,7 @@ import {
   getBookingStatusStats,
   getDailyRevenue,
   getDashboardOverview,
+  getDashboardStats,
   getDateRange,
   getMonthlyRevenue,
   getMonthRange,
@@ -16,6 +17,8 @@ import {
   getWeekRange,
 } from "../src/controllers/dashboardControllers.js";
 import Booking from "../src/models/Booking.js";
+import Cinema from "../src/models/Cinema.js";
+import Genre from "../src/models/Genre.js";
 import Movie from "../src/models/Movie.js";
 import Showtime from "../src/models/Showtime.js";
 
@@ -42,6 +45,91 @@ test("getDateRange validates a calendar date and creates Vietnam boundaries", ()
   assert.equal(range.end.toISOString(), "2026-08-07T17:00:00.000Z");
   assert.equal(getDateRange("2026-02-30"), null);
   assert.equal(getDateRange("07-08-2026"), null);
+});
+
+test("getDashboardStats returns the latest bookings instead of a hard-coded empty list", async () => {
+  const originals = {
+    genreCountDocuments: Genre.countDocuments,
+    movieCountDocuments: Movie.countDocuments,
+    cinemaCountDocuments: Cinema.countDocuments,
+    showtimeCountDocuments: Showtime.countDocuments,
+    showtimeFind: Showtime.find,
+    bookingCountDocuments: Booking.countDocuments,
+    bookingFind: Booking.find,
+  };
+  let bookingSort;
+  let bookingLimit;
+  let responseBody;
+
+  Genre.countDocuments = async () => 4;
+  Movie.countDocuments = async (filter) => filter.status === "now_showing" ? 2 : 7;
+  Cinema.countDocuments = async () => 1;
+  Showtime.countDocuments = async () => 3;
+  Showtime.find = () => ({
+    populate() { return this; },
+    sort() { return this; },
+    async limit() { return []; },
+  });
+  Booking.countDocuments = async () => 12;
+  Booking.find = () => ({
+    populate() { return this; },
+    sort(value) {
+      bookingSort = value;
+      return this;
+    },
+    limit(value) {
+      bookingLimit = value;
+      return this;
+    },
+    async lean() {
+      return [{
+        _id: "booking-1",
+        booking_code: "AURA000000000001",
+        customer_name: "Nguyễn Văn A",
+        showtime_id: { movie_id: { title: "Ốc mượn hồn" } },
+        total_price: 200000,
+        status: "confirmed",
+        payment_status: "paid",
+        created_at: new Date("2026-08-08T01:00:00.000Z"),
+      }];
+    },
+  });
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getDashboardStats({}, response);
+  } finally {
+    Genre.countDocuments = originals.genreCountDocuments;
+    Movie.countDocuments = originals.movieCountDocuments;
+    Cinema.countDocuments = originals.cinemaCountDocuments;
+    Showtime.countDocuments = originals.showtimeCountDocuments;
+    Showtime.find = originals.showtimeFind;
+    Booking.countDocuments = originals.bookingCountDocuments;
+    Booking.find = originals.bookingFind;
+  }
+
+  assert.equal(responseBody.data.stats.bookings, 12);
+  assert.deepEqual(bookingSort, { created_at: -1 });
+  assert.equal(bookingLimit, 5);
+  assert.deepEqual(responseBody.data.recentBookings[0], {
+    id: "booking-1",
+    code: "AURA000000000001",
+    customerName: "Nguyễn Văn A",
+    movieTitle: "Ốc mượn hồn",
+    totalAmount: 200000,
+    status: "Đã thanh toán",
+    createdAt: new Date("2026-08-08T01:00:00.000Z"),
+  });
 });
 
 test("getWeekRange uses Monday through Sunday in Vietnam", () => {

@@ -193,7 +193,6 @@ const BookingsPage = () => {
       setSubmitting(true);
       const response = await cancelAdminBooking(selectedBooking._id, {
         reason: cancelReason,
-        refund_payment: selectedBooking.payment_status === "paid",
       });
       setSelectedBooking(response.data);
       setFeedback({ type: "success", message: response.message || "Đã hủy đơn vé." });
@@ -210,7 +209,7 @@ const BookingsPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Đơn vé</h1>
-          <p>Tra cứu mã đơn, theo dõi thanh toán, hủy vé và xử lý hoàn tiền</p>
+          <p>Tra cứu mã đơn, theo dõi thanh toán và xử lý hủy do rạp</p>
         </div>
         <button className="btn btn-secondary" onClick={() => fetchBookings(currentPage)} disabled={loading} type="button">
           <HiOutlineRefresh />
@@ -408,9 +407,11 @@ const BookingDetailModal = ({
                   onChange={(event) => onPaymentChange((current) => ({ ...current, payment_status: event.target.value }))}
                   value={paymentForm.payment_status}
                 >
-                  {Object.entries(paymentStatusLabels).map(([value, label]) => (
+                  {Object.entries(paymentStatusLabels)
+                    .filter(([value]) => booking.payment_status !== "paid" || ["paid", "cancelled", "refunded"].includes(value))
+                    .map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
-                  ))}
+                    ))}
                 </select>
                 <input
                   className="form-input"
@@ -425,7 +426,10 @@ const BookingDetailModal = ({
             </div>
 
             <div>
-              <h3>Hủy vé / hoàn tiền</h3>
+              <h3>Hủy đơn do rạp</h3>
+              {booking.payment_status === "paid" && (
+                <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ Ticket. Hoàn tiền cần được xử lý và đối soát trong workflow thanh toán riêng.</p>
+              )}
               <div className="booking-action-row">
                 <input
                   className="form-input"
@@ -440,7 +444,7 @@ const BookingDetailModal = ({
                   type="button"
                 >
                   <HiOutlineXCircle />
-                  {booking.payment_status === "paid" ? "Hủy và hoàn tiền" : "Hủy vé"}
+                  Hủy đơn
                 </button>
               </div>
             </div>

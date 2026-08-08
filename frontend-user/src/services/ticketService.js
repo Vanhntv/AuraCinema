@@ -5,6 +5,11 @@ export const getMyTickets = async (params = {}) => {
   return response.data;
 };
 
+export const getTicketsByBooking = async (bookingId) => {
+  const response = await axiosClient.get(`/tickets/by-booking/${bookingId}`);
+  return response.data;
+};
+
 export const getMyTicketDetail = async (ticketId) => {
   const response = await axiosClient.get(`/tickets/${ticketId}`);
   return response.data;

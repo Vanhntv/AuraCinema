@@ -5,24 +5,16 @@ import TicketScanLog, {
   TICKET_SCAN_RESULTS,
   createTicketScanLogSafe,
 } from "../models/TicketScanLog.js";
-import { hashQrToken } from "../services/ticketService.js";
+import {
+  buildTicketQrPayload,
+  decryptQrToken,
+  hashQrToken,
+  parseTicketQrPayload,
+} from "../services/ticketService.js";
 
-const QR_PAYLOAD_PREFIX = "AURA_TICKET:";
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 100;
-const MAX_QR_TOKEN_LENGTH = 512;
-
-const normalizeQrToken = (value = "") => {
-  if (typeof value !== "string") return "";
-
-  const rawValue = value.trim();
-  if (!rawValue || rawValue.length > MAX_QR_TOKEN_LENGTH) return "";
-
-  return rawValue.startsWith(QR_PAYLOAD_PREFIX)
-    ? rawValue.slice(QR_PAYLOAD_PREFIX.length).trim()
-    : rawValue;
-};
 
 const getRequestIp = (req) => {
   const forwardedFor = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
@@ -284,25 +276,35 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
   };
 };
 
-const populateTicketForAdmin = (query) =>
-  query
-    .select("-qrTokenHash -qrTokenEncrypted")
+const populateTicketForAdmin = (query, { includeQrToken = false } = {}) => {
+  const selectedQuery = query.select(
+    includeQrToken ? "+qrTokenEncrypted -qrTokenHash" : "-qrTokenHash -qrTokenEncrypted",
+  );
+
+  return selectedQuery
     .populate("bookingId", "booking_code status payment_status paid_at total_price customer_name customer_email customer_phone")
     .populate("movieId", "title poster duration age_limit")
     .populate("showtimeId", "start_time end_time status")
-    .populate("roomId", "name")
+    .populate({
+      path: "roomId",
+      select: "name cinema_id",
+      populate: { path: "cinema_id", select: "name address" },
+    })
     .populate({
       path: "seatId",
       select: "seat_row seat_number seat_code seat_type_id",
       populate: { path: "seat_type_id", select: "name" },
     })
-    .populate("checkedInBy", "full_name email");
+    .populate("checkedInBy", "full_name email")
+    .populate("printedBy", "full_name email");
+};
 
-const formatTicketForAdmin = (ticket, verification = {}) => {
+export const formatTicketForAdmin = (ticket, verification = {}) => {
   const booking = ticket.bookingId || {};
   const movie = ticket.movieId || {};
   const showtime = ticket.showtimeId || {};
   const room = ticket.roomId || {};
+  const cinema = room.cinema_id || {};
   const seat = ticket.seatId || {};
 
   return {
@@ -313,6 +315,9 @@ const formatTicketForAdmin = (ticket, verification = {}) => {
     price: ticket.price,
     checkedInAt: ticket.checkedInAt,
     checkedInBy: ticket.checkedInBy || null,
+    printedAt: ticket.printedAt || null,
+    printedBy: ticket.printedBy || null,
+    canPrint: !ticket.printedAt,
     booking: booking?._id
       ? {
         id: booking._id,
@@ -349,6 +354,13 @@ const formatTicketForAdmin = (ticket, verification = {}) => {
         name: room.name,
       }
       : null,
+    cinema: cinema?._id
+      ? {
+        id: cinema._id,
+        name: cinema.name,
+        address: cinema.address,
+      }
+      : null,
     seat: {
       id: seat?._id || ticket.seatId,
       label: ticket.seatLabel,
@@ -361,16 +373,36 @@ const formatTicketForAdmin = (ticket, verification = {}) => {
   };
 };
 
-const getTicketByQrToken = async (qrToken) => {
-  const token = normalizeQrToken(qrToken);
-  if (!token) return null;
-
+const getTicketByQrToken = async (token) => {
   return populateTicketForAdmin(
     Ticket.findOne({
       qrTokenHash: hashQrToken(token),
     }),
   );
 };
+
+const normalizeTicketCode = (value) => String(value || "").trim().toUpperCase();
+
+const getTicketByCode = async (ticketCode) =>
+  populateTicketForAdmin(
+    Ticket.findOne({ ticketCode: normalizeTicketCode(ticketCode) }),
+    { includeQrToken: true },
+  );
+
+export const claimTicketPrintOnce = ({ qrToken, adminId, now = new Date() }) =>
+  Ticket.findOneAndUpdate(
+    {
+      qrTokenHash: hashQrToken(qrToken),
+      printedAt: null,
+    },
+    {
+      $set: {
+        printedAt: now,
+        printedBy: adminId,
+      },
+    },
+    { new: true },
+  );
 
 const getCheckInWindow = (showtime, movie) => {
   const startTime = showtime?.start_time ? new Date(showtime.start_time) : null;
@@ -404,16 +436,7 @@ const evaluateTicketBase = (ticket) => {
   }
 
   const booking = ticket.bookingId;
-  if (!booking || booking.payment_status !== "paid" || booking.status !== "confirmed") {
-    return {
-      allowed: false,
-      result: "PAYMENT_NOT_COMPLETED",
-      statusCode: 409,
-      message: "Đơn hàng chưa được thanh toán.",
-    };
-  }
-
-  if (ticket.status === "CANCELLED") {
+  if (ticket.status === "CANCELLED" || booking?.status === "cancelled") {
     return {
       allowed: false,
       result: "CANCELLED",
@@ -428,6 +451,15 @@ const evaluateTicketBase = (ticket) => {
       result: "EXPIRED",
       statusCode: 409,
       message: "Vé đã hết hạn.",
+    };
+  }
+
+  if (!booking || booking.payment_status !== "paid" || booking.status !== "confirmed") {
+    return {
+      allowed: false,
+      result: "PAYMENT_NOT_COMPLETED",
+      statusCode: 409,
+      message: "Đơn hàng chưa được thanh toán.",
     };
   }
 
@@ -480,7 +512,7 @@ export const evaluateTicketForCheckIn = (ticket, now = new Date()) => {
 };
 
 export const verifyAdminTicketQr = async (req, res) => {
-  const qrToken = normalizeQrToken(req.body?.qrToken);
+  const qrToken = parseTicketQrPayload(req.body?.qrToken);
 
   if (!qrToken) {
     await writeScanLog(req, {
@@ -497,18 +529,31 @@ export const verifyAdminTicketQr = async (req, res) => {
 
   try {
     const ticket = await getTicketByQrToken(qrToken);
+    const evaluation = evaluateTicketForCheckIn(ticket, new Date());
+
+    if (ticket && evaluation.result === "EXPIRED" && ticket.status === "VALID") {
+      await Ticket.updateOne({ _id: ticket._id, status: "VALID" }, { $set: { status: "EXPIRED" } });
+      ticket.status = "EXPIRED";
+    }
 
     await writeScanLog(req, {
       ticketId: ticket?._id || null,
       action: "VERIFY",
-      result: ticket ? "SUCCESS" : "INVALID_TOKEN",
-      errorNote: ticket ? "" : "Khong tim thay ve tu ma QR",
+      result: evaluation.result,
+      errorNote: evaluation.allowed ? "" : evaluation.message,
     });
 
-    if (!ticket) {
-      return res.status(404).json({
+    if (!evaluation.allowed) {
+      return res.status(evaluation.statusCode).json({
         success: false,
-        message: "Không tìm thấy vé từ mã QR này.",
+        message: evaluation.message,
+        data: ticket
+          ? formatTicketForAdmin(ticket, {
+            canCheckIn: false,
+            result: evaluation.result,
+            checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId, ticket.movieId),
+          })
+          : null,
       });
     }
 
@@ -516,7 +561,9 @@ export const verifyAdminTicketQr = async (req, res) => {
       success: true,
       message: "Đã tải thông tin vé thành công.",
       data: formatTicketForAdmin(ticket, {
+        canCheckIn: true,
         result: "SUCCESS",
+        checkInWindow: evaluation.checkInWindow,
       }),
     });
   } catch (error) {
@@ -576,8 +623,119 @@ export const getAdminTicketScanLogs = async (req, res) => {
   }
 };
 
+export const printAdminTicketQr = async (req, res) => {
+  const qrToken = parseTicketQrPayload(req.body?.qrToken);
+
+  if (!qrToken) {
+    return res.status(400).json({
+      success: false,
+      message: "Vui lòng cung cấp mã QR.",
+    });
+  }
+
+  try {
+    const printedTicket = await claimTicketPrintOnce({
+      qrToken,
+      adminId: req.user.id,
+    });
+
+    if (!printedTicket) {
+      const existingTicket = await getTicketByQrToken(qrToken);
+      if (!existingTicket) {
+        return res.status(404).json({
+          success: false,
+          message: "Mã QR không hợp lệ.",
+        });
+      }
+
+      const printedTime = existingTicket.printedAt
+        ? new Date(existingTicket.printedAt).toLocaleString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+        : "trước đó";
+
+      return res.status(409).json({
+        success: false,
+        message: `Vé này đã được in lúc ${printedTime} và không thể in lại.`,
+        data: formatTicketForAdmin(existingTicket),
+      });
+    }
+
+    const populatedTicket = await populateTicketForAdmin(Ticket.findById(printedTicket._id));
+    return res.json({
+      success: true,
+      message: "Đã ghi nhận lượt in vé.",
+      data: formatTicketForAdmin(populatedTicket),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Không thể ghi nhận lượt in vé.",
+    });
+  }
+};
+
+export const lookupAdminTicketCode = async (req, res) => {
+  const ticketCode = normalizeTicketCode(req.body?.ticketCode);
+
+  if (!/^[A-Z0-9-]{6,64}$/.test(ticketCode)) {
+    return res.status(400).json({
+      success: false,
+      message: "Mã vé không hợp lệ. Vui lòng kiểm tra và nhập lại.",
+    });
+  }
+
+  try {
+    const ticket = await getTicketByCode(ticketCode);
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy vé với mã đã nhập.",
+      });
+    }
+
+    const evaluation = evaluateTicketForCheckIn(ticket, new Date());
+    if (evaluation.result === "EXPIRED" && ticket.status === "VALID") {
+      await Ticket.updateOne({ _id: ticket._id, status: "VALID" }, { $set: { status: "EXPIRED" } });
+      ticket.status = "EXPIRED";
+    }
+
+    const qrPayload = buildTicketQrPayload(decryptQrToken(ticket.qrTokenEncrypted));
+    await writeScanLog(req, {
+      ticketId: ticket._id,
+      action: "VERIFY",
+      result: evaluation.result,
+      errorNote: evaluation.allowed ? "" : evaluation.message,
+    });
+
+    const responseBody = {
+      success: evaluation.allowed,
+      message: evaluation.allowed ? "Đã tìm thấy vé." : evaluation.message,
+      data: formatTicketForAdmin(ticket, {
+        canCheckIn: evaluation.allowed,
+        result: evaluation.result,
+        checkInWindow: evaluation.checkInWindow || getCheckInWindow(ticket.showtimeId, ticket.movieId),
+      }),
+      qrPayload,
+    };
+
+    return evaluation.allowed
+      ? res.json(responseBody)
+      : res.status(evaluation.statusCode).json(responseBody);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Không thể tra cứu mã vé.",
+    });
+  }
+};
+
 export const checkInAdminTicketQr = async (req, res) => {
-  const qrToken = normalizeQrToken(req.body?.qrToken);
+  const qrToken = parseTicketQrPayload(req.body?.qrToken);
 
   if (!qrToken) {
     await writeScanLog(req, {
@@ -598,6 +756,10 @@ export const checkInAdminTicketQr = async (req, res) => {
     const evaluation = evaluateTicketForCheckIn(ticket, now);
 
     if (!evaluation.allowed) {
+      if (ticket && evaluation.result === "EXPIRED" && ticket.status === "VALID") {
+        await Ticket.updateOne({ _id: ticket._id, status: "VALID" }, { $set: { status: "EXPIRED" } });
+        ticket.status = "EXPIRED";
+      }
       await writeScanLog(req, {
         ticketId: ticket?._id || null,
         action: "CHECK_IN",

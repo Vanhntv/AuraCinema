@@ -12,7 +12,17 @@ export const verifyTicketQr = async (qrToken) => {
   return response.data;
 };
 
+export const lookupTicketByCode = async (ticketCode) => {
+  const response = await axiosClient.post(`${API_URL}/lookup`, { ticketCode });
+  return response.data;
+};
+
 export const checkInTicketQr = async (qrToken) => {
   const response = await axiosClient.post(`${API_URL}/check-in`, { qrToken });
+  return response.data;
+};
+
+export const claimTicketPrint = async (qrToken) => {
+  const response = await axiosClient.post(`${API_URL}/print`, { qrToken });
   return response.data;
 };

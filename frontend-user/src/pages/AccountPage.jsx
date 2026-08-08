@@ -297,8 +297,14 @@ function AccountPage() {
       try {
         setLoadingTickets(true);
         setTicketsError("");
-        const response = await getMyTickets({ page: 1, limit: 100 });
-        if (isActive) setTickets(response.data || []);
+        const firstPage = await getMyTickets({ page: 1, limit: 50 });
+        const totalPages = Number(firstPage.pagination?.totalPages || 1);
+        const remainingPages = totalPages > 1
+          ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) =>
+            getMyTickets({ page: index + 2, limit: 50 })))
+          : [];
+        const allTickets = [firstPage, ...remainingPages].flatMap((response) => response.data || []);
+        if (isActive) setTickets(allTickets);
       } catch (error) {
         if (isActive) {
           const message = getApiErrorMessage(error, "Không thể tải vé điện tử.");
@@ -730,6 +736,7 @@ function AccountPage() {
   };
 
   const openTicketDetail = async (ticket, { qrOnly = false } = {}) => {
+    let detailedTicket = ticket;
     setSelectedTicketDetail(ticket);
     setTicketQrDataUrl("");
     setTicketQrError("");
@@ -737,7 +744,8 @@ function AccountPage() {
     try {
       setLoadingTicketDetail(!qrOnly);
       const response = await getMyTicketDetail(ticket.id);
-      setSelectedTicketDetail(response.data || ticket);
+      detailedTicket = response.data || ticket;
+      setSelectedTicketDetail(detailedTicket);
     } catch (error) {
       const message = getApiErrorMessage(error, "Không thể tải chi tiết vé.");
       setTicketQrError(message);
@@ -746,12 +754,37 @@ function AccountPage() {
       setLoadingTicketDetail(false);
     }
 
-    await loadTicketQr(ticket.id);
+    if (["VALID", "CHECKED_IN"].includes(detailedTicket.status)) {
+      await loadTicketQr(ticket.id);
+    } else {
+      setTicketQrError("QR không khả dụng với vé đã hủy hoặc hết hạn.");
+    }
+  };
+
+  const handleTicketPdf = async (ticket) => {
+    try {
+      const [detailResponse, qrResponse, pdfModule] = await Promise.all([
+        getMyTicketDetail(ticket.id),
+        getMyTicketQr(ticket.id),
+        import("../utils/ticketPdf"),
+      ]);
+      const detailedTicket = detailResponse.data || ticket;
+      const qrPayload = qrResponse.data?.qrPayload;
+      if (!qrPayload?.startsWith("AURA_TICKET:")) {
+        throw new Error("QR vé chưa sẵn sàng.");
+      }
+
+      await pdfModule.downloadTicketPdf(detailedTicket, qrPayload);
+      showToast("success", "Đã tải PDF vé.");
+    } catch (error) {
+      showToast("error", getApiErrorMessage(error, "Không thể tạo PDF vé."));
+    }
   };
 
   const renderTicketCard = (ticket) => {
     const status = getTicketStatusMeta(ticket.status);
     const poster = resolveImageUrl(ticket.movie?.poster);
+    const qrAvailable = ["VALID", "CHECKED_IN"].includes(ticket.status);
 
     return (
       <article
@@ -780,6 +813,7 @@ function AccountPage() {
             <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
               <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
               <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
+              <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
               <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
               <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
               <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
@@ -787,15 +821,35 @@ function AccountPage() {
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-3 border-t border-white/10 pt-4">
+            {qrAvailable ? (
+              <>
             <button
-              className="h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
+              className="h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
+              type="button"
+              onClick={() => openTicketDetail(ticket, { qrOnly: true })}
+            >
+              Xem QR
+            </button>
+            <button
+              className="h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
               type="button"
               onClick={() => downloadTicketQrDirectly(ticket)}
             >
               Tải QR
             </button>
             <button
-              className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
+              className="h-11 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
+              type="button"
+              onClick={() => handleTicketPdf(ticket)}
+            >
+              Tải PDF
+            </button>
+              </>
+            ) : (
+              <p className="mr-auto self-center text-xs font-semibold text-slate-500">QR không khả dụng với vé {status.label.toLowerCase()}.</p>
+            )}
+            <button
+              className="h-11 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
               type="button"
               onClick={() => openTicketDetail(ticket)}
             >
@@ -987,6 +1041,7 @@ function AccountPage() {
                     <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
                       <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
+                      <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
                       <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
                       <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
                       <p><span className="text-slate-500">Loại ghế:</span> <strong className="text-white">{ticket.seat?.type || "Đang cập nhật"}</strong></p>
@@ -1017,6 +1072,9 @@ function AccountPage() {
                       >
                         Tải mã QR
                       </button>
+                      <div className="mt-3 flex flex-wrap justify-center gap-2">
+                        <button className="min-h-11 rounded-full border border-slate-300 px-4 text-sm font-black text-slate-900" type="button" onClick={() => handleTicketPdf(ticket)}>Tải PDF</button>
+                      </div>
                     </>
                   ) : null}
                   <p className="mt-3 text-xs font-black text-black">Vui lòng xuất trình mã QR tại cửa phòng chiếu</p>
