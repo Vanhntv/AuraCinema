@@ -93,6 +93,8 @@ const BookingsPage = () => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageLookup, setPageLookup] = useState("1");
+  const [pageLookupError, setPageLookupError] = useState("");
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -105,7 +107,7 @@ const BookingsPage = () => {
   const [cancelReason, setCancelReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchBookings = useCallback(async (page = currentPage) => {
+  const fetchBookings = useCallback(async (page = 1) => {
     try {
       setLoading(true);
       setFeedback({ type: "", message: "" });
@@ -116,8 +118,11 @@ const BookingsPage = () => {
         payment_status: paymentFilter || undefined,
         status: statusFilter || undefined,
       });
+      const resolvedPage = Number(response.pagination?.page || page);
       setBookings(response.data || []);
-      setCurrentPage(response.pagination?.page || page);
+      setCurrentPage(resolvedPage);
+      setPageLookup(String(resolvedPage));
+      setPageLookupError("");
       setTotalPages(response.pagination?.totalPages || 1);
       setTotalItems(response.pagination?.totalItems || 0);
     } catch (error) {
@@ -125,10 +130,14 @@ const BookingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, paymentFilter, searchQuery, statusFilter]);
+  }, [paymentFilter, searchQuery, statusFilter]);
 
   useEffect(() => {
-    fetchBookings(1);
+    const timerId = window.setTimeout(() => {
+      void fetchBookings(1);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
   }, [fetchBookings]);
 
   const stats = useMemo(() => ({
@@ -164,6 +173,23 @@ const BookingsPage = () => {
   const handleSubmitFilters = (event) => {
     event.preventDefault();
     fetchBookings(1);
+  };
+
+  const handlePageLookup = (event) => {
+    event.preventDefault();
+    const requestedPage = Number(pageLookup);
+
+    if (!Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > totalPages) {
+      setPageLookupError(`Nhập số trang từ 1 đến ${totalPages}.`);
+      return;
+    }
+
+    if (requestedPage === currentPage) {
+      setPageLookupError("");
+      return;
+    }
+
+    void fetchBookings(requestedPage);
   };
 
   const handleUpdatePayment = async () => {
@@ -325,6 +351,33 @@ const BookingsPage = () => {
         <button className="pagination-btn" disabled={currentPage >= totalPages || loading} onClick={() => fetchBookings(currentPage + 1)} type="button">
           Sau
         </button>
+        <form className="pagination-lookup" onSubmit={handlePageLookup}>
+          <label htmlFor="booking-page-lookup">Đến trang</label>
+          <input
+            id="booking-page-lookup"
+            aria-describedby={pageLookupError ? "booking-page-lookup-error" : undefined}
+            aria-invalid={Boolean(pageLookupError)}
+            inputMode="numeric"
+            maxLength={String(totalPages).length}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "" || /^\d+$/.test(value)) {
+                setPageLookup(value);
+                setPageLookupError("");
+              }
+            }}
+            pattern="[0-9]*"
+            value={pageLookup}
+          />
+          <button className="pagination-go-btn" disabled={loading || pageLookup === ""} type="submit">
+            Đi
+          </button>
+        </form>
+        {pageLookupError && (
+          <span className="pagination-lookup-error" id="booking-page-lookup-error" role="alert">
+            {pageLookupError}
+          </span>
+        )}
       </div>
 
       {selectedBooking && (

@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { getPublishedPolicies } from "../services/policyService";
 
 const supportPages = {
   "dieu-khoan-su-dung": {
@@ -104,10 +106,40 @@ const supportPages = {
   },
 };
 
+const policySurfaceBySlug = {
+  "dieu-khoan-su-dung": "terms",
+  "chinh-sach-bao-mat": "privacy",
+};
+
+const splitPolicyParagraphs = (content = "") =>
+  String(content)
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
 function SupportInfoPage() {
   const { pathname } = useLocation();
   const slug = pathname.split("/").filter(Boolean).at(-1);
   const page = supportPages[slug];
+  const [publishedPolicies, setPublishedPolicies] = useState([]);
+
+  useEffect(() => {
+    const surface = policySurfaceBySlug[slug];
+    if (!surface) return undefined;
+
+    let active = true;
+    getPublishedPolicies(surface)
+      .then((response) => {
+        if (active) setPublishedPolicies(response.data || []);
+      })
+      .catch(() => {
+        if (active) setPublishedPolicies([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [slug]);
 
   if (!page) {
     return <Navigate to="/" replace />;
@@ -128,19 +160,28 @@ function SupportInfoPage() {
       </section>
 
       <section className="mt-6 grid gap-5">
-        {page.sections.map((section) => (
+        {(publishedPolicies.length > 0 ? publishedPolicies : page.sections).map((section) => (
           <article
             className="rounded-3xl border border-white/10 bg-[#141b26] p-6"
-            key={section.title}
+            key={section._id || section.title}
           >
             <h2 className="text-xl font-black text-white">{section.title}</h2>
-            <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-              {section.items.map((item) => (
-                <li className="rounded-2xl bg-white/[0.035] px-4 py-3" key={item}>
-                  {item}
-                </li>
-              ))}
-            </ul>
+            {section.summary && <p className="mt-3 text-sm font-semibold leading-6 text-slate-200">{section.summary}</p>}
+            {section.items ? (
+              <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
+                {section.items.map((item) => (
+                  <li className="rounded-2xl bg-white/[0.035] px-4 py-3" key={item}>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="mt-4 grid gap-4 text-sm leading-7 text-slate-300">
+                {splitPolicyParagraphs(section.content).map((paragraph, index) => (
+                  <p className="whitespace-pre-line" key={`${section._id}-${index}`}>{paragraph}</p>
+                ))}
+              </div>
+            )}
           </article>
         ))}
       </section>

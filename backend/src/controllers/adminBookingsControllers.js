@@ -9,6 +9,10 @@ import {
 import {
   refundVoucherUsageForBooking,
 } from "../services/voucherService.js";
+import {
+  creditRewardPointsForBooking,
+  reverseRewardPointsForBooking,
+} from "../services/rewardPointService.js";
 
 const PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "refunded"];
 const BOOKING_STATUSES = ["pending", "confirmed", "cancelled"];
@@ -238,6 +242,12 @@ export const updateAdminBookingPayment = async (req, res) => {
     ).trim();
 
     Object.assign(booking, updates);
+    if (paymentStatus === "paid" && previousPaymentStatus !== "paid") {
+      await creditRewardPointsForBooking({ booking });
+    }
+    if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
+      await reverseRewardPointsForBooking({ booking });
+    }
     await booking.save();
 
     if (booking.status === "confirmed" && booking.payment_status === "paid") {
@@ -287,6 +297,9 @@ export const cancelAdminBooking = async (req, res) => {
     booking.cancellation_reason = String(req.body?.reason || "").trim();
     booking.cancelled_at = new Date();
     booking.payment_status = refundPayment ? "refunded" : (wasPaid ? "paid" : "cancelled");
+    if (refundPayment) {
+      await reverseRewardPointsForBooking({ booking });
+    }
     await booking.save();
 
     await releaseBookingSeats(booking);

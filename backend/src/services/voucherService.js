@@ -9,6 +9,7 @@ import {
   parseVoucherDiscountType,
   parseVoucherStatus,
   validateVoucherPayload,
+  validateVoucherScopeConfiguration,
   validateVoucherUpdatePayload,
 } from "../modules/vouchers/voucher.validation.js";
 
@@ -720,6 +721,8 @@ const buildVoucherVerificationResponse = (voucher, context = {}) => {
     voucher: {
       id: voucher._id,
       code: voucher.code,
+      name: voucher.name,
+      description: voucher.description,
       discount_type: voucher.discount_type,
       discount_value: voucher.discount_value,
       max_discount_amount: voucher.max_discount_amount,
@@ -727,6 +730,7 @@ const buildVoucherVerificationResponse = (voucher, context = {}) => {
       quantity: voucher.quantity,
       usage_limit_per_user: voucher.usage_limit_per_user,
       apply_scope: voucher.apply_scope,
+      terms_and_conditions: voucher.terms_and_conditions,
       start_date: voucher.start_date,
       end_date: voucher.end_date,
       status: voucher.status,
@@ -783,6 +787,50 @@ export const listPublicVouchers = async () => {
     .sort({ start_date: -1, created_at: -1 });
 
   return vouchers.map(toVoucherListItem);
+};
+
+export const listEligibleVouchers = async (payload = {}) => {
+  const context = normalizeVoucherContext(payload);
+
+  if (context.orderAmount === null || context.orderAmount <= 0) {
+    return [];
+  }
+
+  const session = payload.session ?? null;
+  const [vouchers, user] = await Promise.all([
+    Voucher.find(buildPublicVoucherFilter()).sort({ start_date: -1, created_at: -1 }).session(session),
+    context.userId
+      ? User.findOne({ _id: context.userId, deleted_at: null, status: true }).session(session)
+      : null,
+  ]);
+
+  const eligibleVouchers = await Promise.all(
+    vouchers.map(async (voucher) => {
+      if (checkVoucherScope(voucher, context, user)) return null;
+
+      if (context.userId) {
+        const usedByCustomer = await countVoucherUsageByUser({
+          voucherId: voucher._id,
+          userId: context.userId,
+          session,
+        });
+
+        if (usedByCustomer >= Number(voucher.usage_limit_per_user || 1)) return null;
+      }
+
+      if (context.orderAmount < Number(voucher.min_order ?? 0)) return null;
+
+      return buildVoucherVerificationResponse(voucher, context);
+    }),
+  );
+
+  return eligibleVouchers
+    .filter(Boolean)
+    .sort((first, second) => {
+      const discountDifference = Number(second.discount_amount || 0) - Number(first.discount_amount || 0);
+      if (discountDifference !== 0) return discountDifference;
+      return String(first.voucher?.code || "").localeCompare(String(second.voucher?.code || ""));
+    });
 };
 
 export const getPublicVoucherByIdService = async (id) => {
@@ -1098,6 +1146,13 @@ export const updateVoucherService = async (id, payload, user = null) => {
     const error = new Error(
       "discount_value khong duoc lon hon 100 khi discount_type la percent"
     );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const scopeError = validateVoucherScopeConfiguration(nextVoucherState);
+  if (scopeError) {
+    const error = new Error(scopeError);
     error.statusCode = 400;
     throw error;
   }

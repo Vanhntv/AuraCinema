@@ -71,6 +71,31 @@ export const parseVoucherStatus = (value, fallback = true) => {
   return fallback;
 };
 
+export const validateVoucherScopeConfiguration = (voucher, prefix = "") => {
+  const scope = parseVoucherApplyScope(voucher.apply_scope, null);
+  const movieIds = Array.isArray(voucher.applicable_movie_ids)
+    ? voucher.applicable_movie_ids.filter((value) => !isEmptyValue(value))
+    : [];
+  const memberTiers = Array.isArray(voucher.applicable_member_tiers)
+    ? voucher.applicable_member_tiers.filter((value) => !isEmptyValue(value))
+    : [];
+
+  if (scope === "movie") {
+    if (!movieIds.length) {
+      return `${prefix}Mã áp dụng theo phim phải chọn ít nhất một phim`;
+    }
+    if (movieIds.some((value) => !/^[a-f\d]{24}$/i.test(String(value)))) {
+      return `${prefix}Danh sách phim áp dụng không hợp lệ`;
+    }
+  }
+
+  if (scope === "member" && !memberTiers.length) {
+    return `${prefix}Mã áp dụng theo thành viên phải chọn ít nhất một hạng thành viên`;
+  }
+
+  return null;
+};
+
 const parseDateValue = (value) => {
   if (isEmptyValue(value)) return null;
 
@@ -285,6 +310,9 @@ export const validateVoucherPayload = (voucher, index = null) => {
     return `${prefix}usage_limit_per_user khong duoc lon hon usage_limit`;
   }
 
+  const scopeError = validateVoucherScopeConfiguration(voucher, prefix);
+  if (scopeError) return scopeError;
+
   const dateError = validateVoucherDates(voucher.start_date, voucher.end_date, prefix, true);
   if (dateError) return dateError;
 
@@ -368,6 +396,9 @@ export const validateVoucherUpdatePayload = (voucher, index = null) => {
   if ("status" in voucher && !isEmptyValue(voucher.status) && typeof voucher.status !== "boolean" && typeof voucher.status !== "string") {
     return `${prefix}status khong hop le`;
   }
+
+  const scopeError = validateVoucherScopeConfiguration(voucher, prefix);
+  if (scopeError) return scopeError;
 
   return null;
 };

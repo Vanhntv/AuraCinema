@@ -1,6 +1,7 @@
 import { randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import User from "../models/User.js";
+import RewardPointLog from "../models/RewardPointLog.js";
 import { signJwt } from "../utils/jwt.js";
 
 const scrypt = promisify(scryptCallback);
@@ -496,10 +497,13 @@ export const resetPassword = async (req, res) => {
 
 export const profile = async (req, res) => {
   try {
-    const user = await User.findOne({
-      _id: req.user.id,
-      deleted_at: null,
-    }).select("-password");
+    const [user, rewardPointLogs] = await Promise.all([
+      User.findOne({ _id: req.user.id, deleted_at: null }).select("-password"),
+      RewardPointLog.find({ user_id: req.user.id })
+        .sort({ created_at: -1 })
+        .limit(50)
+        .select("type points balance_after reason created_at booking_id"),
+    ]);
 
     if (!user) {
       return res.status(404).json({
@@ -510,7 +514,10 @@ export const profile = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: sanitizeUser(user),
+      data: {
+        ...sanitizeUser(user),
+        reward_point_logs: rewardPointLogs,
+      },
     });
   } catch (error) {
     return sendAuthError(res, error, "Không thể tải thông tin tài khoản. Vui lòng thử lại sau.");

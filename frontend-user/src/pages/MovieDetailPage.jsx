@@ -20,6 +20,17 @@ import {
 const fallbackPoster =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22230%22 fill=%22white%22 font-family=%22Arial%22 font-size=%2220%22 text-anchor=%22middle%22%3EAura Cinema%3C/text%3E%3C/svg%3E'
 
+function getGenreNames(movie) {
+  const values = [
+    ...(Array.isArray(movie?.genres) ? movie.genres : []),
+    ...(Array.isArray(movie?.genreIds) ? movie.genreIds : []),
+    ...(movie?.genre ? [movie.genre] : []),
+  ]
+  return [...new Set(values.map((genre) => (
+    typeof genre === 'string' ? genre : genre?.name || genre?.title || ''
+  )).map((name) => String(name).trim()).filter(Boolean))]
+}
+
 function youtubeEmbed(url) {
   if (!url) return ''
   try {
@@ -112,6 +123,7 @@ export default function MovieDetailPage() {
   )
   const backdrop = movie?.banner || movie?.banners?.[0] || movie?.poster
   const embedUrl = youtubeEmbed(trailer?.youtube_url)
+  const genreNames = getGenreNames(movie)
 
   if (loading) return <div className="mx-auto min-h-[65vh] w-[min(1180px,calc(100%_-_40px))] animate-pulse py-16"><div className="h-[520px] rounded-3xl bg-white/[0.05]" /></div>
   if (error || !movie) return <div className="mx-auto min-h-[60vh] w-[min(1180px,calc(100%_-_40px))] py-20 text-center"><h1 className="text-2xl font-black">Không thể tải chi tiết phim</h1><p className="mt-3 text-slate-400">{error}</p></div>
@@ -146,6 +158,12 @@ export default function MovieDetailPage() {
               <p><strong className="mr-2 text-slate-100">Đạo diễn</strong>{movie.director || 'Đang cập nhật'}</p>
               {movie.actors && <p><strong className="mr-2 text-slate-100">Diễn viên</strong>{movie.actors}</p>}
               {movie.country && <p><strong className="mr-2 text-slate-100">Quốc gia</strong>{movie.country}</p>}
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="mr-1 text-slate-100">Thể loại</strong>
+                {genreNames.length ? genreNames.map((genre) => (
+                  <span key={genre} className="rounded-full border border-[#ff6070]/30 bg-[#ff6070]/10 px-3 py-1 text-xs font-semibold text-[#ff9aa5]">{genre}</span>
+                )) : <span>Đang cập nhật</span>}
+              </div>
             </div>
             <h2 className="mt-6 text-sm font-black uppercase tracking-[.18em] text-[#ff7180]">Nội dung phim</h2>
             <p className="mt-3 max-w-4xl text-[15px] leading-7 text-slate-300">{movie.description || 'Nội dung phim đang được cập nhật.'}</p>

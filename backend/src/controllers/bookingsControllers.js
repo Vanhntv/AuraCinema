@@ -12,6 +12,7 @@ import {
   verifyVoucherService,
 } from "../services/voucherService.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
+import { creditRewardPointsForBooking } from "../services/rewardPointService.js";
 import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
 
 const seatTypeName = (seat) => normalizeSeatTypeName(seat.seat_id?.seat_type_id?.name);
@@ -168,6 +169,7 @@ export const markBookingAsPaid = async ({
   booking.payment_provider = provider || "internal";
   booking.payment_transaction_id = transactionId;
   booking.paid_at = new Date();
+  await creditRewardPointsForBooking({ booking, session });
   await booking.save({ session });
   await createTicketsForPaidBooking(booking._id, { session });
 

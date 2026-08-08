@@ -52,3 +52,33 @@ test("validateVoucherUpdatePayload permits partial edits and validates changed f
   assert.match(validateVoucherUpdatePayload({ code: "BAD CODE" }), /khoang trang/);
   assert.match(validateVoucherUpdatePayload({ min_order: -1 }), /khong duoc am/);
 });
+
+test("scope movie requires valid movie ids", () => {
+  assert.match(
+    validateVoucherPayload({ ...validVoucher, apply_scope: "movie", applicable_movie_ids: [] }),
+    /phải chọn ít nhất một phim/,
+  );
+  assert.match(
+    validateVoucherPayload({ ...validVoucher, apply_scope: "movie", applicable_movie_ids: ["movie-1"] }),
+    /Danh sách phim/,
+  );
+  assert.equal(
+    validateVoucherPayload({
+      ...validVoucher,
+      apply_scope: "movie",
+      applicable_movie_ids: ["507f1f77bcf86cd799439011"],
+    }),
+    null,
+  );
+});
+
+test("scope member requires at least one member tier", () => {
+  assert.match(
+    validateVoucherPayload({ ...validVoucher, apply_scope: "member", applicable_member_tiers: [] }),
+    /phải chọn ít nhất một hạng/,
+  );
+  assert.equal(
+    validateVoucherPayload({ ...validVoucher, apply_scope: "member", applicable_member_tiers: ["vip"] }),
+    null,
+  );
+});

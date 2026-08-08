@@ -51,6 +51,9 @@ const bookingSchema = new mongoose.Schema(
     payment_provider: { type: String, default: "internal", trim: true },
     payment_transaction_id: { type: String, default: "", trim: true },
     paid_at: { type: Date, default: null },
+    reward_points_earned: { type: Number, default: 0, min: 0 },
+    reward_points_credited_at: { type: Date, default: null },
+    reward_points_reversed_at: { type: Date, default: null },
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } },
 );

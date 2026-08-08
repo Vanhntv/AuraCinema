@@ -8,6 +8,17 @@ import {
   getBookingPaymentStatus,
 } from "../services/bookingService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
+import { getPublishedPolicies } from "../services/policyService";
+
+const DEFAULT_PAYMENT_POLICIES = [
+  {
+    _id: "default-payment-policy",
+    title: "Kiểm tra thông tin trước khi thanh toán",
+    summary: "Vui lòng kiểm tra kỹ thông tin phim, suất chiếu, phòng và ghế.",
+    content: "Vé đã thanh toán thành công không hỗ trợ khách hàng tự hủy, đổi hoặc hoàn vé, trừ trường hợp được rạp xử lý theo chính sách.",
+    requires_confirmation: true,
+  },
+];
 
 function formatCurrency(value) {
   return `${Number(value || 0).toLocaleString("vi-VN")}đ`;
@@ -110,6 +121,12 @@ function DetailRow({ label, value, strong = false }) {
   );
 }
 
+const splitPolicyParagraphs = (content = "") =>
+  String(content)
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
 function PaymentPage() {
   const { bookingId } = useParams();
   const location = useLocation();
@@ -121,12 +138,35 @@ function PaymentPage() {
   const [isCancellingBooking, setIsCancellingBooking] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [hasConfirmedBooking, setHasConfirmedBooking] = useState(false);
+  const [paymentPolicies, setPaymentPolicies] = useState([]);
 
   const amount = useMemo(
     () => Number(summary?.finalTotal || summary?.total_price || 0),
     [summary?.finalTotal, summary?.total_price],
   );
   const bookingIsPaid = paymentStatus === "paid";
+  const publishedPaymentPolicies = paymentPolicies.filter((policy) => policy.surface === "payment");
+  const visiblePaymentPolicies = publishedPaymentPolicies.length > 0
+    ? publishedPaymentPolicies
+    : DEFAULT_PAYMENT_POLICIES;
+  const cinemaPolicies = paymentPolicies.filter((policy) => policy.surface !== "payment");
+  const hasRequiredPolicies = visiblePaymentPolicies.some((policy) => policy.requires_confirmation);
+
+  useEffect(() => {
+    let active = true;
+
+    getPublishedPolicies()
+      .then((response) => {
+        if (active) setPaymentPolicies(response.data || []);
+      })
+      .catch(() => {
+        if (active) setPaymentPolicies([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!bookingId) return undefined;
@@ -343,14 +383,52 @@ function PaymentPage() {
             <strong className="text-3xl font-black text-[var(--aura-coral)]">{formatCurrency(amount)}</strong>
           </div>
 
-          <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-100">
-            <p className="font-bold">Vui lòng kiểm tra kỹ thông tin phim, suất chiếu, phòng và ghế trước khi thanh toán.</p>
-            <p className="mt-2 text-amber-100/80">Vé đã thanh toán thành công không hỗ trợ khách hàng tự hủy, đổi hoặc hoàn vé, trừ trường hợp được rạp xử lý theo chính sách.</p>
-          </div>
+          <section className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-100" aria-labelledby="payment-policies-title">
+            <h2 className="text-sm font-black text-amber-50" id="payment-policies-title">Chính sách trước khi thanh toán</h2>
+            <div className="mt-2 grid gap-2">
+              {visiblePaymentPolicies.map((policy, index) => (
+                <details className="group rounded-lg bg-black/10 px-3 py-2" key={policy._id} open={index === 0 ? true : undefined}>
+                  <summary className="cursor-pointer list-none font-bold text-amber-50 marker:hidden">
+                    {policy.title}
+                    <span className="ms-2 text-xs font-medium text-amber-100/65 group-open:hidden">Xem nội dung</span>
+                  </summary>
+                  {policy.summary && <p className="mt-2 font-semibold text-amber-50/90">{policy.summary}</p>}
+                  <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pe-2 text-amber-100/80">
+                    {splitPolicyParagraphs(policy.content).map((paragraph, paragraphIndex) => (
+                      <p className="whitespace-pre-line" key={`${policy._id}-${paragraphIndex}`}>{paragraph}</p>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </section>
+
+          {cinemaPolicies.length > 0 && (
+            <section className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-slate-200" aria-labelledby="cinema-policies-title">
+              <h2 className="text-sm font-black text-white" id="cinema-policies-title">Các chính sách của rạp</h2>
+              <p className="mt-1 text-xs text-slate-400">Thông tin được rạp công bố và áp dụng cho giao dịch của bạn.</p>
+              <div className="mt-3 grid gap-2">
+                {cinemaPolicies.map((policy) => (
+                  <details className="group rounded-lg bg-white/[0.04] px-3 py-2" key={policy._id}>
+                    <summary className="cursor-pointer list-none font-bold text-slate-100 marker:hidden">
+                      {policy.title}
+                      <span className="ms-2 text-xs font-medium text-slate-400 group-open:hidden">Xem nội dung</span>
+                    </summary>
+                    {policy.summary && <p className="mt-2 font-semibold text-slate-200">{policy.summary}</p>}
+                    <div className="mt-2 grid max-h-44 gap-2 overflow-y-auto pe-2 text-slate-300">
+                      {splitPolicyParagraphs(policy.content).map((paragraph, paragraphIndex) => (
+                        <p className="whitespace-pre-line" key={`${policy._id}-${paragraphIndex}`}>{paragraph}</p>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </section>
+          )}
 
           <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
             <input className="mt-1 h-5 w-5 accent-[var(--aura-coral)]" type="checkbox" checked={hasConfirmedBooking} onChange={(event) => setHasConfirmedBooking(event.target.checked)} />
-            <span>Tôi đã kiểm tra và xác nhận thông tin đặt vé.</span>
+            <span>{hasRequiredPolicies ? "Tôi đã kiểm tra thông tin đặt vé và đọc các chính sách áp dụng." : "Tôi đã kiểm tra và xác nhận thông tin đặt vé."}</span>
           </label>
         </div>
 

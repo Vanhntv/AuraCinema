@@ -7,6 +7,7 @@ import {
   getPublicVoucherByIdService,
   getVoucherByIdService,
   getVoucherStatsService,
+  listEligibleVouchers,
   listPublicVouchers,
   listVoucherUsageHistoryService,
   listVouchers,
@@ -173,6 +174,23 @@ export const getPublicVouchers = async (req, res) => {
     });
   } catch (error) {
     sendError(res, error);
+  }
+};
+
+export const getEligibleVouchers = async (req, res) => {
+  try {
+    const vouchers = await listEligibleVouchers({
+      ...req.query,
+      ...req.body,
+      user_id: req.user?.id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: vouchers,
+    });
+  } catch (error) {
+    return sendError(res, error);
   }
 };
 
