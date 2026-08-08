@@ -34,3 +34,8 @@ export const updateConcessionContent = async (id, data) => {
   });
   return res.data;
 };
+
+export const deleteConcession = async (id) => {
+  const res = await axiosClient.delete(`${API_URL}/${id}`);
+  return res.data;
+};
