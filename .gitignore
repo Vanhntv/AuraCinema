@@ -7,3 +7,5 @@ backend/.env.*
 frontend-user/.env
 frontend-user/.env.*
 !frontend-user/.env.example
+
+.codegraph
