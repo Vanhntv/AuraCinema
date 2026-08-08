@@ -143,6 +143,7 @@ function BookingResultPage({ result = "success" }) {
       combos,
       voucherCode: booking?.voucher?.code || "",
       total: Number(booking?.total_price || 0),
+      rewardPointsEarned: Number(booking?.reward_points_earned || 0),
     };
   }, [booking, bookingId, tickets]);
 
@@ -210,6 +211,7 @@ function BookingResultPage({ result = "success" }) {
           <div className="flex justify-between gap-4 text-slate-400"><span>Combo</span><strong className="text-right text-slate-200">{bookingSummary.combos.length ? bookingSummary.combos.map((item) => `${item.name} ×${item.quantity}`).join(", ") : "Không có"}</strong></div>
           <div className="flex justify-between gap-4 text-slate-400"><span>Voucher</span><strong className="text-slate-200">{bookingSummary.voucherCode || "Không áp dụng"}</strong></div>
           <div className="flex justify-between gap-4 text-base"><span>Tổng đã thanh toán</span><strong className="text-xl text-[var(--aura-coral)]">{currencyFormatter.format(bookingSummary.total)}</strong></div>
+          {bookingSummary.rewardPointsEarned > 0 && <div className="flex justify-between gap-4 text-sm"><span className="text-slate-400">Điểm thưởng nhận được</span><strong className="text-emerald-300">+{bookingSummary.rewardPointsEarned.toLocaleString("vi-VN")} điểm</strong></div>}
         </div>
       </section>
 

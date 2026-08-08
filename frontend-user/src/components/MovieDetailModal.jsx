@@ -21,6 +21,17 @@ function getStatusLabel(status) {
   return labels[status] || 'Đang cập nhật'
 }
 
+function getGenreNames(movie) {
+  const values = [
+    ...(Array.isArray(movie?.genres) ? movie.genres : []),
+    ...(Array.isArray(movie?.genreIds) ? movie.genreIds : []),
+    ...(movie?.genre ? [movie.genre] : []),
+  ]
+  return [...new Set(values.map((genre) => (
+    typeof genre === 'string' ? genre : genre?.name || genre?.title || ''
+  )).map((name) => String(name).trim()).filter(Boolean))]
+}
+
 function getYoutubeEmbedUrl(url) {
   if (!url) return ''
 
@@ -296,6 +307,7 @@ function MovieDetailModal({ movie, onClose, onBook }) {
               <InfoItem label="Khởi chiếu" value={formatDate(releaseDate)} />
               <InfoItem label="Đạo diễn" value={movie.director} />
               <InfoItem label="Quốc gia" value={movie.country} />
+              <InfoItem label="Thể loại" value={getGenreNames(movie).join(', ')} />
               <InfoItem label="Ngôn ngữ" value={movie.language} />
               <InfoItem label="Độ tuổi" value={ageLimit ? `${ageLimit}+` : ''} />
             </div>

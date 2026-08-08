@@ -5,6 +5,11 @@ export const verifyVoucher = async (payload) => {
   return response.data;
 };
 
+export const getEligibleVouchers = async (payload, config = {}) => {
+  const response = await axiosClient.post("/vouchers/eligible", payload, config);
+  return response.data;
+};
+
 export const getMyVoucherWallet = async () => {
   const response = await axiosClient.get("/vouchers/my-wallet");
   return response.data;

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HiOutlineSearch, HiOutlineX } from 'react-icons/hi'
 import { useNavigate } from 'react-router-dom'
+import useCurrentTime from '../hooks/useCurrentTime'
 import { getMovies } from '../services/movieService'
 import { getShowtimes } from '../services/showtimeService'
+import { getShowtimeStartDate } from '../utils/dateTime'
 
 const fallbackPoster =
   'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22450%22 viewBox=%220 0 300 450%22%3E%3Crect width=%22300%22 height=%22450%22 fill=%22%23151b26%22/%3E%3Ctext x=%22150%22 y=%22225%22 fill=%22%23f8fafc%22 font-family=%22Arial%22 font-size=%2222%22 text-anchor=%22middle%22%3ENo Poster%3C/text%3E%3C/svg%3E'
@@ -31,47 +33,6 @@ function matchesMovieSearch(movie, searchTerm) {
   const keyword = normalizeFilterValue(searchTerm)
   if (!keyword) return true
   return normalizeText(movie?.title).includes(keyword)
-}
-
-function getMovieStatusValue(movie) {
-  const explicitStatus = normalizeFilterValue(
-    movie?.status ||
-      movie?.release_status ||
-      movie?.releaseStatus ||
-      movie?.screening_status ||
-      movie?.screeningStatus ||
-      movie?.movieStatus,
-  )
-
-  if (explicitStatus) {
-    if (
-      explicitStatus === 'coming_soon' ||
-      explicitStatus === 'comingsoon' ||
-      explicitStatus === 'upcoming' ||
-      explicitStatus === 'scheduled' ||
-      explicitStatus.includes('sap_chieu') ||
-      explicitStatus.includes('sap chieu')
-    ) {
-      return 'coming_soon'
-    }
-
-    if (
-      explicitStatus === 'now_showing' ||
-      explicitStatus === 'nowshowing' ||
-      explicitStatus === 'showing' ||
-      explicitStatus.includes('dang_chieu') ||
-      explicitStatus.includes('dang chieu')
-    ) {
-      return 'now_showing'
-    }
-  }
-
-  const releaseDate = new Date(movie?.release_date || movie?.releaseDate)
-  if (!Number.isNaN(releaseDate.getTime()) && releaseDate > new Date()) {
-    return 'coming_soon'
-  }
-
-  return 'now_showing'
 }
 
 function getMovieGenreItems(movie) {
@@ -113,7 +74,7 @@ function matchesMovieGenre(movie, selectedGenre) {
 
 function matchesMovieStatus(movie, selectedStatus) {
   if (selectedStatus === 'all') return true
-  return getMovieStatusValue(movie) === selectedStatus
+  return movie?.showtimeStatus === selectedStatus
 }
 
 function matchesMovieFilters(movie, { searchTerm, selectedGenre, selectedStatus }) {
@@ -143,42 +104,81 @@ function buildGenreOptions(movies) {
     .sort((a, b) => a.label.localeCompare(b.label, 'vi'))
 }
 
-function isComingSoonMovie(movie) {
-  return getMovieStatusValue(movie) === 'coming_soon'
-}
-
-function isNowShowingMovie(movie) {
-  return getMovieStatusValue(movie) === 'now_showing'
-}
-
 function getMovieId(movie) {
   return String(movie?._id || movie?.id || movie?.movie_id || '')
 }
 
-function getScheduledMovieId(showtime) {
-  return String(showtime?.movie_id || '')
+function getShowtimeMovieId(showtime) {
+  const movie = showtime?.movie_id || showtime?.movieId
+  if (movie && typeof movie === 'object') return getMovieId(movie)
+  return String(movie || '')
 }
 
-function buildScheduledMovies(showtimes, movies) {
+function getEffectiveShowtimeStatus(showtime, currentTime) {
+  const apiStatus = normalizeFilterValue(showtime?.status)
+  const storedStatus = normalizeFilterValue(showtime?.stored_status)
+  if (apiStatus === 'cancelled' || storedStatus === 'cancelled') return 'cancelled'
+
+  const startDate = getShowtimeStartDate(showtime)
+  if (!startDate) return apiStatus
+
+  const endDate = new Date(
+    showtime?.end_time || showtime?.endDateTime || showtime?.end_datetime,
+  )
+  const now = Number(currentTime)
+
+  if (startDate.getTime() > now) return 'scheduled'
+  if (!Number.isNaN(endDate.getTime()) && endDate.getTime() > now) {
+    return 'now_showing'
+  }
+
+  return 'completed'
+}
+
+function classifyMoviesByShowtime(movies, showtimes, currentTime) {
   const moviesById = new Map(movies.map((movie) => [getMovieId(movie), movie]))
-  const scheduledMovies = new Map()
+  const showtimeStates = new Map()
 
   showtimes.forEach((showtime) => {
-    const movieId = getScheduledMovieId(showtime)
-    if (!movieId || scheduledMovies.has(movieId)) return
+    const movieId = getShowtimeMovieId(showtime)
+    const status = getEffectiveShowtimeStatus(showtime, currentTime)
 
-    const movie = moviesById.get(movieId) || {
-      _id: movieId,
-      title: showtime.movieTitle,
-      poster: showtime.moviePoster,
-      duration: showtime.movieDuration,
-      status: showtime.movieStatus,
+    if (!movieId || !['now_showing', 'scheduled'].includes(status)) return
+
+    if (!showtimeStates.has(movieId)) {
+      showtimeStates.set(movieId, {
+        isNowShowing: false,
+        isScheduled: false,
+        fallbackMovie: {
+          _id: movieId,
+          title: showtime.movieTitle || 'Phim đang cập nhật',
+          poster: showtime.moviePoster,
+          duration: showtime.movieDuration,
+          release_date: showtime.movieReleaseDate,
+          age_limit: showtime.movieAgeLimit,
+        },
+      })
     }
 
-    scheduledMovies.set(movieId, movie)
+    const state = showtimeStates.get(movieId)
+    if (status === 'now_showing') state.isNowShowing = true
+    if (status === 'scheduled') state.isScheduled = true
   })
 
-  return Array.from(scheduledMovies.values())
+  const nowShowing = []
+  const comingSoon = []
+
+  showtimeStates.forEach((state, movieId) => {
+    const movie = moviesById.get(movieId) || state.fallbackMovie
+    if (state.isNowShowing) {
+      nowShowing.push({ ...movie, showtimeStatus: 'now_showing' })
+    }
+    if (state.isScheduled) {
+      comingSoon.push({ ...movie, showtimeStatus: 'coming_soon' })
+    }
+  })
+
+  return { nowShowing, comingSoon }
 }
 
 function MovieCard({ movie, onOpenDetail }) {
@@ -301,7 +301,7 @@ function MovieFilterSelect({ value, onChange, options, ariaLabel }) {
       className="h-11 w-full rounded-full border border-white/10 bg-[#151b26] px-4 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-semibold text-white outline-none transition duration-200 hover:border-white/20 focus:border-[#ff6070]/50 focus:bg-[#192131] sm:max-w-xs"
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value} className="bg-[#151b26] text-white">
+        <option key={option.value} value={option.value} disabled={option.disabled} className="bg-[#151b26] text-white">
           {option.label}
         </option>
       ))}
@@ -323,8 +323,9 @@ function ClearFiltersButton({ onClick }) {
 
 function NowShowingMovies() {
   const navigate = useNavigate()
+  const currentTime = useCurrentTime()
   const [movies, setMovies] = useState([])
-  const [scheduledShowtimes, setScheduledShowtimes] = useState([])
+  const [showtimes, setShowtimes] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
@@ -339,12 +340,12 @@ function NowShowingMovies() {
         setIsLoading(true)
         const [movieData, showtimeData] = await Promise.all([
           getMovies({ limit: 1000 }),
-          getShowtimes({ status: 'scheduled' }),
+          getShowtimes(),
         ])
 
         if (isMounted) {
           setMovies(movieData)
-          setScheduledShowtimes(showtimeData?.data || [])
+          setShowtimes(showtimeData?.data || [])
           setError('')
         }
       } catch (err) {
@@ -371,21 +372,20 @@ function NowShowingMovies() {
     setSelectedStatus('all')
   }
 
-  const nowShowingMovies = useMemo(
-    () => movies.filter(isNowShowingMovie),
-    [movies],
+  const classifiedMovies = useMemo(
+    () => classifyMoviesByShowtime(movies, showtimes, currentTime),
+    [currentTime, movies, showtimes],
   )
-  const comingSoonMovies = useMemo(
-    () => [
-      ...movies.filter(isComingSoonMovie),
-      ...buildScheduledMovies(scheduledShowtimes, movies),
-    ].filter((movie, index, list) => {
-      const movieId = getMovieId(movie)
-      return movieId && list.findIndex((item) => getMovieId(item) === movieId) === index
-    }),
-    [movies, scheduledShowtimes],
+  const nowShowingMovies = classifiedMovies.nowShowing
+  const comingSoonMovies = classifiedMovies.comingSoon
+  const filterableMovies = useMemo(
+    () => [...nowShowingMovies, ...comingSoonMovies],
+    [comingSoonMovies, nowShowingMovies],
   )
-  const genreOptions = useMemo(() => buildGenreOptions(movies), [movies])
+  const genreOptions = useMemo(
+    () => buildGenreOptions(filterableMovies),
+    [filterableMovies],
+  )
   const filterState = useMemo(
     () => ({ searchTerm, selectedGenre, selectedStatus }),
     [searchTerm, selectedGenre, selectedStatus],
@@ -446,8 +446,12 @@ function NowShowingMovies() {
             ariaLabel="Lọc theo trạng thái"
             options={[
               { value: 'all', label: 'Trạng thái' },
-              { value: 'now_showing', label: 'Đang chiếu' },
-              { value: 'coming_soon', label: 'Sắp chiếu' },
+              { value: 'now_showing', label: `Đang chiếu (${nowShowingMovies.length})` },
+              {
+                value: 'coming_soon',
+                label: `Sắp chiếu (${comingSoonMovies.length})`,
+                disabled: comingSoonMovies.length === 0,
+              },
             ]}
           />
           {hasActiveFilters ? <ClearFiltersButton onClick={clearFilters} /> : null}
@@ -475,14 +479,23 @@ function NowShowingMovies() {
         <>
           {!hasSearchResults ? (
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-slate-300">
-              Không tìm thấy phim phù hợp.
+              <p>Không tìm thấy phim phù hợp với bộ lọc hiện tại.</p>
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-4 h-11 rounded-full bg-[var(--aura-coral)] px-6 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
+                >
+                  Xem tất cả phim
+                </button>
+              ) : null}
             </div>
           ) : (
             <>
               {shouldShowNowShowing ? (
                 <MovieGroup
                   title="Phim đang chiếu"
-                  movies={filteredNowShowingMovies.slice(0, 4)}
+                  movies={hasActiveFilters ? filteredNowShowingMovies : filteredNowShowingMovies.slice(0, 4)}
                   emptyText="Chưa có phim đang chiếu."
                   onOpenDetail={(movie) => navigate(`/phim/${getMovieId(movie)}`)}
                 />

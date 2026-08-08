@@ -10,7 +10,7 @@ import {
   getBookingPaymentStatus,
 } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
-import { verifyVoucher } from "../services/voucherService";
+import { getEligibleVouchers, verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, isShowtimeUpcoming } from "../utils/dateTime";
@@ -28,6 +28,17 @@ function normalizeText(value = "") {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/đ/g, "d");
+}
+
+function formatVoucherBenefit(voucher) {
+  if (voucher?.discount_type === "percent") {
+    const maximum = Number(voucher.max_discount_amount || 0);
+    return maximum > 0
+      ? `Giảm ${Number(voucher.discount_value || 0)}% · tối đa ${formatCurrency(maximum)}`
+      : `Giảm ${Number(voucher.discount_value || 0)}%`;
+  }
+
+  return `Giảm ${formatCurrency(voucher?.discount_value || 0)}`;
 }
 
 function getSeatType(seat) {
@@ -278,6 +289,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isApplyingVoucher, setIsApplyingVoucher] = useState(false);
   const [voucherError, setVoucherError] = useState("");
   const [voucherMessage, setVoucherMessage] = useState("");
+  const [eligibleVouchers, setEligibleVouchers] = useState([]);
+  const [eligibleVouchersContextKey, setEligibleVouchersContextKey] = useState("");
+  const [isLoadingEligibleVouchers, setIsLoadingEligibleVouchers] = useState(false);
+  const [eligibleVouchersError, setEligibleVouchersError] = useState("");
   const [showLoginNotice, setShowLoginNotice] = useState(false);
   const [initialRequestedDate] = useState(
     () => new URLSearchParams(location.search).get("date") || "",
@@ -384,6 +399,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setAppliedVoucher(null);
     setVoucherError("");
     setVoucherMessage("");
+    setEligibleVouchers([]);
+    setEligibleVouchersContextKey("");
+    setEligibleVouchersError("");
   }, [
     initialRequestedDate,
     initialShowtimeDateValue,
@@ -577,13 +595,61 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const finalTotal = appliedVoucher
     ? Number(appliedVoucher.final_amount ?? Math.max(totalPrice - discountAmount, 0))
     : totalPrice;
+  const voucherContextKey = `${movie._id}:${seatTotal}:${concessionTotal}:${totalPrice}`;
+  const hasCurrentEligibleVoucherResult = eligibleVouchersContextKey === voucherContextKey;
 
   useEffect(() => {
     if (!appliedVoucher) return;
-    setAppliedVoucher(null);
-    setVoucherMessage("");
-    setVoucherError("Tổng đơn đã thay đổi. Vui lòng áp dụng lại mã giảm giá.");
-  }, [seatTotal, concessionTotal, appliedVoucher]);
+    if (Number(appliedVoucher.order_amount) === totalPrice) return;
+
+    const timerId = window.setTimeout(() => {
+      setAppliedVoucher(null);
+      setVoucherMessage("");
+      setVoucherError("Tổng đơn đã thay đổi. Vui lòng áp dụng lại mã giảm giá.");
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [appliedVoucher, totalPrice]);
+
+  useEffect(() => {
+    if (!isAuthenticated || totalPrice <= 0) {
+      return undefined;
+    }
+
+    const abortController = new AbortController();
+    const requestContextKey = voucherContextKey;
+    const timerId = window.setTimeout(async () => {
+      try {
+        setIsLoadingEligibleVouchers(true);
+        setEligibleVouchersError("");
+        const response = await getEligibleVouchers(
+          {
+            order_amount: totalPrice,
+            ticket_amount: seatTotal,
+            concession_amount: concessionTotal,
+            movie_id: movie._id,
+          },
+          { signal: abortController.signal },
+        );
+        setEligibleVouchers(response?.data || []);
+        setEligibleVouchersContextKey(requestContextKey);
+      } catch (requestError) {
+        if (requestError.code === "ERR_CANCELED") return;
+        setEligibleVouchers([]);
+        setEligibleVouchersContextKey(requestContextKey);
+        setEligibleVouchersError(
+          requestError.response?.data?.message || "Không thể tải mã giảm giá lúc này.",
+        );
+      } finally {
+        if (!abortController.signal.aborted) setIsLoadingEligibleVouchers(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timerId);
+      abortController.abort();
+    };
+  }, [concessionTotal, isAuthenticated, movie._id, seatTotal, totalPrice, voucherContextKey]);
 
   const seatPriceNotes = useMemo(() => {
     const priceByType = new Map();
@@ -783,13 +849,13 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   };
 
-  const applyVoucher = async () => {
+  const applyVoucher = async (suggestedCode = "") => {
     if (!isAuthenticated) {
       requestLoginNotice();
       return;
     }
 
-    const code = voucherCode.trim().toUpperCase();
+    const code = String(suggestedCode || voucherCode).trim().toUpperCase();
     if (!code) {
       setVoucherError("Vui lòng nhập mã giảm giá.");
       return;
@@ -832,8 +898,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const removeVoucher = () => {
     setAppliedVoucher(null);
+    setVoucherCode("");
     setVoucherError("");
-    setVoucherMessage("");
+    setVoucherMessage("Đã bỏ mã giảm giá.");
   };
 
   const syncSelectedSeatsBeforeSubmit = async () => {
@@ -1395,8 +1462,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
               <div className="rounded-xl border border-white/10 bg-black/15 p-3">
                 <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã giảm giá</label>
-                <div className="mt-2 flex gap-2">
+                <form className="mt-2 flex gap-2" onSubmit={(event) => { event.preventDefault(); void applyVoucher(); }}>
                   <input
+                    aria-label="Nhập mã giảm giá"
                     className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold uppercase text-white outline-none placeholder:text-slate-600 focus:border-[#ff6070]"
                     value={voucherCode}
                     placeholder="AURA20"
@@ -1408,13 +1476,63 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                     disabled={Boolean(appliedVoucher) || isApplyingVoucher}
                   />
                   {appliedVoucher ? (
-                    <button type="button" className="rounded-full bg-white/10 px-4 text-sm font-extrabold text-white hover:bg-white/15" onClick={removeVoucher}>Bỏ</button>
+                    <button
+                      type="button"
+                      className="shrink-0 rounded-full bg-white/10 px-4 text-sm font-extrabold text-white hover:bg-white/15"
+                      onClick={removeVoucher}
+                      aria-label={`Bỏ mã giảm giá ${appliedVoucher.voucher?.code || voucherCode}`}
+                    >
+                      Bỏ mã
+                    </button>
                   ) : (
-                    <button type="button" className="rounded-full bg-[var(--aura-coral)] px-4 text-sm font-extrabold text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-50" onClick={applyVoucher} disabled={isApplyingVoucher}>{isApplyingVoucher ? "..." : "Áp dụng"}</button>
+                    <button type="submit" className="rounded-full bg-[var(--aura-coral)] px-4 text-sm font-extrabold text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={isApplyingVoucher}>{isApplyingVoucher ? "Đang áp dụng" : "Áp dụng"}</button>
                   )}
+                </form>
+                <div aria-live="polite">
+                  {voucherError && <p className="mt-2 text-xs font-semibold text-amber-200">{voucherError}</p>}
+                  {voucherMessage && <p className="mt-2 text-xs font-semibold text-emerald-200">{voucherMessage}</p>}
                 </div>
-                {voucherError && <p className="mt-2 text-xs font-semibold text-amber-200">{voucherError}</p>}
-                {voucherMessage && <p className="mt-2 text-xs font-semibold text-emerald-200">{voucherMessage}</p>}
+
+                {!appliedVoucher && totalPrice > 0 && (
+                  <div className="mt-4 border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold text-slate-300">Mã dùng được cho đơn này</p>
+                      {isAuthenticated && hasCurrentEligibleVoucherResult && eligibleVouchers.length > 0 && <span className="text-[11px] font-semibold text-emerald-200">{eligibleVouchers.length} mã</span>}
+                    </div>
+
+                    {!isAuthenticated ? (
+                      <p className="mt-2 text-xs leading-5 text-slate-500">Đăng nhập để xem các mã bạn đủ điều kiện sử dụng.</p>
+                    ) : isLoadingEligibleVouchers || !hasCurrentEligibleVoucherResult ? (
+                      <p className="mt-2 text-xs text-slate-400">Đang kiểm tra ưu đãi phù hợp...</p>
+                    ) : eligibleVouchersError ? (
+                      <p className="mt-2 text-xs font-semibold leading-5 text-amber-200">{eligibleVouchersError}</p>
+                    ) : eligibleVouchers.length === 0 ? (
+                      <p className="mt-2 text-xs leading-5 text-slate-500">Chưa có mã phù hợp với giá trị và nội dung đơn hiện tại.</p>
+                    ) : (
+                      <div className="mt-2 grid max-h-48 gap-2 overflow-y-auto pr-1">
+                        {eligibleVouchers.map((item) => (
+                          <button
+                            key={item.voucher.id}
+                            type="button"
+                            className="group flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white/[0.05] px-3 py-3 text-left transition hover:bg-white/[0.09] disabled:cursor-wait disabled:opacity-60"
+                            onClick={() => void applyVoucher(item.voucher.code)}
+                            disabled={isApplyingVoucher}
+                            aria-label={`Áp dụng mã ${item.voucher.code}, tiết kiệm ${formatCurrency(item.discount_amount)}`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-black text-white">{item.voucher.code}</span>
+                              <span className="mt-0.5 block text-[11px] leading-4 text-slate-400">{item.voucher.name || formatVoucherBenefit(item.voucher)}</span>
+                            </span>
+                            <span className="shrink-0 text-right">
+                              <span className="block text-xs font-extrabold text-emerald-200">-{formatCurrency(item.discount_amount)}</span>
+                              <span className="mt-0.5 block text-[10px] font-bold text-[#ff9aa5] group-hover:text-white">Chọn mã</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
 	              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{formatCurrency(totalPrice)}</strong></p>

@@ -28,6 +28,7 @@ import sepayWebhookRoute from "./router/sepayWebhookRouters.js";
 import ticketsRoute from "./router/ticketsRouters.js";
 import adminTicketsRoute from "./router/adminTicketsRouters.js";
 import giftsRoute from "./router/giftsRouters.js";
+import policiesRoute from "./router/policiesRouters.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -86,6 +87,7 @@ app.use("/api/bookings", bookingsRoute);
 app.use("/api/admin/bookings", adminBookingsRoute);
 app.use("/api/users", usersRoute);
 app.use("/api/settings", settingsRoute);
+app.use("/api/policies", policiesRoute);
 app.use("/api/combos", combosRoute);
 app.use("/api/marketing-content", marketingContentRoute);
 app.use("/api/admin/marketing-content", adminMarketingContentRoute);

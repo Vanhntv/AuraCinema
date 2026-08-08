@@ -212,14 +212,26 @@ const canEditShowtime = (showtime) =>
   (showtime.status === "cancelled" && isFutureShowtime(showtime));
 const canCancelShowtime = (showtime) => showtime.status === "scheduled";
 
+const getShowtimePriceSnapshot = (showtime) => ({
+  normal: showtime?.seat_prices?.normal ?? showtime?.base_price ?? null,
+  vip: showtime?.seat_prices?.vip ?? null,
+  couple: showtime?.seat_prices?.couple ?? null,
+});
+
 const getShowtimeGroupKey = (showtime) =>
-  [
+  (() => {
+    const prices = getShowtimePriceSnapshot(showtime);
+    return [
     showtime.movie_id || "movie",
     showtime.cinema_id || showtime.cinemaName || "cinema",
     showtime.room_id || showtime.roomName || "room",
     toDateInputValue(showtime.start_time) || "date",
     showtime.base_price ?? "base",
-  ].join("|");
+      prices.normal ?? "normal",
+      prices.vip ?? "vip",
+      prices.couple ?? "couple",
+    ].join("|");
+  })();
 
 const toDateInputValue = (value) => {
   if (!value) return "";
@@ -439,10 +451,10 @@ const ShowtimesPage = () => {
       ...seatPrices,
       roomType: String(selectedRoom.room_type || "2D").toUpperCase(),
       dayType: isHolidayDate(formData.start_date)
-        ? "Ng�y l?"
+        ? "Ngày lễ"
         : isWeekendDate(formData.start_date)
-          ? "Cu?i tu?n"
-          : "Ng�y th�?ng",
+          ? "Cuối tuần"
+          : "Ngày thường",
     };
   }, [formData.start_date, selectedRoom]);
 
@@ -506,6 +518,7 @@ const ShowtimesPage = () => {
           roomName: showtime.roomName || "-",
           startDate: showtime.start_time,
           basePrice: showtime.base_price,
+          seatPrices: getShowtimePriceSnapshot(showtime),
           showtimes: [],
         });
       }
@@ -1314,8 +1327,12 @@ const ShowtimesPage = () => {
                         : item.movieTitle || "Không xác định phim"}
                     </strong>
                     {!isInvalidIssue ? (
-                      <small>
-                        {item.roomName || selectedRoom?.name || "-"} · {formatDateTime(item.start_time)} - {item.endTime || formatDateTime(item.end_time)}
+                      <small className="showtime-conflict-schedule">
+                        <span>{item.roomName || selectedRoom?.name || "-"}</span>
+                        <span className="showtime-conflict-range">
+                          <span>Bắt đầu: {formatDateTime(item.start_time)}</span>
+                          <strong>Kết thúc: {item.endTime || formatDateTime(item.end_time)}</strong>
+                        </span>
                       </small>
                     ) : null}
                   </div>
@@ -1772,9 +1789,11 @@ const ShowtimesPage = () => {
                       </div>
                     </td>
                     <td>
-                      <strong className="showtime-price-cell">
-                        {formatCurrency(group.basePrice)}
-                      </strong>
+                      <div className="showtime-price-cell" aria-label="Ba loại giá vé">
+                        <span><small>Thường</small><strong>{formatCurrency(group.seatPrices.normal)}</strong></span>
+                        <span><small>VIP</small><strong>{formatCurrency(group.seatPrices.vip)}</strong></span>
+                        <span><small>Đôi</small><strong>{formatCurrency(group.seatPrices.couple)}</strong></span>
+                      </div>
                     </td>
                     <td>
                       <div className="showtime-row-actions">

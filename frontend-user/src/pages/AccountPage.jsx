@@ -1096,7 +1096,18 @@ function AccountPage() {
       <AccountTable
         empty="Không có dữ liệu"
         headers={["Ngày giao dịch", "Loại giao dịch", "Tên giao dịch", "Số điểm"]}
-      />
+      >
+        {(user?.reward_point_logs || []).length > 0 ? user.reward_point_logs.map((log) => (
+          <tr key={log._id}>
+            <td className="whitespace-nowrap px-5 py-4 text-slate-400">{formatDateTime(log.created_at)}</td>
+            <td className="px-5 py-4 font-bold text-white">{log.type === "earn" ? "Tích điểm" : log.type === "redeem" ? "Đổi điểm" : log.type === "add" ? "Cộng điểm" : "Trừ điểm"}</td>
+            <td className="px-5 py-4 text-slate-400">{log.reason || "Điều chỉnh điểm thưởng"}</td>
+            <td className={`px-5 py-4 text-right font-black ${["subtract", "redeem"].includes(log.type) ? "text-red-300" : "text-emerald-300"}`}>
+              {["subtract", "redeem"].includes(log.type) ? "-" : "+"}{Number(log.points || 0).toLocaleString("vi-VN")}
+            </td>
+          </tr>
+        )) : null}
+      </AccountTable>
     </section>
   );
 

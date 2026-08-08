@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   HiOutlineClipboardList,
+  HiOutlineDocumentText,
   HiOutlineFilm,
   HiOutlineQrcode,
   HiOutlineShoppingBag,
@@ -60,6 +61,7 @@ const menuItems = [
     section: "Hệ thống",
     items: [
       { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
+      { path: "/admin/policies", icon: <HiOutlineDocumentText />, label: "Chính sách" },
     ],
   },
 ];

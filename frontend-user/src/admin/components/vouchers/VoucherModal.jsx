@@ -124,6 +124,18 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     if (!isUsedVoucher && Number.isInteger(usageLimit) && Number.isInteger(usagePerUser) && usagePerUser > usageLimit) {
       nextErrors.usage_limit_per_user = "Lượt mỗi khách không được lớn hơn tổng lượt sử dụng";
     }
+    const movieIds = formData.applicable_movie_ids
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!isUsedVoucher && formData.apply_scope === "movie" && movieIds.length === 0) {
+      nextErrors.applicable_movie_ids = "Phải chọn ít nhất một phim khi áp dụng theo phim";
+    } else if (!isUsedVoucher && formData.apply_scope === "movie" && movieIds.some((id) => !/^[a-f\d]{24}$/i.test(id))) {
+      nextErrors.applicable_movie_ids = "ID phim không hợp lệ (cần dạng ObjectId)";
+    }
+    if (!isUsedVoucher && formData.apply_scope === "member" && formData.applicable_member_tiers.length === 0) {
+      nextErrors.applicable_member_tiers = "Phải chọn ít nhất một hạng thành viên";
+    }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -294,7 +306,8 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phim cụ thể</label>
-                  <input className="form-input" placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.applicable_movie_ids} onChange={(event) => handleChange("applicable_movie_ids", event.target.value)} disabled={isUsedVoucher} />
+                  <input className={`form-input ${errors.applicable_movie_ids ? "error" : ""}`} placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.applicable_movie_ids} onChange={(event) => handleChange("applicable_movie_ids", event.target.value)} disabled={isUsedVoucher} />
+                  {errors.applicable_movie_ids && <p className="form-error">{errors.applicable_movie_ids}</p>}
                 </div>
               </div>
               <div className="segmented-options">
@@ -305,6 +318,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
                   </label>
                 ))}
               </div>
+              {errors.applicable_member_tiers && <p className="form-error">{errors.applicable_member_tiers}</p>}
             </section>
 
             <section className="voucher-form-section">

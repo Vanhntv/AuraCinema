@@ -7,6 +7,11 @@ const rewardPointLogSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    booking_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Booking",
+      default: null,
+    },
     admin_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -43,6 +48,10 @@ const rewardPointLogSchema = new mongoose.Schema(
 );
 
 rewardPointLogSchema.index({ user_id: 1, created_at: -1 });
+rewardPointLogSchema.index(
+  { booking_id: 1, type: 1 },
+  { unique: true, partialFilterExpression: { booking_id: { $exists: true }, type: "earn" } },
+);
 
 const RewardPointLog = mongoose.model("RewardPointLog", rewardPointLogSchema);
 

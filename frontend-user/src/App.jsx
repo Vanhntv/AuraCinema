@@ -42,6 +42,7 @@ const AdminVouchersPage = lazy(() => import('./admin/pages/VouchersPage'));
 const AdminTicketScannerPage = lazy(() => import('./admin/pages/TicketScannerPage'));
 const AdminTicketScanHistoryPage = lazy(() => import('./admin/pages/TicketScanHistoryPage'));
 const AdminGiftsPage = lazy(() => import('./admin/pages/GiftsPage'));
+const AdminPoliciesPage = lazy(() => import('./admin/pages/PoliciesPage'));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -171,6 +172,7 @@ function App() {
           <Route path="gifts" element={<AdminGiftsPage />} />
           <Route path="trailers" element={<AdminTrailersPage />} />
           <Route path="users" element={<AdminUsersPage />} />
+          <Route path="policies" element={<AdminPoliciesPage />} />
           <Route path="settings" element={<Navigate to="/admin/movies" replace />} />
         </Route>
         {/* Các route InfoPages đã xóa theo yêu cầu của bạn */}
