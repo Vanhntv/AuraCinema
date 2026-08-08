@@ -8,6 +8,7 @@ import {
   HiOutlineTrendingUp,
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
+import ConfirmDialog from "../components/common/ConfirmDialog";
 import ConcessionContentModal from "../components/concessions/ConcessionContentModal";
 import ConcessionModal from "../components/concessions/ConcessionModal";
 import ConcessionPriceModal from "../components/concessions/ConcessionPriceModal";
@@ -15,6 +16,7 @@ import ConcessionStatusModal from "../components/concessions/ConcessionStatusMod
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
   createConcession,
+  deleteConcession,
   getConcessions,
   updateConcessionContent,
   updateConcessionPrice,
@@ -38,6 +40,7 @@ const ConcessionsPage = () => {
   const [priceTarget, setPriceTarget] = useState(null);
   const [contentTarget, setContentTarget] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const activeCount = useMemo(
     () => items.filter((item) => item.status).length,
@@ -185,6 +188,28 @@ const ConcessionsPage = () => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+
+    try {
+      setSubmitting(true);
+      await deleteConcession(deleteTarget._id);
+      addToast("success", `Đã xóa dịch vụ "${deleteTarget.name}"`);
+      setDeleteTarget(null);
+      const nextPage = items.length === 1 && currentPage > 1
+        ? currentPage - 1
+        : currentPage;
+      fetchConcessions(nextPage);
+    } catch (error) {
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể xóa dịch vụ bắp nước",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
       <div className="page-header">
@@ -296,6 +321,7 @@ const ConcessionsPage = () => {
               onToggleStatus={setStatusTarget}
               onEditPrice={setPriceTarget}
               onEditContent={setContentTarget}
+              onDelete={setDeleteTarget}
             />
 
             <div className="pagination">
@@ -347,6 +373,17 @@ const ConcessionsPage = () => {
         onClose={() => setStatusTarget(null)}
         onSubmit={handleUpdateStatus}
         isLoading={submitting}
+      />
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        title="Xóa dịch vụ bắp nước"
+        message={`Bạn có chắc chắn muốn xóa "${deleteTarget?.name || ""}"? Dịch vụ sẽ không còn xuất hiện trong danh sách bán, dữ liệu booking trước đây vẫn được giữ lại.`}
+        confirmLabel={submitting ? "Đang xóa..." : "Xóa dịch vụ"}
+        confirmClassName="btn-danger"
+        isLoading={submitting}
+        onConfirm={handleDelete}
+        onCancel={() => !submitting && setDeleteTarget(null)}
       />
 
       <Toast toasts={toasts} onRemove={removeToast} />

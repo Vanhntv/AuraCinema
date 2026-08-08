@@ -1,4 +1,8 @@
-import { HiOutlinePencil, HiOutlinePhotograph } from "react-icons/hi";
+import {
+  HiOutlinePencil,
+  HiOutlinePhotograph,
+  HiOutlineTrash,
+} from "react-icons/hi";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", {
@@ -43,6 +47,7 @@ const ConcessionTable = ({
   onToggleStatus,
   onEditPrice,
   onEditContent,
+  onDelete,
 }) => {
   return (
     <div className="table-wrapper concession-table-wrapper">
@@ -57,7 +62,7 @@ const ConcessionTable = ({
             <th style={{ width: "110px" }}>Tồn kho</th>
             <th style={{ width: "150px" }}>Trạng thái</th>
             <th style={{ width: "160px" }}>Cập nhật</th>
-            <th style={{ width: "110px", textAlign: "center" }}>Thao tác</th>
+            <th style={{ width: "150px", textAlign: "center" }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>
@@ -132,6 +137,15 @@ const ConcessionTable = ({
                       title="Cập nhật hình ảnh và mô tả"
                     >
                       <HiOutlinePhotograph />
+                    </button>
+                    <button
+                      className="btn btn-icon btn-ghost"
+                      style={{ color: "var(--color-danger)" }}
+                      onClick={() => onDelete(item)}
+                      title="Xóa bắp nước"
+                      aria-label={`Xóa ${item.name}`}
+                    >
+                      <HiOutlineTrash />
                     </button>
                   </div>
                 </td>
