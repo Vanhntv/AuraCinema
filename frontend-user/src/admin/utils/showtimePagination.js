@@ -1,5 +1,14 @@
 export const SHOWTIME_PAGE_SIZE = 10;
 
+export const createDefaultShowtimeViewState = () => ({
+  searchQuery: "",
+  movieFilter: "",
+  roomFilter: "",
+  dateFilter: "",
+  statusFilter: "",
+  currentPage: 1,
+});
+
 const toSortableTimestamp = (value) => {
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;

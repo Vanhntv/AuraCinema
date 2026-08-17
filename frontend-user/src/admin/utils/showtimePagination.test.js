@@ -1,9 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createDefaultShowtimeViewState,
   paginateShowtimeGroups,
   sortShowtimeGroupsNewestFirst,
 } from "./showtimePagination.js";
+
+test("resets every showtime filter and pagination to the initial state", () => {
+  assert.deepEqual(createDefaultShowtimeViewState(), {
+    searchQuery: "",
+    movieFilter: "",
+    roomFilter: "",
+    dateFilter: "",
+    statusFilter: "",
+    currentPage: 1,
+  });
+});
 
 test("sorts groups and their slots from newest to oldest", () => {
   const groups = [

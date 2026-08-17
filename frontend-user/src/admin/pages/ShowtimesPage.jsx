@@ -15,6 +15,7 @@ import {
 import axiosClient from "../../api/axiosClient";
 import ticketPriceData from "../../data/ticketPriceData.json";
 import {
+  createDefaultShowtimeViewState,
   paginateShowtimeGroups,
   sortShowtimeGroupsNewestFirst,
 } from "../utils/showtimePagination";
@@ -427,6 +428,27 @@ const ShowtimesPage = () => {
     },
     [fetchMovies, fetchRooms, fetchShowtimes],
   );
+
+  const handleRefresh = () => {
+    const hasActiveFilters = Boolean(
+      searchQuery || movieFilter || roomFilter || dateFilter || statusFilter,
+    );
+    const initialState = createDefaultShowtimeViewState();
+
+    setSearchQuery(initialState.searchQuery);
+    setMovieFilter(initialState.movieFilter);
+    setRoomFilter(initialState.roomFilter);
+    setDateFilter(initialState.dateFilter);
+    setStatusFilter(initialState.statusFilter);
+    setCurrentPage(initialState.currentPage);
+
+    if (hasActiveFilters) {
+      setLoading(true);
+      return;
+    }
+
+    void loadInitialData();
+  };
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1241,7 +1263,12 @@ const ShowtimesPage = () => {
           <p className="page-subtitle">{text.subtitle}</p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-secondary" onClick={loadInitialData}>
+          <button
+            className="btn btn-secondary"
+            disabled={loading}
+            onClick={handleRefresh}
+            type="button"
+          >
             <HiOutlineRefresh />
             {text.refresh}
           </button>
