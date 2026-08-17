@@ -14,6 +14,10 @@ import {
 } from "react-icons/hi";
 import axiosClient from "../../api/axiosClient";
 import ticketPriceData from "../../data/ticketPriceData.json";
+import {
+  paginateShowtimeGroups,
+  sortShowtimeGroupsNewestFirst,
+} from "../utils/showtimePagination";
 
 const emptyForm = {
   movie_id: "",
@@ -355,6 +359,7 @@ const ShowtimesPage = () => {
   const [roomFilter, setRoomFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [formData, setFormData] = useState(emptyForm);
   const [formErrors, setFormErrors] = useState({});
   const [editingShowtime, setEditingShowtime] = useState(null);
@@ -526,32 +531,42 @@ const ShowtimesPage = () => {
       groups.get(groupKey).showtimes.push(showtime);
     });
 
-    return Array.from(groups.values()).map((group) => {
-      const showtimesByStartTime = group.showtimes.reduce((timeMap, showtime) => {
-        const key = new Date(showtime.start_time).getTime();
-        const existingShowtime = timeMap.get(key);
+    return sortShowtimeGroupsNewestFirst(
+      Array.from(groups.values()).map((group) => {
+        const showtimesByStartTime = group.showtimes.reduce(
+          (timeMap, showtime) => {
+            const key = new Date(showtime.start_time).getTime();
+            const existingShowtime = timeMap.get(key);
 
-        if (
-          !existingShowtime ||
-          (existingShowtime.status === "cancelled" &&
-            showtime.status !== "cancelled")
-        ) {
-          timeMap.set(key, showtime);
-        }
+            if (
+              !existingShowtime ||
+              (existingShowtime.status === "cancelled" &&
+                showtime.status !== "cancelled")
+            ) {
+              timeMap.set(key, showtime);
+            }
 
-        return timeMap;
-      }, new Map());
+            return timeMap;
+          },
+          new Map(),
+        );
 
-      return {
-        ...group,
-        showtimes: Array.from(showtimesByStartTime.values()).sort(
-          (first, second) =>
-            new Date(first.start_time).getTime() -
-            new Date(second.start_time).getTime(),
-        ),
-      };
-    });
+        return {
+          ...group,
+          showtimes: Array.from(showtimesByStartTime.values()),
+        };
+      }),
+    );
   }, [filteredShowtimes]);
+
+  const {
+    currentPage: resolvedCurrentPage,
+    totalPages,
+    items: pagedShowtimeGroups,
+  } = useMemo(
+    () => paginateShowtimeGroups(groupedShowtimes, currentPage),
+    [currentPage, groupedShowtimes],
+  );
 
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1235,13 +1250,19 @@ const ShowtimesPage = () => {
             className="search-input"
             placeholder={text.searchPlaceholder}
             value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            onChange={(event) => {
+              setSearchQuery(event.target.value);
+              setCurrentPage(1);
+            }}
           />
         </div>
         <select
           className="form-input showtime-filter-select"
           value={movieFilter}
-          onChange={(event) => setMovieFilter(event.target.value)}
+          onChange={(event) => {
+            setMovieFilter(event.target.value);
+            setCurrentPage(1);
+          }}
         >
           <option value="">Tất cả phim</option>
           {movies.map((movie) => (
@@ -1253,7 +1274,10 @@ const ShowtimesPage = () => {
         <select
           className="form-input showtime-filter-select"
           value={roomFilter}
-          onChange={(event) => setRoomFilter(event.target.value)}
+          onChange={(event) => {
+            setRoomFilter(event.target.value);
+            setCurrentPage(1);
+          }}
         >
           <option value="">Tất cả phòng</option>
           {rooms.map((room) => (
@@ -1266,12 +1290,18 @@ const ShowtimesPage = () => {
           className="form-input showtime-filter-date"
           type="date"
           value={dateFilter}
-          onChange={(event) => setDateFilter(event.target.value)}
+          onChange={(event) => {
+            setDateFilter(event.target.value);
+            setCurrentPage(1);
+          }}
         />
         <select
           className="form-input showtime-filter-select"
           value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value)}
+          onChange={(event) => {
+            setStatusFilter(event.target.value);
+            setCurrentPage(1);
+          }}
         >
           <option value="">Tất cả trạng thái</option>
           {Object.entries(statusLabels).map(([value, label]) => (
@@ -1730,8 +1760,9 @@ const ShowtimesPage = () => {
         ) : groupedShowtimes.length === 0 ? (
           <div className="empty-state">{text.noShowtimes}</div>
         ) : (
-          <div className="table-container">
-            <table className="data-table showtime-group-table">
+          <>
+            <div className="table-container">
+              <table className="data-table showtime-group-table">
               <thead>
                 <tr>
                   <th>{text.movie}</th>
@@ -1744,8 +1775,8 @@ const ShowtimesPage = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody>
-                {groupedShowtimes.map((group) => (
+                <tbody>
+                  {pagedShowtimeGroups.map((group) => (
                   <tr key={group.key}>
                     <td>
                       <div className="showtime-movie-cell">
@@ -1831,10 +1862,32 @@ const ShowtimesPage = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <nav className="pagination" aria-label="Phân trang suất chiếu">
+              <button
+                className="pagination-btn"
+                disabled={resolvedCurrentPage <= 1}
+                onClick={() => setCurrentPage(resolvedCurrentPage - 1)}
+                type="button"
+              >
+                Trang trước
+              </button>
+              <span className="pagination-info">
+                Trang {resolvedCurrentPage} / {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                disabled={resolvedCurrentPage >= totalPages}
+                onClick={() => setCurrentPage(resolvedCurrentPage + 1)}
+                type="button"
+              >
+                Trang sau
+              </button>
+            </nav>
+          </>
         )}
       </div>
     </div>
