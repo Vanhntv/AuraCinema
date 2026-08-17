@@ -766,14 +766,37 @@ export const getRevenueComparison = async (req, res) => {
   }
 };
 
-export const getTopMoviesRevenue = async (_req, res) => {
+export const getTopMoviesRevenue = async (req, res) => {
   try {
+    const requestedPeriod = String(req.query?.period || "").toLowerCase();
+    const selectedDate = req.query?.date || getTodayRange().localDay;
+    const ranges = requestedPeriod
+      ? getComparisonRanges(requestedPeriod, selectedDate)
+      : null;
+
+    if (requestedPeriod && !ranges) {
+      return res.status(400).json({
+        success: false,
+        message: "Khoảng thời gian xem top phim không hợp lệ.",
+      });
+    }
+
+    const bookingMatch = {
+      payment_status: "paid",
+      status: { $in: REVENUE_BOOKING_STATUSES },
+      ...(ranges
+        ? {
+            created_at: {
+              $gte: ranges.current.start,
+              $lt: ranges.current.end,
+            },
+          }
+        : {}),
+    };
+
     const movies = await Booking.aggregate([
       {
-        $match: {
-          payment_status: "paid",
-          status: { $in: REVENUE_BOOKING_STATUSES },
-        },
+        $match: bookingMatch,
       },
       {
         $lookup: {
@@ -832,12 +855,33 @@ export const getTopMoviesRevenue = async (_req, res) => {
   }
 };
 
-export const getTopSellingCombos = async (_req, res) => {
+export const getTopSellingCombos = async (req, res) => {
   try {
+    const requestedPeriod = String(req.query?.period || "").toLowerCase();
+    const selectedDate = req.query?.date || getTodayRange().localDay;
+    const ranges = requestedPeriod
+      ? getComparisonRanges(requestedPeriod, selectedDate)
+      : null;
+
+    if (requestedPeriod && !ranges) {
+      return res.status(400).json({
+        success: false,
+        message: "Khoảng thời gian xem top combo không hợp lệ.",
+      });
+    }
+
     const combos = await Booking.aggregate([
       {
         $match: {
           payment_status: "paid",
+          ...(ranges
+            ? {
+                created_at: {
+                  $gte: ranges.current.start,
+                  $lt: ranges.current.end,
+                },
+              }
+            : {}),
         },
       },
       { $unwind: "$combos" },

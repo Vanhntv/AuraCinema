@@ -48,13 +48,17 @@ export const getRevenueComparison = async (period, date) => {
   return res.data;
 };
 
-export const getTopMoviesRevenue = async () => {
-  const res = await axiosClient.get("/admin/dashboard/movies/top-revenue");
+export const getTopMoviesRevenue = async (filters = {}) => {
+  const res = await axiosClient.get("/admin/dashboard/movies/top-revenue", {
+    params: filters,
+  });
   return res.data;
 };
 
-export const getTopSellingCombos = async () => {
-  const res = await axiosClient.get("/admin/dashboard/combos/top-selling");
+export const getTopSellingCombos = async (filters = {}) => {
+  const res = await axiosClient.get("/admin/dashboard/combos/top-selling", {
+    params: filters,
+  });
   return res.data;
 };
 

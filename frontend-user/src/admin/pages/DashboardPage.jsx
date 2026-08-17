@@ -128,6 +128,9 @@ const DashboardPage = () => {
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [topMoviesLoading, setTopMoviesLoading] = useState(true);
+  const [topMoviesError, setTopMoviesError] = useState("");
+  const [topCombosLoading, setTopCombosLoading] = useState(true);
   const [revenuePeriod, setRevenuePeriod] = useState("today");
   const [selectedDate, setSelectedDate] = useState(dashboardCurrentDate);
   const [dailyStats, setDailyStats] = useState(emptyDailyStats);
@@ -167,8 +170,8 @@ const DashboardPage = () => {
         getDashboardStats(),
         getDashboardOverview(),
         getTodayRevenue(),
-        getTopMoviesRevenue(),
-        getTopSellingCombos(),
+        getTopMoviesRevenue({ period: "today", date: dashboardCurrentDate }),
+        getTopSellingCombos({ period: "today", date: dashboardCurrentDate }),
         getBookingStatusStats(),
       ]);
 
@@ -204,6 +207,40 @@ const DashboardPage = () => {
   useEffect(() => {
     fetchDashboard();
   }, [fetchDashboard]);
+
+  const fetchTopRankings = useCallback(async (period, date) => {
+    try {
+      setTopMoviesLoading(true);
+      setTopCombosLoading(true);
+      setTopMoviesError("");
+      const params = { period };
+      if (period === "custom") params.date = date;
+      const [moviesResponse, combosResponse] = await Promise.all([
+        getTopMoviesRevenue(params),
+        getTopSellingCombos(params),
+      ]);
+      setDashboard((current) => ({
+        ...current,
+        topMovies: moviesResponse.data || [],
+        topCombos: combosResponse.data || [],
+      }));
+    } catch (err) {
+      setTopMoviesError(
+        err.response?.data?.message || "Không thể tải top phim theo khoảng thời gian.",
+      );
+      setDashboard((current) => ({ ...current, topMovies: [], topCombos: [] }));
+    } finally {
+      setTopMoviesLoading(false);
+      setTopCombosLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTopRankings(
+      revenuePeriod,
+      revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate,
+    );
+  }, [fetchTopRankings, revenuePeriod, selectedDate]);
 
   const fetchDailyStats = useCallback(async (date) => {
     if (!date) {
@@ -782,7 +819,9 @@ const DashboardPage = () => {
           <HiOutlineChartBar />
         </div>
 
-        {loading ? (
+        {topMoviesError ? (
+          <div className="dashboard-daily-error">{topMoviesError}</div>
+        ) : topMoviesLoading ? (
           <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
         ) : dashboard.topMovies.length ? (
           <div className="dashboard-top-movies-list">
@@ -832,7 +871,9 @@ const DashboardPage = () => {
           <HiOutlineShoppingBag />
         </div>
 
-        {loading ? (
+        {topMoviesError ? (
+          <div className="dashboard-daily-error">{topMoviesError}</div>
+        ) : topCombosLoading ? (
           <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
         ) : dashboard.topCombos.length ? (
           <div className="dashboard-top-movies-list">
