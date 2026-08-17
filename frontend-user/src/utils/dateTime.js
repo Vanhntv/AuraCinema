@@ -94,7 +94,7 @@ export const buildRelativeDateOptions = (days = 7) =>
       weekday: formatWeekdayLong(date),
       date: formatDayMonth(date),
       displayDate: formatDayMonth(date),
-      label: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : "",
+      label: index < 2 ? formatDayMonth(date) : "",
       fullLabel: index === 0 ? "Hôm nay" : index === 1 ? "Ngày mai" : formatWeekdayLong(date),
     };
   });
@@ -119,6 +119,11 @@ export const getShowtimeStartDate = (showtime) => {
 };
 
 export const isShowtimeUpcoming = (showtime, currentTime = Date.now()) => {
+  const status = String(
+    showtime?.status || showtime?.stored_status || "",
+  ).toLowerCase();
+  if (status === "cancelled") return false;
+
   const startDate = getShowtimeStartDate(showtime);
   return Boolean(startDate && startDate.getTime() > Number(currentTime));
 };
