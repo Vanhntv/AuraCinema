@@ -568,6 +568,16 @@ const ShowtimesPage = () => {
     [currentPage, groupedShowtimes],
   );
 
+  useEffect(() => {
+    if (currentPage === resolvedCurrentPage) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setCurrentPage(resolvedCurrentPage);
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [currentPage, resolvedCurrentPage]);
+
   const updateField = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     setFormErrors((prev) => ({ ...prev, [field]: "" }));
