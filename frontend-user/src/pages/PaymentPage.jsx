@@ -65,8 +65,11 @@ function mapBookingToSummary(booking, current = {}) {
     ageClassification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
     cinemaName: cinema.name || existing.cinemaName || "Đang cập nhật",
     roomName: room.name || existing.roomName || "Đang cập nhật",
+    showtimeId: showtime._id || existing.showtimeId,
+    showtimeStartTime: showtime.start_time || existing.showtimeStartTime,
     dateLabel: formatBookingDate(showtime.start_time),
     showtimeLabel: formatBookingTime(showtime.start_time),
+    selectedSeatIds: seats.map((item) => item._id).filter(Boolean),
     seatLabels: seats.map((item) => {
       const seat = item.seat_id || {};
       return `${seat.seat_row || ""}${seat.seat_number || ""}`;
@@ -387,7 +390,18 @@ function PaymentPage() {
   };
 
   const closePayment = () => {
-    navigate(buildPaymentClosePath(summary));
+    navigate(buildPaymentClosePath(summary), {
+      state: {
+        paymentReturnState: {
+          bookingId,
+          movieId: summary?.movieId,
+          showtimeId: summary?.showtimeId,
+          showtimeStartTime: summary?.showtimeStartTime,
+          selectedSeatIds: summary?.selectedSeatIds || [],
+          paymentExpiresAt: summary?.paymentExpiresAt,
+        },
+      },
+    });
   };
 
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";

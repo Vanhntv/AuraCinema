@@ -6,7 +6,10 @@ export const buildPaymentClosePath = (summary, currentDate = new Date()) => {
   const movieId = String(summary?.movieId || "").trim();
   if (!movieId) return FALLBACK_PAYMENT_CLOSE_PATH;
 
-  const selectedDate = getDateKey(currentDate);
-  const queryString = selectedDate ? `?date=${encodeURIComponent(selectedDate)}` : "";
+  const selectedDate = getDateKey(summary?.showtimeStartTime || currentDate);
+  const searchParams = new URLSearchParams();
+  if (selectedDate) searchParams.set("date", selectedDate);
+  if (summary?.showtimeId) searchParams.set("showtime", String(summary.showtimeId));
+  const queryString = searchParams.toString() ? `?${searchParams.toString()}` : "";
   return `/phim/${encodeURIComponent(movieId)}${queryString}#lich-chieu`;
 };
