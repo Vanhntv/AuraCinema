@@ -14,6 +14,7 @@ import { getEligibleVouchers, verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, isShowtimeUpcoming } from "../utils/dateTime";
+import { getVoucherBookingPricing, mergeBookingVoucherPricing } from "../utils/voucherBooking";
 
 const SEAT_TYPES = {
   normal: { label: "Ghe thuong", color: "bg-slate-600", selected: "bg-sky-500" },
@@ -591,25 +592,26 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   );
 
   const totalPrice = seatTotal + concessionTotal;
-  const discountAmount = Number(appliedVoucher?.discount_amount || 0);
-  const finalTotal = appliedVoucher
-    ? Number(appliedVoucher.final_amount ?? Math.max(totalPrice - discountAmount, 0))
-    : totalPrice;
+  const {
+    voucherCode: verifiedVoucherCode,
+    isCurrent: isAppliedVoucherCurrent,
+    discountAmount,
+    finalTotal,
+  } = getVoucherBookingPricing({ appliedVoucher, totalPrice });
   const voucherContextKey = `${movie._id}:${seatTotal}:${concessionTotal}:${totalPrice}`;
   const hasCurrentEligibleVoucherResult = eligibleVouchersContextKey === voucherContextKey;
 
   useEffect(() => {
     if (!appliedVoucher) return;
-    if (Number(appliedVoucher.order_amount) === totalPrice) return;
+    if (isAppliedVoucherCurrent) return;
 
     const timerId = window.setTimeout(() => {
-      setAppliedVoucher(null);
       setVoucherMessage("");
-      setVoucherError("Tổng đơn đã thay đổi. Vui lòng áp dụng lại mã giảm giá.");
+      setVoucherError("Tổng đơn đã thay đổi. Mã giảm giá sẽ được kiểm tra lại khi xác nhận.");
     }, 0);
 
     return () => window.clearTimeout(timerId);
-  }, [appliedVoucher, totalPrice]);
+  }, [appliedVoucher, isAppliedVoucherCurrent]);
 
   useEffect(() => {
     if (!isAuthenticated || totalPrice <= 0) {
@@ -971,7 +973,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           quantity: item.quantity,
           subtotal: Number(item.price || 0) * item.quantity,
         })),
-        voucherCode: appliedVoucher?.voucher?.code || "",
+        voucherCode: verifiedVoucherCode,
         discountAmount,
         totalPrice,
         finalTotal,
@@ -983,14 +985,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           combo_id: item._id,
           quantity: item.quantity,
         })),
-        voucher_code: appliedVoucher?.voucher?.code || undefined,
+        voucher_code: verifiedVoucherCode || undefined,
       });
-      const nextBookingSummary = {
+      const nextBookingSummary = mergeBookingVoucherPricing({
         ...bookingSummary,
         bookingCode: response.data?.booking_code || response.data?._id,
         bookingId: response.data?._id,
         paymentStatus: response.data?.payment_status || "pending",
-      };
+      }, response.data);
       setShowtimeSeats((current) => current.map((seat) =>
         selectedSeats.some((selected) => selected._id === seat._id)
           ? { ...seat, status: "reserved", held_by: currentUserId }

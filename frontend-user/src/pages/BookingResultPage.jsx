@@ -5,6 +5,7 @@ import { HiOutlineCheckCircle } from "react-icons/hi";
 import { getBookingDetail } from "../services/bookingService";
 import { getMyTicketQr, getTicketsByBooking } from "../services/ticketService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
+import { getBookingResultPurchaseDetails } from "../utils/voucherBooking";
 
 const RETRY_DELAYS = [0, 1000, 2000, 3000];
 
@@ -129,7 +130,7 @@ function BookingResultPage({ result = "success" }) {
     const movie = showtime.movie_id || {};
     const room = showtime.room_id || {};
     const cinema = room.cinema_id || {};
-    const combos = booking?.combos || [];
+    const purchaseDetails = getBookingResultPurchaseDetails(booking);
     return {
       bookingCode: booking?.booking_code || bookingId,
       movieTitle: movie.title || tickets[0]?.movie?.title || "Phim đang cập nhật",
@@ -140,8 +141,8 @@ function BookingResultPage({ result = "success" }) {
       cinema: cinema.name || tickets[0]?.cinema?.name || "Rạp đang cập nhật",
       room: room.name || tickets[0]?.room?.name || "Phòng đang cập nhật",
       provider: getProviderLabel(booking?.payment_provider),
-      combos,
-      voucherCode: booking?.voucher?.code || "",
+      services: purchaseDetails.services,
+      voucher: purchaseDetails.voucher,
       total: Number(booking?.total_price || 0),
       rewardPointsEarned: Number(booking?.reward_points_earned || 0),
     };
@@ -207,12 +208,35 @@ function BookingResultPage({ result = "success" }) {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 border-t border-white/10 pt-5 text-sm">
-          <div className="flex justify-between gap-4 text-slate-400"><span>Combo</span><strong className="text-right text-slate-200">{bookingSummary.combos.length ? bookingSummary.combos.map((item) => `${item.name} ×${item.quantity}`).join(", ") : "Không có"}</strong></div>
-          <div className="flex justify-between gap-4 text-slate-400"><span>Voucher</span><strong className="text-slate-200">{bookingSummary.voucherCode || "Không áp dụng"}</strong></div>
-          <div className="flex justify-between gap-4 text-base"><span>Tổng đã thanh toán</span><strong className="text-xl text-[var(--aura-coral)]">{currencyFormatter.format(bookingSummary.total)}</strong></div>
-          {bookingSummary.rewardPointsEarned > 0 && <div className="flex justify-between gap-4 text-sm"><span className="text-slate-400">Điểm thưởng nhận được</span><strong className="text-emerald-300">+{bookingSummary.rewardPointsEarned.toLocaleString("vi-VN")} điểm</strong></div>}
-        </div>
+        <dl className="mt-5 grid gap-4 border-t border-white/10 pt-5 text-sm">
+          <div className="grid gap-2 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+            <dt className="text-slate-400">Dịch vụ</dt>
+            <dd className="grid gap-2 sm:justify-self-stretch">
+              {bookingSummary.services.length ? bookingSummary.services.map((service) => (
+                <div key={service.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 text-slate-200">
+                  <span className="min-w-0">
+                    <strong className="block break-words font-bold text-white">{service.name} ×{service.quantity}</strong>
+                    {service.quantity > 1 && <span className="mt-0.5 block text-xs text-slate-500">{currencyFormatter.format(service.unitPrice)} / phần</span>}
+                  </span>
+                  <strong className="whitespace-nowrap text-right">{currencyFormatter.format(service.subtotal)}</strong>
+                </div>
+              )) : <strong className="text-slate-200 sm:text-right">Không có</strong>}
+            </dd>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+            <dt className="text-slate-400">Mã giảm giá</dt>
+            <dd className="flex items-center justify-between gap-4 sm:justify-end">
+              {bookingSummary.voucher ? (
+                <>
+                  <strong className="rounded-full bg-emerald-300/10 px-3 py-1 text-xs text-emerald-200">{bookingSummary.voucher.code}</strong>
+                  <strong className="whitespace-nowrap text-emerald-300">−{currencyFormatter.format(bookingSummary.voucher.discountAmount)}</strong>
+                </>
+              ) : <strong className="text-slate-200">Không áp dụng</strong>}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-4 text-base"><dt>Tổng đã thanh toán</dt><dd className="text-xl font-bold text-[var(--aura-coral)]">{currencyFormatter.format(bookingSummary.total)}</dd></div>
+          {bookingSummary.rewardPointsEarned > 0 && <div className="flex justify-between gap-4 text-sm"><dt className="text-slate-400">Điểm thưởng nhận được</dt><dd className="font-bold text-emerald-300">+{bookingSummary.rewardPointsEarned.toLocaleString("vi-VN")} điểm</dd></div>}
+        </dl>
       </section>
 
       {isLoading && (
