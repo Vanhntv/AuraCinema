@@ -9,7 +9,12 @@ import {
 } from "../services/bookingService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 import { getPublishedPolicies } from "../services/policyService";
-import { getRemainingSeconds, isBookingExpired } from "../utils/bookingExpiry";
+import {
+  formatPaymentCountdown,
+  getPaymentCountdownTone,
+  getRemainingSeconds,
+  isBookingExpired,
+} from "../utils/bookingExpiry";
 import { buildPaymentClosePath } from "../utils/paymentNavigation";
 
 const DEFAULT_PAYMENT_POLICIES = [
@@ -122,6 +127,31 @@ function DetailRow({ label, value, strong = false }) {
       <span className="text-slate-500">{label}</span>
       <span className={`max-w-[58%] text-right ${strong ? "font-bold text-white" : "text-slate-200"}`}>{value}</span>
     </p>
+  );
+}
+
+function PaymentCountdown({ remainingSeconds }) {
+  const isUrgent = getPaymentCountdownTone(remainingSeconds) === "urgent";
+
+  return (
+    <div
+      className={`min-w-32 rounded-[var(--aura-radius-md)] border px-4 py-3 text-center sm:text-right ${
+        isUrgent
+          ? "border-red-400/40 bg-red-500/15 text-red-200"
+          : "border-[var(--aura-coral)]/35 bg-[#ff5364]/10 text-[var(--aura-coral)]"
+      }`}
+      role="timer"
+      aria-live="polite"
+      aria-atomic="true"
+      aria-label={`Thời gian thanh toán còn lại ${formatPaymentCountdown(remainingSeconds)}`}
+    >
+      <span className="block text-[11px] font-bold uppercase tracking-[0.08em] text-current/75">
+        Thời gian thanh toán
+      </span>
+      <strong className="mt-1 block text-3xl font-black leading-none tabular-nums">
+        {formatPaymentCountdown(remainingSeconds)}
+      </strong>
+    </div>
   );
 }
 
@@ -366,7 +396,16 @@ function PaymentPage() {
   return (
     <main className="mx-auto min-h-[70vh] w-[min(960px,calc(100%_-_32px))] py-10 text-white">
       <section className="rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-ink)] p-5 shadow-[var(--aura-shadow-floating)]">
-        <h1 className="text-center text-xl font-black text-white">Xác nhận đơn hàng</h1>
+        <header className="grid items-start gap-4 sm:grid-cols-[1fr_auto_1fr]">
+          <h1 className="text-center text-xl font-black text-white sm:col-start-2">
+            Xác nhận đơn hàng
+          </h1>
+          {!bookingIsExpired && remainingSeconds > 0 && (
+            <div className="justify-self-center sm:col-start-3 sm:row-start-1 sm:justify-self-end">
+              <PaymentCountdown remainingSeconds={remainingSeconds} />
+            </div>
+          )}
+        </header>
 
         <div className="mx-auto mt-6 w-full max-w-[560px] rounded-[var(--aura-radius-md)] bg-[var(--aura-surface)] p-5">
           <div className="grid gap-4">
@@ -383,13 +422,6 @@ function PaymentPage() {
           <div className="mt-7 grid gap-3 border-t border-white/5 pt-5">
             <DetailRow label="Mã đơn" value={summary?.bookingCode || bookingId} strong />
             <DetailRow label="Trạng thái" value={bookingIsExpired ? "Đã hết hạn" : "Đang thanh toán"} strong />
-            {!bookingIsExpired && remainingSeconds > 0 && (
-              <DetailRow
-                label="Thời gian còn lại"
-                value={`${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`}
-                strong
-              />
-            )}
             <DetailRow label="Tiền vé" value={formatCurrency(summary?.seatTotal || amount)} />
             <DetailRow label="Tiền bắp nước" value={formatCurrency(summary?.concessionTotal)} />
             <DetailRow label="Giảm giá" value={`- ${formatCurrency(summary?.discountAmount)}`} />

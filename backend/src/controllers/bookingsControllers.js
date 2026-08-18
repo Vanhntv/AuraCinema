@@ -6,6 +6,7 @@ import SeatHold from "../models/SeatHold.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import User from "../models/User.js";
+import Ticket from "../models/Ticket.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import {
   consumeReservedVoucherForBooking,
@@ -23,8 +24,65 @@ import {
   expirePendingBooking,
   isBookingPaymentExpired,
 } from "../services/bookingExpiryService.js";
+import { issueBookingOrderQr } from "../services/bookingOrderService.js";
+import { getBookingOrderQrPayload } from "../services/bookingOrderService.js";
+import {
+  formatBookingOrder,
+  populateBookingOrderTickets,
+} from "../services/bookingViewService.js";
 
 const seatTypeName = (seat) => normalizeSeatTypeName(seat.seat_id?.seat_type_id?.name);
+
+const documentId = (value) => value?._id || value || null;
+
+const buildSeatLabel = (seat = {}) => {
+  const code = String(seat.seat_code || "").trim().toUpperCase();
+  if (code) return code;
+  return `${String(seat.seat_row || "").trim()}${seat.seat_number ?? ""}`.toUpperCase();
+};
+
+const buildBookingSnapshots = ({ showtime, seats, seatTotalPrice, comboTotalPrice, subtotalPrice, discountAmount, totalPrice }) => {
+  const movie = showtime.movie_id || {};
+  const room = showtime.room_id || {};
+  const cinema = room.cinema_id || {};
+
+  return {
+    movie_snapshot: {
+      movie_id: documentId(movie),
+      title: movie.title || "",
+      poster: movie.poster || "",
+      age_classification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
+    },
+    showtime_snapshot: {
+      showtime_id: showtime._id,
+      start_time: showtime.start_time || null,
+      end_time: showtime.end_time || null,
+      cinema_id: documentId(cinema),
+      cinema_name: cinema.name || "",
+      cinema_address: cinema.address || "",
+      room_id: documentId(room),
+      room_name: room.name || "",
+    },
+    seat_items: seats.map((showtimeSeat) => {
+      const seat = showtimeSeat.seat_id || {};
+      return {
+        showtime_seat_id: showtimeSeat._id,
+        seat_id: documentId(seat),
+        seat_code: String(seat.seat_code || "").trim().toUpperCase(),
+        seat_label: buildSeatLabel(seat),
+        seat_type: String(seat.seat_type_id?.name || "").trim(),
+        price: Number(showtimeSeat.price || 0),
+      };
+    }),
+    pricing: {
+      ticket_subtotal: seatTotalPrice,
+      service_subtotal: comboTotalPrice,
+      subtotal: subtotalPrice,
+      discount: discountAmount,
+      total: totalPrice,
+    },
+  };
+};
 
 const isCoupleSeat = (seat) => {
   const typeName = seatTypeName(seat);
@@ -379,7 +437,14 @@ export const createBooking = async (req, res) => {
       const now = new Date();
       const [user, showtime, hold] = await Promise.all([
         User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session),
-        Showtime.findOne({ _id: showtime_id, deleted_at: null }).session(session),
+        Showtime.findOne({ _id: showtime_id, deleted_at: null })
+          .populate({ path: "movie_id", select: "title poster age_limit" })
+          .populate({
+            path: "room_id",
+            select: "name cinema_id",
+            populate: { path: "cinema_id", select: "name address" },
+          })
+          .session(session),
         SeatHold.findOne({
           token: holdToken,
           user_id: req.user.id,
@@ -458,7 +523,7 @@ export const createBooking = async (req, res) => {
           order_amount: subtotalPrice,
           ticket_amount: seatTotalPrice,
           concession_amount: comboTotalPrice,
-          movie_id: showtime.movie_id,
+          movie_id: documentId(showtime.movie_id),
           user_id: user._id,
           session,
         });
@@ -481,12 +546,24 @@ export const createBooking = async (req, res) => {
       }
 
       const totalPrice = Math.max(subtotalPrice - discountAmount, 0);
+      const bookingSnapshots = buildBookingSnapshots({
+        showtime,
+        seats,
+        seatTotalPrice,
+        comboTotalPrice,
+        subtotalPrice,
+        discountAmount,
+        totalPrice,
+      });
+      const orderQr = issueBookingOrderQr(now);
       let booking;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
           [booking] = await Booking.create([{
             _id: bookingId,
             booking_code: generateBookingCode(),
+            ticketing_version: 2,
+            order_qr: orderQr,
             user_id: user._id,
             seat_hold_id: hold._id,
             showtime_id,
@@ -494,6 +571,7 @@ export const createBooking = async (req, res) => {
             customer_name: user.full_name,
             customer_email: user.email,
             customer_phone: user.phone,
+            ...bookingSnapshots,
             combos: reservedCombos,
             voucher: voucherSnapshot,
             subtotal_price: subtotalPrice,
@@ -541,7 +619,8 @@ export const createBooking = async (req, res) => {
 
     const bookingData = typeof createdBooking.toObject === "function"
       ? createdBooking.toObject()
-      : createdBooking;
+      : { ...createdBooking };
+    delete bookingData.order_qr;
 
     return res.status(201).json({
       success: true,
@@ -663,7 +742,11 @@ export const getBookingDetail = async (req, res) => {
     const expiryResult = await expirePendingBooking({ booking });
     if (expiryResult.expired) booking = expiryResult.booking;
 
-    return res.json({ success: true, data: booking });
+    const tickets = await populateBookingOrderTickets(
+      Ticket.find({ bookingId: booking._id }).sort({ seatLabel: 1 }),
+    );
+
+    return res.json({ success: true, data: formatBookingOrder(booking, tickets) });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
@@ -742,6 +825,9 @@ export const cancelBooking = async (req, res) => {
 
 export const getMyBookings = async (req, res) => {
   try {
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 100);
+    const filter = { user_id: req.user.id };
     const bookings = await Booking.find({ user_id: req.user.id })
       .populate({
         path: "showtime_id",
@@ -765,9 +851,70 @@ export const getMyBookings = async (req, res) => {
       })
       .populate({ path: "combos.combo_id", select: "name image type" })
       .populate({ path: "voucher.voucher_id", select: "code name apply_scope" })
-      .sort({ created_at: -1 });
-    return res.json({ success: true, data: bookings });
+      .sort({ created_at: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+    const bookingIds = bookings.map((booking) => booking._id);
+    const tickets = bookingIds.length
+      ? await populateBookingOrderTickets(
+        Ticket.find({ bookingId: { $in: bookingIds } }).sort({ seatLabel: 1 }),
+      )
+      : [];
+    const ticketsByBooking = new Map();
+    tickets.forEach((ticket) => {
+      const key = String(ticket.bookingId);
+      if (!ticketsByBooking.has(key)) ticketsByBooking.set(key, []);
+      ticketsByBooking.get(key).push(ticket);
+    });
+    const totalItems = await Booking.countDocuments(filter);
+
+    return res.json({
+      success: true,
+      data: bookings.map((booking) =>
+        formatBookingOrder(booking, ticketsByBooking.get(String(booking._id)) || [])),
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages: Math.max(Math.ceil(totalItems / limit), 1),
+      },
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getBookingOrderQr = async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user_id: req.user.id,
+    }).select("+order_qr.token_encrypted");
+
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
+    }
+    if (booking.status !== "confirmed" || booking.payment_status !== "paid") {
+      return res.status(409).json({
+        success: false,
+        code: "BOOKING_NOT_PAYABLE",
+        message: "QR đơn chỉ khả dụng sau khi thanh toán thành công",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        bookingId: booking._id,
+        bookingCode: booking.booking_code,
+        qrPayload: getBookingOrderQrPayload(booking),
+      },
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+    });
   }
 };

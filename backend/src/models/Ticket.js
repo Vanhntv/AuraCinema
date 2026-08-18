@@ -55,6 +55,11 @@ const ticketSchema = new mongoose.Schema(
       minlength: 2,
       maxlength: 12,
     },
+    seatType: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     price: {
       type: Number,
       required: true,
@@ -97,6 +102,12 @@ const ticketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+    },
+    printClaimId: {
+      type: String,
+      default: "",
+      trim: true,
+      select: false,
     },
   },
   {

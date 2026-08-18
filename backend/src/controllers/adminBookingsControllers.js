@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
+import Ticket from "../models/Ticket.js";
+import BookingActionLog from "../models/BookingActionLog.js";
 import {
   cancelValidTicketsForBooking,
   createTicketsForPaidBooking,
@@ -213,7 +215,33 @@ export const getAdminBookingById = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
     }
 
-    return res.json({ success: true, data: booking });
+    const [tickets, actionLogs] = await Promise.all([
+      Ticket.find({ bookingId: booking._id })
+        .select("-qrTokenHash")
+        .sort({ seatLabel: 1 }),
+      BookingActionLog.find({ bookingId: booking._id })
+        .sort({ createdAt: -1 })
+        .limit(100),
+    ]);
+    const bookingData = typeof booking.toObject === "function" ? booking.toObject() : booking;
+
+    return res.json({
+      success: true,
+      data: {
+        ...bookingData,
+        tickets: tickets.map((ticket) => ({
+          id: ticket._id,
+          ticketCode: ticket.ticketCode,
+          seatLabel: ticket.seatLabel,
+          seatType: ticket.seatType,
+          price: ticket.price,
+          status: ticket.status,
+          printedAt: ticket.printedAt,
+          checkedInAt: ticket.checkedInAt,
+        })),
+        action_logs: actionLogs,
+      },
+    });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }

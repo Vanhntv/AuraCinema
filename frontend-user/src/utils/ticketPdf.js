@@ -206,6 +206,9 @@ const printPdfInCurrentPage = (pdfDocument) => new Promise((resolve, reject) => 
   });
 });
 
+export const printPdfDefinition = (definition) =>
+  printPdfInCurrentPage(pdfMake.createPdf(definition));
+
 export const downloadTicketPdf = (ticket, qrPayload) => new Promise((resolve, reject) => {
   try {
     createTicketPdf(ticket, qrPayload).download(`AuraCinema-${getSafeTicketCode(ticket)}.pdf`, resolve);

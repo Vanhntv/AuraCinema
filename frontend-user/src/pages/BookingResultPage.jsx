@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { HiOutlineCheckCircle } from "react-icons/hi";
-import { getBookingDetail } from "../services/bookingService";
-import { getMyTicketQr, getTicketsByBooking } from "../services/ticketService";
+import { getBookingDetail, getBookingOrderQr } from "../services/bookingService";
+import { getMyTicketQr } from "../services/ticketService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 import { getBookingResultPurchaseDetails } from "../utils/voucherBooking";
 
@@ -58,6 +58,7 @@ function BookingResultPage({ result = "success" }) {
   const [isLoading, setIsLoading] = useState(isSuccess && Boolean(bookingId));
   const [error, setError] = useState("");
   const [ticketIssueMessage, setTicketIssueMessage] = useState("");
+  const [orderQrDataUrl, setOrderQrDataUrl] = useState("");
 
   useEffect(() => {
     if (!isSuccess || !bookingId) return undefined;
@@ -84,8 +85,7 @@ function BookingResultPage({ result = "success" }) {
             throw new Error("Thanh toán đang được backend xác nhận.");
           }
 
-          const ticketResponse = await getTicketsByBooking(bookingId);
-          const issuedTickets = ticketResponse.data || [];
+          const issuedTickets = nextBooking?.tickets || [];
           if (!issuedTickets.length) throw new Error("Vé điện tử chưa sẵn sàng.");
 
           const ticketsWithQr = await Promise.all(issuedTickets.map(async (ticket) => {
@@ -105,6 +105,21 @@ function BookingResultPage({ result = "success" }) {
 
           if (!active) return;
           setTickets(ticketsWithQr);
+          if (Number(nextBooking.ticketing_version) === 2) {
+            const orderQrResponse = await getBookingOrderQr(bookingId);
+            const orderQrPayload = orderQrResponse.data?.qrPayload;
+            if (!orderQrPayload?.startsWith("AURA_BOOKING_V2:")) {
+              throw new Error("QR đơn vé chưa sẵn sàng.");
+            }
+            const nextOrderQrDataUrl = await QRCode.toDataURL(orderQrPayload, {
+              errorCorrectionLevel: "M",
+              margin: 2,
+              width: 280,
+              color: { dark: "#101010", light: "#ffffff" },
+            });
+            if (!active) return;
+            setOrderQrDataUrl(nextOrderQrDataUrl);
+          }
           setTicketIssueMessage("");
           setIsLoading(false);
           return;
@@ -237,6 +252,18 @@ function BookingResultPage({ result = "success" }) {
           <div className="flex justify-between gap-4 text-base"><dt>Tổng đã thanh toán</dt><dd className="text-xl font-bold text-[var(--aura-coral)]">{currencyFormatter.format(bookingSummary.total)}</dd></div>
           {bookingSummary.rewardPointsEarned > 0 && <div className="flex justify-between gap-4 text-sm"><dt className="text-slate-400">Điểm thưởng nhận được</dt><dd className="font-bold text-emerald-300">+{bookingSummary.rewardPointsEarned.toLocaleString("vi-VN")} điểm</dd></div>}
         </dl>
+        {orderQrDataUrl && (
+          <div className="mt-5 grid gap-4 border-t border-white/10 pt-5 sm:grid-cols-[minmax(0,1fr)_180px] sm:items-center">
+            <div>
+              <h3 className="text-lg font-black">QR đơn vé</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">Xuất trình mã này tại quầy để nhân viên tra cứu và in toàn bộ vé hợp lệ chưa in trong đơn.</p>
+            </div>
+            <div className="rounded-2xl bg-white p-3 text-center text-black">
+              <img className="mx-auto h-36 w-36 object-contain" src={orderQrDataUrl} alt={`QR đơn ${bookingSummary.bookingCode}`} />
+              <p className="mt-1 text-[11px] font-black">{bookingSummary.bookingCode}</p>
+            </div>
+          </div>
+        )}
       </section>
 
       {isLoading && (
