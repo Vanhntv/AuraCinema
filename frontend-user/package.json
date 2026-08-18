@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test src/admin/utils/showtimePagination.test.js src/utils/dateTime.test.js src/utils/voucherBooking.test.js",
+    "test": "node --test src/admin/utils/showtimePagination.test.js src/utils/bookingExpiry.test.js src/utils/dateTime.test.js src/utils/paymentNavigation.test.js src/utils/voucherBooking.test.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"

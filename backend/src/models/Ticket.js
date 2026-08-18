@@ -107,7 +107,13 @@ const ticketSchema = new mongoose.Schema(
 
 ticketSchema.index({ ticketCode: 1 }, { unique: true });
 ticketSchema.index({ qrTokenHash: 1 }, { unique: true });
-ticketSchema.index({ showtimeId: 1, seatId: 1 }, { unique: true });
+ticketSchema.index(
+  { showtimeId: 1, seatId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ["VALID", "CHECKED_IN"] } },
+  },
+);
 ticketSchema.index({ bookingId: 1 });
 ticketSchema.index({ userId: 1, createdAt: -1 });
 ticketSchema.index({ status: 1 });

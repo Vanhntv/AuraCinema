@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getShowtimeSeats, holdShowtimeSeats, releaseShowtimeSeats } from "../services/showtimeSeatService";
+import {
+  getActiveShowtimeSeatHold,
+  getShowtimeSeats,
+  holdShowtimeSeats,
+  releaseShowtimeSeats,
+} from "../services/showtimeSeatService";
 import { getShowtimesByMovie } from "../services/showtimeService";
 import {
   cancelBooking,
@@ -280,6 +285,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [bookingResult, setBookingResult] = useState(null);
   const [confirmedBookingSummary, setConfirmedBookingSummary] = useState(null);
   const [holdExpiresAt, setHoldExpiresAt] = useState(null);
+  const [holdToken, setHoldToken] = useState("");
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [concessions, setConcessions] = useState([]);
   const [selectedConcessions, setSelectedConcessions] = useState({});
@@ -316,6 +322,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
   const bookingResultRef = useRef(null);
+  const selectedShowtimeRef = useRef(selectedShowtime);
+  const holdTokenRef = useRef(holdToken);
   const dialogRef = useRef(null);
   const previousFocusRef = useRef(null);
 
@@ -326,6 +334,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   useEffect(() => {
     bookingResultRef.current = bookingResult;
   }, [bookingResult]);
+
+  useEffect(() => {
+    selectedShowtimeRef.current = selectedShowtime;
+  }, [selectedShowtime]);
+
+  useEffect(() => {
+    holdTokenRef.current = holdToken;
+  }, [holdToken]);
 
   useEffect(() => {
     const bookingId = bookingResult?._id || confirmedBookingSummary?.bookingId;
@@ -353,14 +369,17 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const releaseHeldSeats = useCallback(async ({ resetState = true } = {}) => {
     const seatIds = selectedSeatsRef.current.map((seat) => seat._id);
+    const showtimeId = getShowtimeId(selectedShowtimeRef.current);
 
-    if (!seatIds.length || bookingResultRef.current) return true;
+    if (!seatIds.length || !showtimeId || bookingResultRef.current) return true;
 
     try {
-      await releaseShowtimeSeats(seatIds);
+      await releaseShowtimeSeats(showtimeId, seatIds, holdTokenRef.current);
       if (resetState) {
         setSelectedSeats([]);
         setHoldExpiresAt(null);
+        holdTokenRef.current = "";
+        setHoldToken("");
         setRemainingSeconds(0);
       }
       return true;
@@ -370,9 +389,38 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   }, []);
 
-  useEffect(() => () => {
-    void releaseHeldSeats({ resetState: false });
-  }, [releaseHeldSeats]);
+  const restoreActiveHold = useCallback(async (showtimeId, seats) => {
+    if (!isAuthenticated || !showtimeId) {
+      setHoldToken("");
+      holdTokenRef.current = "";
+      setHoldExpiresAt(null);
+      setSelectedSeats([]);
+      return;
+    }
+
+    try {
+      const response = await getActiveShowtimeSeatHold(showtimeId);
+      const activeHold = response?.data;
+      if (!activeHold) {
+        setHoldToken("");
+        holdTokenRef.current = "";
+        setHoldExpiresAt(null);
+        setSelectedSeats([]);
+        return;
+      }
+
+      const heldIds = new Set((activeHold.showtime_seat_ids || []).map(String));
+      holdTokenRef.current = activeHold.hold_token || "";
+      setHoldToken(holdTokenRef.current);
+      setHoldExpiresAt(activeHold.expires_at || null);
+      setSelectedSeats(seats.filter((seat) => heldIds.has(String(seat._id))));
+    } catch {
+      setHoldToken("");
+      holdTokenRef.current = "";
+      setHoldExpiresAt(null);
+      setSelectedSeats([]);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!movie?._id) return;
@@ -394,6 +442,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setBookingResult(null);
     setConfirmedBookingSummary(null);
     setHoldExpiresAt(null);
+    setHoldToken("");
     setRemainingSeconds(0);
     setSelectedConcessions({});
     setVoucherCode("");
@@ -481,7 +530,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       try {
         setIsLoadingSeats(true);
         const response = await getShowtimeSeats(initialShowtimeId);
-        if (isActive) setShowtimeSeats(response?.data || []);
+        if (isActive) {
+          const seats = response?.data || [];
+          setShowtimeSeats(seats);
+          await restoreActiveHold(initialShowtimeId, seats);
+        }
       } catch (requestError) {
         if (isActive) {
           setShowtimeSeats([]);
@@ -497,7 +550,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     return () => {
       isActive = false;
     };
-  }, [initialShowtime, initialShowtimeId, movie?._id, shouldLoadInitialShowtime]);
+  }, [initialShowtime, initialShowtimeId, movie?._id, restoreActiveHold, shouldLoadInitialShowtime]);
 
   useEffect(() => {
     if (!holdExpiresAt) return undefined;
@@ -507,6 +560,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       if (seconds === 0) {
         setSelectedSeats([]);
         setHoldExpiresAt(null);
+        holdTokenRef.current = "";
+        setHoldToken("");
         setSeatError("Thời gian giữ ghế đã hết. Vui lòng chọn lại ghế.");
       }
     };
@@ -544,7 +599,21 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     const syncSeats = async () => {
       try {
         const response = await getShowtimeSeats(showtimeId);
-        if (isActive) setShowtimeSeats(response?.data || []);
+        const seats = response?.data || [];
+        if (!isActive) return;
+
+        setShowtimeSeats(seats);
+        const hasUnrestoredOwnHold =
+          !holdTokenRef.current &&
+          selectedSeatsRef.current.length === 0 &&
+          seats.some((seat) =>
+            isHeldSeat(seat) &&
+            currentUserId &&
+            getSeatHolderId(seat) === currentUserId,
+          );
+        if (hasUnrestoredOwnHold) {
+          await restoreActiveHold(showtimeId, seats);
+        }
       } catch {
         if (isActive) setSeatError("Không thể đồng bộ trạng thái ghế mới nhất.");
       }
@@ -555,7 +624,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       isActive = false;
       window.clearInterval(timer);
     };
-  }, [selectedShowtime, step]);
+  }, [currentUserId, restoreActiveHold, selectedShowtime, step]);
 
   const selectedTypeSummary = useMemo(() => {
     const selectedTypes = Array.from(
@@ -729,7 +798,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     try {
       setIsLoadingSeats(true);
       const response = await getShowtimeSeats(showtimeId);
-      setShowtimeSeats(response?.data || []);
+      const seats = response?.data || [];
+      setShowtimeSeats(seats);
+      await restoreActiveHold(showtimeId, seats);
     } catch (requestError) {
       setShowtimeSeats([]);
       setSeatError(requestError.response?.data?.message || "Không thể tải sơ đồ ghế.");
@@ -785,7 +856,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       }
 
       try {
-        await releaseShowtimeSeats(releaseIds);
+        await releaseShowtimeSeats(
+          getShowtimeId(selectedShowtime),
+          releaseIds,
+          holdToken,
+        );
       } catch (requestError) {
         if (requestError.response?.status === 401) {
           logout();
@@ -798,7 +873,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setSelectedSeats((current) =>
         current.filter((item) => !releaseIds.includes(item._id)),
       );
-      if (selectedSeats.length === releaseIds.length) setHoldExpiresAt(null);
+      if (selectedSeats.length === releaseIds.length) {
+        setHoldExpiresAt(null);
+        holdTokenRef.current = "";
+        setHoldToken("");
+      }
       setSeatError("");
       return;
     }
@@ -821,10 +900,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
 
     try {
-      const response = await holdShowtimeSeats(getShowtimeId(selectedShowtime), [
-        ...selectedSeats.map((item) => item._id),
-        ...newSeats.map((item) => item._id),
-      ]);
+      const response = await holdShowtimeSeats(
+        getShowtimeId(selectedShowtime),
+        [
+          ...selectedSeats.map((item) => item._id),
+          ...newSeats.map((item) => item._id),
+        ],
+        holdToken,
+      );
       setSelectedSeats((current) => {
         const currentIds = new Set(current.map((item) => item._id));
         return [
@@ -832,6 +915,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           ...newSeats.filter((item) => !currentIds.has(item._id)),
         ];
       });
+      holdTokenRef.current = response.data.hold_token || holdToken;
+      setHoldToken(holdTokenRef.current);
       setHoldExpiresAt(response.data.expires_at);
       setSeatError("");
     } catch (requestError) {
@@ -844,7 +929,11 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setSeatError(requestError.response?.data?.message || "Không thể giữ ghế này.");
       try {
         const latestSeats = await getShowtimeSeats(getShowtimeId(selectedShowtime));
-        setShowtimeSeats(latestSeats?.data || []);
+        const seats = latestSeats?.data || [];
+        setShowtimeSeats(seats);
+        if (requestError.response?.status === 409 && !holdTokenRef.current) {
+          await restoreActiveHold(getShowtimeId(selectedShowtime), seats);
+        }
       } catch {
         setSeatError(requestError.response?.data?.message || "Không thể giữ ghế này.");
       }
@@ -933,7 +1022,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         return false;
       }
 
-      const holdResponse = await holdShowtimeSeats(showtimeId, seatIds);
+      const holdResponse = await holdShowtimeSeats(showtimeId, seatIds, holdToken);
+      holdTokenRef.current = holdResponse.data.hold_token || holdToken;
+      setHoldToken(holdTokenRef.current);
       setHoldExpiresAt(holdResponse.data.expires_at);
       setSeatError("");
       return true;
@@ -958,6 +1049,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       if (!canContinue) return;
 
       const bookingSummary = {
+        movieId: movie._id,
         movieTitle: movie.title,
         ageClassification: Number(movie.age_limit || movie.ageLimit) > 0 ? `T${movie.age_limit || movie.ageLimit}` : "P",
         dateLabel: `${selectedDate.fullLabel || selectedDate.label} · ${selectedDate.displayDate}`,
@@ -986,12 +1078,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           quantity: item.quantity,
         })),
         voucher_code: verifiedVoucherCode || undefined,
+        hold_token: holdToken,
       });
       const nextBookingSummary = mergeBookingVoucherPricing({
         ...bookingSummary,
         bookingCode: response.data?.booking_code || response.data?._id,
         bookingId: response.data?._id,
         paymentStatus: response.data?.payment_status || "pending",
+        paymentExpiresAt: response.data?.payment_expires_at || null,
       }, response.data);
       setShowtimeSeats((current) => current.map((seat) =>
         selectedSeats.some((selected) => selected._id === seat._id)
@@ -999,6 +1093,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           : seat,
       ));
       setSelectedSeats([]);
+      holdTokenRef.current = "";
+      setHoldToken("");
+      setHoldExpiresAt(null);
       setSelectedConcessions({});
       setAppliedVoucher(null);
       setVoucherCode("");
@@ -1081,6 +1178,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setConfirmedBookingSummary(null);
       setSelectedSeats([]);
       setHoldExpiresAt(null);
+      holdTokenRef.current = "";
+      setHoldToken("");
       setRemainingSeconds(0);
       setStep("select-seat");
       const showtimeId = getShowtimeId(selectedShowtime);

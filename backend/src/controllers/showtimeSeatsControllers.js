@@ -9,9 +9,12 @@ import {
 } from "../services/showtimeSeatService.js";
 import Booking from "../models/Booking.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
-import { isBrokenSeatType } from "../utils/seatTypes.js";
-
-const HOLD_DURATION_MS = 5 * 60 * 1000;
+import {
+  acquireSeatHold,
+  expireSeatHolds,
+  getActiveSeatHold,
+  releaseSeatHold,
+} from "../services/seatHoldService.js";
 
 const releaseFailedPaymentReservedSeats = async (showtimeId) => {
   if (!showtimeId) return;
@@ -22,97 +25,86 @@ const releaseFailedPaymentReservedSeats = async (showtimeId) => {
     payment_status: { $in: ["failed", "cancelled"] },
     showtime_seat_ids: { $exists: true, $ne: [] },
   }).select("showtime_seat_ids");
-  const seatIds = failedBookings.flatMap((booking) => booking.showtime_seat_ids || []);
 
-  if (!seatIds.length) return;
+  if (!failedBookings.length) return;
 
-  await ShowtimeSeat.updateMany(
-    { _id: { $in: seatIds }, status: "reserved" },
-    { $set: { status: "available", held_by: null, hold_expires_at: null } },
-  );
+  await Promise.all(failedBookings.map((booking) =>
+    ShowtimeSeat.updateMany(
+      {
+        _id: { $in: booking.showtime_seat_ids || [] },
+        status: "reserved",
+        reserved_by_booking_id: booking._id,
+      },
+      {
+        $set: {
+          status: "available",
+          held_by: null,
+          reserved_by_booking_id: null,
+          hold_expires_at: null,
+        },
+      },
+    ),
+  ));
 };
 
 export const holdShowtimeSeats = async (req, res) => {
   try {
-    const { showtime_id, showtime_seat_ids } = req.body;
-    if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
-      return res.status(400).json({ success: false, message: "Vui long chon ghe can giu" });
-    }
-    if (new Set(showtime_seat_ids.map(String)).size !== showtime_seat_ids.length) {
-      return res.status(400).json({ success: false, message: "Danh sach ghe bi trung lap" });
-    }
-    const now = new Date();
-    await ShowtimeSeat.updateMany(
-      { status: "held", hold_expires_at: { $lte: now } },
-      { $set: { status: "available", held_by: null, hold_expires_at: null } },
-    );
-    let seatsQuery = ShowtimeSeat.find({ _id: { $in: showtime_seat_ids }, showtime_id, deleted_at: null });
-    if (typeof seatsQuery.populate === "function") {
-      seatsQuery = seatsQuery.populate({
-        path: "seat_id",
-        populate: { path: "seat_type_id", select: "name description price_multiplier" },
-      });
-    }
-    const seats = await seatsQuery;
-    if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
-      return res.status(409).json({ success: false, message: "Ghe hong khong the giu ve" });
-    }
-    const canHold = seats.length === new Set(showtime_seat_ids.map(String)).size && seats.every((seat) =>
-      seat.status === "available" || (seat.status === "held" && String(seat.held_by) === String(req.user.id)),
-    );
-    if (!canHold) return res.status(409).json({ success: false, message: "Mot hoac nhieu ghe dang duoc nguoi khac giu" });
-    const expiresAt = new Date(Date.now() + HOLD_DURATION_MS);
-    const acquiredSeats = [];
+    const result = await acquireSeatHold({
+      userId: req.user.id,
+      showtimeId: req.body?.showtime_id,
+      seatIds: req.body?.showtime_seat_ids,
+      token: String(req.body?.hold_token || "").trim(),
+    });
 
-    for (const seatId of showtime_seat_ids) {
-      const previousSeat = await ShowtimeSeat.findOneAndUpdate(
-        {
-          _id: seatId,
-          showtime_id,
-          deleted_at: null,
-          $or: [
-            { status: "available" },
-            { status: "held", held_by: req.user.id },
-          ],
-        },
-        { $set: { status: "held", held_by: req.user.id, hold_expires_at: expiresAt } },
-        { new: false },
-      );
+    return res.json({ success: true, data: result });
+  } catch (error) { return sendError(res, error); }
+};
 
-      if (!previousSeat) {
-        await Promise.all(acquiredSeats.map(({ seat }) => ShowtimeSeat.updateOne(
-          {
-            _id: seat._id,
-            status: "held",
-            held_by: req.user.id,
-            hold_expires_at: expiresAt,
-          },
-          seat.status === "available"
-            ? { $set: { status: "available", held_by: null, hold_expires_at: null } }
-            : { $set: { status: "held", held_by: seat.held_by, hold_expires_at: seat.hold_expires_at } },
-        )));
-
-        return res.status(409).json({
-          success: false,
-          message: "Một hoặc nhiều ghế vừa được người khác giữ. Vui lòng tải lại sơ đồ ghế.",
-        });
-      }
-
-      acquiredSeats.push({ seat: previousSeat });
+export const getActiveShowtimeSeatHold = async (req, res) => {
+  try {
+    const showtimeId = String(req.query?.showtime_id || "").trim();
+    if (!showtimeId) {
+      return res.status(400).json({ success: false, message: "Thiếu suất chiếu" });
     }
 
-    return res.json({ success: true, data: { expires_at: expiresAt } });
+    const hold = await getActiveSeatHold({
+      userId: req.user.id,
+      showtimeId,
+      token: String(req.query?.hold_token || "").trim(),
+    });
+
+    return res.json({
+      success: true,
+      data: hold ? {
+        hold_id: hold._id,
+        hold_token: hold.token,
+        showtime_id: hold.showtime_id,
+        showtime_seat_ids: hold.showtime_seat_ids || [],
+        expires_at: hold.expires_at,
+      } : null,
+    });
   } catch (error) { return sendError(res, error); }
 };
 
 export const releaseShowtimeSeats = async (req, res) => {
   try {
-    const { showtime_seat_ids = [] } = req.body;
-    await ShowtimeSeat.updateMany(
-      { _id: { $in: showtime_seat_ids }, status: "held", held_by: req.user.id },
-      { $set: { status: "available", held_by: null, hold_expires_at: null } },
-    );
-    return res.json({ success: true });
+    const { showtime_id, showtime_seat_ids = [], hold_token = "" } = req.body || {};
+
+    if (!showtime_id) {
+      await ShowtimeSeat.updateMany(
+        { _id: { $in: showtime_seat_ids }, status: "held", held_by: req.user.id, hold_id: null },
+        { $set: { status: "available", held_by: null, hold_id: null, reserved_by_booking_id: null, hold_expires_at: null } },
+      );
+      return res.json({ success: true, data: { released: true, showtime_seat_ids: [] } });
+    }
+
+    const result = await releaseSeatHold({
+      userId: req.user.id,
+      showtimeId: showtime_id,
+      token: String(hold_token || "").trim(),
+      seatIds: showtime_seat_ids,
+    });
+    return res.json({ success: true, data: result });
   } catch (error) { return sendError(res, error); }
 };
 
@@ -127,9 +119,10 @@ const sendError = (res, error) => {
 
 export const getAllShowtimeSeats = async (req, res) => {
   try {
+    await expireSeatHolds({ showtimeId: req.query.showtime_id });
     await ShowtimeSeat.updateMany(
-      { status: "held", hold_expires_at: { $lte: new Date() } },
-      { $set: { status: "available", held_by: null, hold_expires_at: null } },
+      { status: "held", hold_id: null, hold_expires_at: { $lte: new Date() } },
+      { $set: { status: "available", held_by: null, hold_id: null, reserved_by_booking_id: null, hold_expires_at: null } },
     );
     await releaseFailedPaymentReservedSeats(req.query.showtime_id);
     let showtimeSeats = await listShowtimeSeats(req.query);

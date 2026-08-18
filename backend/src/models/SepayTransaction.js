@@ -20,7 +20,7 @@ const sepayTransactionSchema = new mongoose.Schema(
     raw_payload: { type: mongoose.Schema.Types.Mixed, required: true },
     processing_status: {
       type: String,
-      enum: ["received", "paid", "ignored", "failed"],
+      enum: ["received", "paid", "ignored", "failed", "review_required"],
       default: "received",
     },
     error_message: { type: String, default: "", trim: true },

@@ -10,6 +10,7 @@ const bookingSchema = new mongoose.Schema(
       uppercase: true,
     },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    seat_hold_id: { type: mongoose.Schema.Types.ObjectId, ref: "SeatHold", default: null },
     showtime_id: { type: mongoose.Schema.Types.ObjectId, ref: "Showtime", required: true },
     showtime_seat_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: "ShowtimeSeat", required: true }],
     customer_name: { type: String, required: true, trim: true },
@@ -45,9 +46,11 @@ const bookingSchema = new mongoose.Schema(
     cancelled_at: { type: Date, default: null },
     payment_status: {
       type: String,
-      enum: ["pending", "paid", "failed", "cancelled", "refunded"],
+      enum: ["pending", "paid", "failed", "cancelled", "expired", "refund_pending", "refunded"],
       default: "pending",
     },
+    payment_expires_at: { type: Date, default: null },
+    resources_released_at: { type: Date, default: null },
     payment_provider: { type: String, default: "internal", trim: true },
     payment_transaction_id: { type: String, default: "", trim: true },
     paid_at: { type: Date, default: null },
@@ -57,6 +60,8 @@ const bookingSchema = new mongoose.Schema(
   },
   { timestamps: { createdAt: "created_at", updatedAt: "updated_at" } },
 );
+
+bookingSchema.index({ status: 1, payment_status: 1, payment_expires_at: 1 });
 
 const Booking = mongoose.model("Booking", bookingSchema);
 export default Booking;

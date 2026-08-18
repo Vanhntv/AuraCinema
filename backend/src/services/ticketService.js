@@ -6,6 +6,7 @@ import Ticket from "../models/Ticket.js";
 const QR_TOKEN_ENCRYPTION_VERSION = "v1";
 export const TICKET_QR_PREFIX = "AURA_TICKET:";
 const MAX_QR_PAYLOAD_LENGTH = 512;
+const ACTIVE_TICKET_STATUSES = ["VALID", "CHECKED_IN"];
 
 const normalizeText = (value = "") => String(value || "").trim();
 
@@ -213,6 +214,7 @@ export const createTicketsForPaidBooking = async (bookingOrId, options = {}) => 
         filter: {
           showtimeId: draft.showtimeId,
           seatId: draft.seatId,
+          status: { $in: ACTIVE_TICKET_STATUSES },
         },
         update: {
           $setOnInsert: draft,

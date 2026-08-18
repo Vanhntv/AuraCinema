@@ -13,6 +13,13 @@ import {
   buildSepayPgCheckoutFields,
   fetchSepayPgOrder,
 } from "../services/sepayPgPaymentService.js";
+import {
+  assertBookingPayable,
+  expirePendingBooking,
+  isBookingPaymentExpired,
+  markLatePaymentForReview,
+} from "../services/bookingExpiryService.js";
+import { refundVoucherUsageForBooking } from "../services/voucherService.js";
 
 const normalizeMoney = (value) => Math.round(Number(value || 0));
 
@@ -79,11 +86,31 @@ const cancelUnpaidBookingAfterPaymentFailure = async ({
   await booking.save({ session });
 
   await ShowtimeSeat.updateMany(
-    { _id: { $in: booking.showtime_seat_ids }, status: "reserved", held_by: booking.user_id },
-    { $set: { status: "available", held_by: null, hold_expires_at: null } },
+    {
+      _id: { $in: booking.showtime_seat_ids },
+      status: "reserved",
+      held_by: booking.user_id,
+      reserved_by_booking_id: booking._id,
+    },
+    {
+      $set: {
+        status: "available",
+        held_by: null,
+        reserved_by_booking_id: null,
+        hold_expires_at: null,
+      },
+    },
     { session },
   );
   await restoreComboStock({ combos: booking.combos, session });
+  if (booking.voucher?.voucher_id) {
+    await refundVoucherUsageForBooking({
+      bookingId: booking._id,
+      refundUsage: true,
+      finalStatus: "cancelled",
+      session,
+    });
+  }
 
   return booking;
 };
@@ -142,10 +169,11 @@ export const createVnpayPaymentUrl = async (req, res) => {
     if (booking.payment_status === "paid") {
       return res.status(409).json({ success: false, message: "Đơn vé đã thanh toán" });
     }
-
-    if (booking.status !== "pending" || booking.payment_status !== "pending") {
-      return res.status(409).json({ success: false, message: "Đơn vé không còn ở trạng thái chờ thanh toán" });
+    const expiryResult = await expirePendingBooking({ booking });
+    if (expiryResult.expired) {
+      return res.status(410).json({ success: false, message: "Đơn vé đã hết thời gian thanh toán" });
     }
+    assertBookingPayable(booking);
 
     const bookingAmount = normalizeMoney(booking.total_price);
     if (requestedAmount !== bookingAmount) {
@@ -211,10 +239,11 @@ export const createSepayPgCheckout = async (req, res) => {
     if (booking.payment_status === "paid") {
       return res.status(409).json({ success: false, message: "Đơn vé đã thanh toán" });
     }
-
-    if (booking.status !== "pending" || booking.payment_status !== "pending") {
-      return res.status(409).json({ success: false, message: "Đơn vé không còn ở trạng thái chờ thanh toán" });
+    const expiryResult = await expirePendingBooking({ booking });
+    if (expiryResult.expired) {
+      return res.status(410).json({ success: false, message: "Đơn vé đã hết thời gian thanh toán" });
     }
+    assertBookingPayable(booking);
 
     const bookingAmount = normalizeMoney(booking.total_price);
     if (requestedAmount !== bookingAmount) {
@@ -318,6 +347,18 @@ export const verifyVnpayReturn = async (req, res) => {
         { new: true, upsert: true, session, sort: { created_at: -1 } },
       );
 
+      if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking))) {
+        const expiryResult = await expirePendingBooking({ booking, session });
+        const expiredBooking = expiryResult.booking || booking;
+        return markLatePaymentForReview({
+          booking: expiredBooking,
+          payment,
+          provider: "vnpay",
+          transactionId: String(params.vnp_TransactionNo || params.vnp_BankTranNo || bookingId),
+          session,
+        });
+      }
+
       if (success) {
         const paidBooking = await markBookingAsPaid({
           booking,
@@ -349,9 +390,12 @@ export const verifyVnpayReturn = async (req, res) => {
       return { booking: cancelledBooking, payment };
     });
 
-    return res.json({
-      success,
-      message: success ? "Thanh toán VNPay thành công" : "Thanh toán VNPay thất bại",
+    const requiresRefundReview = Boolean(result.lateSuccess);
+    return res.status(requiresRefundReview ? 409 : 200).json({
+      success: success && !requiresRefundReview,
+      message: requiresRefundReview
+        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch đang chờ đối soát và hoàn tiền"
+        : success ? "Thanh toán VNPay thành công" : "Thanh toán VNPay thất bại",
       data: {
         booking_id: result.booking._id,
         booking_status: result.booking.status,
@@ -359,6 +403,7 @@ export const verifyVnpayReturn = async (req, res) => {
         payment_id: result.payment._id,
         vnp_ResponseCode: responseCode,
         vnp_TransactionStatus: transactionStatus,
+        requires_refund_review: requiresRefundReview,
       },
     });
   } catch (error) {
@@ -425,6 +470,18 @@ export const verifySepayPgReturn = async (req, res) => {
         { new: true, upsert: true, session, sort: { created_at: -1 } },
       );
 
+      if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking))) {
+        const expiryResult = await expirePendingBooking({ booking, session });
+        const expiredBooking = expiryResult.booking || booking;
+        return markLatePaymentForReview({
+          booking: expiredBooking,
+          payment,
+          provider: "sepay_pg",
+          transactionId: String(order.transaction_id || order.payment_id || order.id || invoiceNumber),
+          session,
+        });
+      }
+
       if (success) {
         const paidBooking = await markBookingAsPaid({
           booking,
@@ -460,15 +517,19 @@ export const verifySepayPgReturn = async (req, res) => {
       return { booking, payment };
     });
 
-    return res.json({
-      success,
-      message: success ? "Thanh toán SePay thành công" : "Thanh toán SePay chưa hoàn tất",
+    const requiresRefundReview = Boolean(result.lateSuccess);
+    return res.status(requiresRefundReview ? 409 : 200).json({
+      success: success && !requiresRefundReview,
+      message: requiresRefundReview
+        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch đang chờ đối soát và hoàn tiền"
+        : success ? "Thanh toán SePay thành công" : "Thanh toán SePay chưa hoàn tất",
       data: {
         booking_id: result.booking._id,
         booking_status: result.booking.status,
         payment_status: result.booking.payment_status,
         payment_id: result.payment._id,
         sepay_status: orderStatus,
+        requires_refund_review: requiresRefundReview,
       },
     });
   } catch (error) {

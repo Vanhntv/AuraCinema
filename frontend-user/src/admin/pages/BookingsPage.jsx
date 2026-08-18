@@ -20,8 +20,12 @@ const paymentStatusLabels = {
   paid: "Đã thanh toán",
   failed: "Thanh toán lỗi",
   cancelled: "Đã hủy",
+  expired: "Hết hạn thanh toán",
+  refund_pending: "Chờ đối soát hoàn tiền",
   refunded: "Đã hoàn tiền",
 };
+
+const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled", "refunded"]);
 
 const bookingStatusLabels = {
   pending: "Chờ thanh toán",
@@ -50,7 +54,7 @@ const formatDateTime = (value) => {
 
 const statusBadgeClass = (status) => {
   if (status === "paid" || status === "confirmed") return "status-badge status-now-showing";
-  if (status === "pending" || status === "failed") return "status-badge status-coming-soon";
+  if (["pending", "failed", "refund_pending"].includes(status)) return "status-badge status-coming-soon";
   return "status-badge status-ended";
 };
 
@@ -461,7 +465,10 @@ const BookingDetailModal = ({
                   value={paymentForm.payment_status}
                 >
                   {Object.entries(paymentStatusLabels)
-                    .filter(([value]) => booking.payment_status !== "paid" || ["paid", "cancelled", "refunded"].includes(value))
+                    .filter(([value]) =>
+                      (editablePaymentStatuses.has(value) || value === booking.payment_status) &&
+                      (booking.payment_status !== "paid" || ["paid", "cancelled", "refunded"].includes(value)),
+                    )
                     .map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                     ))}
@@ -482,6 +489,9 @@ const BookingDetailModal = ({
               <h3>Hủy đơn do rạp</h3>
               {booking.payment_status === "paid" && (
                 <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ Ticket. Hoàn tiền cần được xử lý và đối soát trong workflow thanh toán riêng.</p>
+              )}
+              {booking.payment_status === "refund_pending" && (
+                <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; hãy đối soát giao dịch và chuyển sang “Đã hoàn tiền” sau khi xử lý.</p>
               )}
               <div className="booking-action-row">
                 <input

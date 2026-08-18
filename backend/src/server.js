@@ -29,6 +29,7 @@ import ticketsRoute from "./router/ticketsRouters.js";
 import adminTicketsRoute from "./router/adminTicketsRouters.js";
 import giftsRoute from "./router/giftsRouters.js";
 import policiesRoute from "./router/policiesRouters.js";
+import { startBookingLifecycleWorker } from "./services/bookingLifecycleWorker.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -107,6 +108,7 @@ app.use((error, req, res, next) => {
 });
 
 connectDB().then(() => {
+  startBookingLifecycleWorker();
   const server = app.listen(PORT, () => {
     console.log(`Backend running on port ${PORT}`);
   });
