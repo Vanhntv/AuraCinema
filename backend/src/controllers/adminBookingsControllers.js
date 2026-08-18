@@ -13,8 +13,10 @@ import {
   creditRewardPointsForBooking,
   reverseRewardPointsForBooking,
 } from "../services/rewardPointService.js";
+import { expirePendingBooking } from "../services/bookingExpiryService.js";
 
-const PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "refunded"];
+const PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "expired", "refund_pending", "refunded"];
+const EDITABLE_PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "refunded"];
 const BOOKING_STATUSES = ["pending", "confirmed", "cancelled"];
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -131,20 +133,36 @@ const restoreComboStock = async ({ combos = [] }) => {
 
 const releaseBookingSeats = async (booking) => {
   await ShowtimeSeat.updateMany(
-    { _id: { $in: booking.showtime_seat_ids }, status: { $in: ["reserved", "booked"] } },
-    { $set: { status: "available", held_by: null, hold_expires_at: null } },
+    {
+      _id: { $in: booking.showtime_seat_ids },
+      status: { $in: ["reserved", "booked"] },
+      reserved_by_booking_id: booking._id,
+    },
+    {
+      $set: {
+        status: "available",
+        held_by: null,
+        reserved_by_booking_id: null,
+        hold_expires_at: null,
+      },
+    },
   );
 };
 
 const markBookingSeatsAsBooked = async (booking) => {
   await ShowtimeSeat.updateMany(
-    { _id: { $in: booking.showtime_seat_ids }, status: "reserved" },
+    {
+      _id: { $in: booking.showtime_seat_ids },
+      status: "reserved",
+      reserved_by_booking_id: booking._id,
+    },
     { $set: { status: "booked", held_by: null, hold_expires_at: null } },
   );
 
   const bookedCount = await ShowtimeSeat.countDocuments({
     _id: { $in: booking.showtime_seat_ids },
     status: "booked",
+    reserved_by_booking_id: booking._id,
   });
 
   if (bookedCount !== booking.showtime_seat_ids.length) {
@@ -180,7 +198,7 @@ export const getAdminBookings = async (req, res) => {
       },
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
@@ -197,14 +215,14 @@ export const getAdminBookingById = async (req, res) => {
 
     return res.json({ success: true, data: booking });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
 export const updateAdminBookingPayment = async (req, res) => {
   try {
     const paymentStatus = String(req.body.payment_status || "").trim();
-    if (!PAYMENT_STATUSES.includes(paymentStatus)) {
+    if (!EDITABLE_PAYMENT_STATUSES.includes(paymentStatus)) {
       return res.status(400).json({ success: false, message: "Trạng thái thanh toán không hợp lệ" });
     }
 
@@ -215,6 +233,16 @@ export const updateAdminBookingPayment = async (req, res) => {
     const booking = await Booking.findById(req.params.id);
     if (!booking) {
       return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
+    }
+
+    if (paymentStatus === "paid") {
+      const expiryResult = await expirePendingBooking({ booking });
+      if (expiryResult.expired || booking.payment_status === "expired") {
+        return res.status(410).json({
+          success: false,
+          message: "Đơn vé đã hết thời gian thanh toán; không thể xác nhận thủ công",
+        });
+      }
     }
 
     const wasCancelled = booking.status === "cancelled";
@@ -258,20 +286,19 @@ export const updateAdminBookingPayment = async (req, res) => {
       await releaseBookingSeats(booking);
       await restoreComboStock({ combos: booking.combos });
       await cancelValidTicketsForBooking(booking._id);
-    }
-
-    if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
-      await refundVoucherUsageForBooking({
-        bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: "refunded",
-      });
+      if (paymentStatus === "refunded" || previousPaymentStatus !== "paid") {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: true,
+          finalStatus: paymentStatus === "refunded" ? "refunded" : "cancelled",
+        });
+      }
     }
 
     const populatedBooking = await populateBooking(Booking.findById(booking._id));
     return res.json({ success: true, message: "Đã cập nhật thanh toán", data: populatedBooking });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
@@ -305,11 +332,13 @@ export const cancelAdminBooking = async (req, res) => {
     await releaseBookingSeats(booking);
     await restoreComboStock({ combos: booking.combos });
     await cancelValidTicketsForBooking(booking._id);
-    await refundVoucherUsageForBooking({
-      bookingId: booking._id,
-      refundUsage: refundPayment,
-      finalStatus: refundPayment ? "refunded" : "cancelled",
-    });
+    if (!wasPaid || refundPayment) {
+      await refundVoucherUsageForBooking({
+        bookingId: booking._id,
+        refundUsage: true,
+        finalStatus: refundPayment ? "refunded" : "cancelled",
+      });
+    }
 
     const populatedBooking = await populateBooking(Booking.findById(booking._id));
     return res.json({
@@ -318,6 +347,6 @@ export const cancelAdminBooking = async (req, res) => {
       data: populatedBooking,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };

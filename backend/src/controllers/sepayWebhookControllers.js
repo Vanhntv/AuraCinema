@@ -2,6 +2,11 @@ import SepayTransaction from "../models/SepayTransaction.js";
 import Booking from "../models/Booking.js";
 import Payment from "../models/Payment.js";
 import { markBookingAsPaid } from "./bookingsControllers.js";
+import {
+  expirePendingBooking,
+  isBookingPaymentExpired,
+  markLatePaymentForReview,
+} from "../services/bookingExpiryService.js";
 import crypto from "crypto";
 import mongoose from "mongoose";
 
@@ -164,6 +169,47 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
     }
 
     const transactionId = String(payload.referenceCode || payload.id || transactionKey);
+    if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
+      const expiryResult = await expirePendingBooking({ booking, session });
+      const expiredBooking = expiryResult.booking || booking;
+      const payment = await Payment.findOneAndUpdate(
+        { provider: "sepay", transaction_ref: transactionKey },
+        {
+          $set: {
+            booking_id: expiredBooking._id,
+            payment_code: expiredBooking.booking_code,
+            provider: "sepay",
+            amount: transferAmount,
+            status: "expired",
+            transaction_ref: transactionKey,
+            transaction_id: transactionId,
+            bank_code: String(payload.gateway || ""),
+            response_code: "00",
+            transaction_status: "00",
+            order_info: String(payload.content || ""),
+            raw_return_data: payload,
+          },
+        },
+        { upsert: true, returnDocument: "after", session },
+      );
+
+      await markLatePaymentForReview({
+        booking: expiredBooking,
+        payment,
+        provider: "sepay",
+        transactionId,
+        session,
+      });
+      await markSepayTransactionStatus({
+        transactionKey,
+        bookingId: expiredBooking._id,
+        status: "review_required",
+        errorMessage: "Thanh toán đến sau khi đơn đã hết hạn; cần hoàn tiền/đối soát",
+        session,
+      });
+      return;
+    }
+
     const paidBooking = await markBookingAsPaid({
       booking,
       provider: "sepay",

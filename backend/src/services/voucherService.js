@@ -395,6 +395,66 @@ export const reserveVoucherUsageForPayment = async ({
   throw error;
 };
 
+export const reserveVoucherForBooking = async ({
+  bookingId,
+  userId,
+  voucherResult,
+  subtotalPrice,
+  session = null,
+}) => {
+  const voucher = voucherResult?.voucher;
+  const voucherId = voucher?.id || voucher?._id;
+  if (!bookingId || !voucherId) return null;
+
+  await reserveVoucherUsageForPayment({
+    voucherId,
+    userId,
+    usageLimitPerUser: voucher.usage_limit_per_user,
+    quantity: 1,
+    session,
+  });
+
+  const discountAmount = Number(voucherResult.discount_amount || 0);
+  const [usage] = await VoucherUsage.create([{
+    voucher_id: voucherId,
+    booking_id: bookingId,
+    user_id: userId,
+    code: voucher.code,
+    discount_type: voucher.discount_type,
+    discount_value: Number(voucher.discount_value || 0),
+    apply_scope: voucher.apply_scope,
+    subtotal_price: Number(subtotalPrice || 0),
+    eligible_amount: Number(voucherResult.eligible_amount || 0),
+    discount_amount: discountAmount,
+    final_price: Math.max(Number(subtotalPrice || 0) - discountAmount, 0),
+    status: "reserved",
+    payment_status: "pending",
+    used_at: null,
+  }], { session });
+
+  return usage;
+};
+
+export const consumeReservedVoucherForBooking = async ({
+  bookingId,
+  now = new Date(),
+  session = null,
+}) => {
+  if (!bookingId) return null;
+  const usage = await VoucherUsage.findOne({
+    booking_id: bookingId,
+    status: "reserved",
+    payment_status: "pending",
+  }).session(session);
+  if (!usage) return null;
+
+  usage.status = "used";
+  usage.payment_status = "paid";
+  usage.used_at = now;
+  await usage.save({ session });
+  return usage;
+};
+
 const deriveVoucherStatus = (data) => {
   const now = new Date();
   const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));

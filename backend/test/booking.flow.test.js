@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { authMiddleware } from "../src/middleware/authMiddleware.js";
+import { updateAdminBookingPayment } from "../src/controllers/adminBookingsControllers.js";
 import { confirmBookingPayment, createBooking } from "../src/controllers/bookingsControllers.js";
 import { holdShowtimeSeats } from "../src/controllers/showtimeSeatsControllers.js";
 import Booking from "../src/models/Booking.js";
+import SeatHold from "../src/models/SeatHold.js";
 import Showtime from "../src/models/Showtime.js";
 import ShowtimeSeat from "../src/models/ShowtimeSeat.js";
 import Ticket from "../src/models/Ticket.js";
@@ -70,6 +72,16 @@ const makeSeat = ({ id, typeName, row = "A", number = 1, price = 50000, heldBy }
   held_by: heldBy,
 });
 
+const makeActiveHold = ({ userId, showtimeId, seatIds }) => ({
+  _id: new mongoose.Types.ObjectId(),
+  token: "hold-token",
+  user_id: userId,
+  showtime_id: showtimeId,
+  showtime_seat_ids: seatIds,
+  status: "active",
+  expires_at: new Date(Date.now() + 5 * 60 * 1000),
+});
+
 test("hold seats rejects unauthenticated requests before any seat is held", async () => {
   const req = { headers: {} };
   const res = makeResponse();
@@ -85,23 +97,32 @@ test("hold seats rejects unauthenticated requests before any seat is held", asyn
   assert.match(res.body.message, /token/i);
 });
 
-test("hold seats releases expired holds before validating a new hold", async () => {
+test("hold seats returns the server-owned hold token and deadline", async () => {
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatId = new mongoose.Types.ObjectId().toString();
   const userId = new mongoose.Types.ObjectId().toString();
-  const updateCalls = [];
-  let atomicHoldFilter = null;
+  const holdId = new mongoose.Types.ObjectId();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+  let atomicHoldUpdate = null;
 
   await withPatched([
-    [ShowtimeSeat, "updateMany", async (filter, update) => {
-      updateCalls.push({ filter, update });
-      return { modifiedCount: 1 };
-    }],
+    [SeatHold, "find", () => ({ limit: async () => [] })],
+    [SeatHold, "findOne", async () => null],
+    [SeatHold, "create", async () => [{
+      _id: holdId,
+      token: "hold-token",
+      user_id: userId,
+      showtime_id: showtimeId,
+      showtime_seat_ids: [],
+      status: "active",
+      expires_at: expiresAt,
+    }]],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
     [ShowtimeSeat, "find", async () => [
-      { _id: seatId, status: "available", held_by: null },
+      { _id: seatId, status: "available", held_by: null, seat_id: { seat_type_id: { name: "Ghế thường" } } },
     ]],
-    [ShowtimeSeat, "findOneAndUpdate", async (filter) => {
-      atomicHoldFilter = filter;
+    [ShowtimeSeat, "findOneAndUpdate", async (filter, update) => {
+      atomicHoldUpdate = update;
       return { _id: seatId, status: "available", held_by: null, hold_expires_at: null };
     }],
   ], async () => {
@@ -115,16 +136,10 @@ test("hold seats releases expired holds before validating a new hold", async () 
 
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.equal(res.body.success, true);
-    assert.equal(updateCalls.length, 1);
-    assert.deepEqual(updateCalls[0].filter.status, "held");
-    assert.ok(updateCalls[0].filter.hold_expires_at.$lte instanceof Date);
-    assert.deepEqual(updateCalls[0].update.$set, {
-      status: "available",
-      held_by: null,
-      hold_expires_at: null,
-    });
-    assert.equal(String(atomicHoldFilter._id), seatId);
-    assert.equal(String(atomicHoldFilter.$or[1].held_by), userId);
+    assert.equal(res.body.data.hold_token, "hold-token");
+    assert.equal(new Date(res.body.data.expires_at).toISOString(), expiresAt.toISOString());
+    assert.equal(String(atomicHoldUpdate.$set.hold_id), String(holdId));
+    assert.equal(String(atomicHoldUpdate.$set.held_by), userId);
   });
 });
 
@@ -132,17 +147,30 @@ test("hold seats rolls back partial acquisition when another user wins a seat", 
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatIds = [new mongoose.Types.ObjectId().toString(), new mongoose.Types.ObjectId().toString()];
   const userId = new mongoose.Types.ObjectId().toString();
+  const holdId = new mongoose.Types.ObjectId();
   let atomicCall = 0;
   let rollbackFilter = null;
   let rollbackUpdate = null;
 
   await withPatched([
-    [ShowtimeSeat, "updateMany", async () => ({ modifiedCount: 0 })],
+    [SeatHold, "find", () => ({ limit: async () => [] })],
+    [SeatHold, "findOne", async () => null],
+    [SeatHold, "create", async () => [{
+      _id: holdId,
+      token: "hold-token",
+      user_id: userId,
+      showtime_id: showtimeId,
+      showtime_seat_ids: [],
+      status: "active",
+      expires_at: new Date(Date.now() + 5 * 60 * 1000),
+    }]],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
     [ShowtimeSeat, "find", async () => seatIds.map((id) => ({
       _id: id,
       status: "available",
       held_by: null,
       hold_expires_at: null,
+      seat_id: { seat_type_id: { name: "Ghế thường" } },
     }))],
     [ShowtimeSeat, "findOneAndUpdate", async () => {
       atomicCall += 1;
@@ -164,8 +192,34 @@ test("hold seats rolls back partial acquisition when another user wins a seat", 
 
     assert.equal(res.statusCode, 409);
     assert.equal(String(rollbackFilter._id), seatIds[0]);
-    assert.equal(String(rollbackFilter.held_by), userId);
+    assert.equal(String(rollbackFilter.hold_id), String(holdId));
     assert.equal(rollbackUpdate.$set.status, "available");
+  });
+});
+
+test("create booking requires a hold token before starting database work", async () => {
+  let sessionStarted = false;
+
+  await withPatched([
+    [mongoose, "startSession", async () => {
+      sessionStarted = true;
+      throw new Error("database work must not start");
+    }],
+  ], async () => {
+    const req = {
+      user: { id: new mongoose.Types.ObjectId().toString(), role: "user" },
+      body: {
+        showtime_id: new mongoose.Types.ObjectId().toString(),
+        showtime_seat_ids: [new mongoose.Types.ObjectId().toString()],
+      },
+    };
+    const res = makeResponse();
+
+    await createBooking(req, res);
+
+    assert.equal(res.statusCode, 400);
+    assert.match(res.body.message, /phiên giữ ghế/i);
+    assert.equal(sessionStarted, false);
   });
 });
 
@@ -173,6 +227,7 @@ test("create booking rejects broken seats", async () => {
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatId = new mongoose.Types.ObjectId().toString();
+  const hold = makeActiveHold({ userId, showtimeId, seatIds: [seatId] });
   let updateCalled = false;
 
   await withPatched([
@@ -187,6 +242,7 @@ test("create booking rejects broken seats", async () => {
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
     })],
+    [SeatHold, "findOne", () => sessionResult(hold)],
     [ShowtimeSeat, "find", () => populateSessionResult([
       makeSeat({ id: seatId, typeName: "Ghe hong", number: 1, heldBy: userId }),
     ])],
@@ -197,7 +253,7 @@ test("create booking rejects broken seats", async () => {
   ], async () => {
     const req = {
       user: { id: userId, role: "user" },
-      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId] },
+      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId], hold_token: hold.token },
     };
     const res = makeResponse();
 
@@ -218,6 +274,7 @@ test("create booking allows multiple seat types in one booking", async () => {
     new mongoose.Types.ObjectId().toString(),
   ];
   const bookingId = new mongoose.Types.ObjectId().toString();
+  const hold = makeActiveHold({ userId, showtimeId, seatIds });
   let createdPayload = null;
   let reservedUpdate = null;
 
@@ -233,6 +290,8 @@ test("create booking allows multiple seat types in one booking", async () => {
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
     })],
+    [SeatHold, "findOne", () => sessionResult(hold)],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
     [ShowtimeSeat, "find", () => populateSessionResult([
       makeSeat({ id: seatIds[0], typeName: "Ghế thường", number: 1, heldBy: userId }),
       makeSeat({ id: seatIds[1], typeName: "VIP", number: 2, price: 70000, heldBy: userId }),
@@ -248,7 +307,7 @@ test("create booking allows multiple seat types in one booking", async () => {
   ], async () => {
     const req = {
       user: { id: userId, role: "user" },
-      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds },
+      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds, hold_token: hold.token },
     };
     const res = makeResponse();
 
@@ -256,13 +315,16 @@ test("create booking allows multiple seat types in one booking", async () => {
 
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.data._id, bookingId);
+    assert.equal(String(res.body.data._id), String(createdPayload._id));
     assert.deepEqual(reservedUpdate.filter._id.$in.map(String), seatIds);
     assert.equal(reservedUpdate.update.$set.status, "reserved");
+    assert.equal(String(reservedUpdate.update.$set.reserved_by_booking_id), String(createdPayload._id));
     assert.equal(createdPayload.subtotal_price, 120000);
     assert.equal(createdPayload.total_price, 120000);
     assert.equal(createdPayload.status, "pending");
     assert.equal(createdPayload.payment_status, "pending");
+    assert.equal(String(createdPayload.seat_hold_id), String(hold._id));
+    assert.ok(createdPayload.payment_expires_at instanceof Date);
   });
 });
 
@@ -274,6 +336,7 @@ test("create booking reserves held seats and stores the computed total", async (
     new mongoose.Types.ObjectId().toString(),
   ];
   const bookingId = new mongoose.Types.ObjectId().toString();
+  const hold = makeActiveHold({ userId, showtimeId, seatIds });
   let updatedReservedSeats = [];
   let seatUpdate = null;
   let createdPayload = null;
@@ -290,6 +353,8 @@ test("create booking reserves held seats and stores the computed total", async (
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
     })],
+    [SeatHold, "findOne", () => sessionResult(hold)],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
     [ShowtimeSeat, "find", () => populateSessionResult([
       makeSeat({ id: seatIds[0], typeName: "Ghế thường", number: 1, price: 50000, heldBy: userId }),
       makeSeat({ id: seatIds[1], typeName: "Ghế thường", number: 2, price: 50000, heldBy: userId }),
@@ -306,7 +371,7 @@ test("create booking reserves held seats and stores the computed total", async (
   ], async () => {
     const req = {
       user: { id: userId, role: "user" },
-      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds },
+      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds, hold_token: hold.token },
     };
     const res = makeResponse();
 
@@ -314,9 +379,10 @@ test("create booking reserves held seats and stores the computed total", async (
 
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.data._id, bookingId);
+    assert.equal(String(res.body.data._id), String(createdPayload._id));
     assert.deepEqual(updatedReservedSeats, seatIds);
     assert.equal(seatUpdate.$set.status, "reserved");
+    assert.equal(String(seatUpdate.$set.reserved_by_booking_id), String(createdPayload._id));
     assert.match(createdPayload.booking_code, /^AURA\d{12}$/);
     assert.equal(createdPayload.subtotal_price, 100000);
     assert.equal(createdPayload.discount_amount, 0);
@@ -436,6 +502,7 @@ test("confirm booking payment marks reserved seats as booked", async () => {
     assert.equal(res.body.success, true);
     assert.deepEqual(bookedSeatUpdate.filter._id.$in.map(String), seatIds);
     assert.equal(bookedSeatUpdate.filter.status, "reserved");
+    assert.equal(String(bookedSeatUpdate.filter.reserved_by_booking_id), String(bookingId));
     assert.equal(bookedSeatUpdate.update.$set.status, "booked");
     assert.equal(booking.status, "confirmed");
     assert.equal(booking.payment_status, "paid");
@@ -445,12 +512,87 @@ test("confirm booking payment marks reserved seats as booked", async () => {
   });
 });
 
+test("admin payment cannot confirm a booking whose seats are owned by another booking", async () => {
+  const userId = new mongoose.Types.ObjectId();
+  const bookingId = new mongoose.Types.ObjectId();
+  const showtimeId = new mongoose.Types.ObjectId();
+  const seatId = new mongoose.Types.ObjectId();
+  let saved = false;
+  let creditedPoints = false;
+  let issuedTickets = false;
+
+  const booking = {
+    _id: bookingId,
+    booking_code: "AURA000000000001",
+    user_id: userId,
+    showtime_id: showtimeId,
+    showtime_seat_ids: [seatId],
+    combos: [],
+    subtotal_price: 50000,
+    total_price: 50000,
+    status: "pending",
+    payment_status: "pending",
+    payment_provider: "internal",
+    async save() {
+      saved = true;
+      return this;
+    },
+  };
+
+  await withPatched([
+    [Booking, "findById", () => booking],
+    [ShowtimeSeat, "updateMany", async (filter) => {
+      assert.equal(String(filter.reserved_by_booking_id), String(bookingId));
+      return { modifiedCount: 0 };
+    }],
+    [ShowtimeSeat, "countDocuments", async (filter) => {
+      assert.equal(String(filter.reserved_by_booking_id), String(bookingId));
+      return 0;
+    }],
+    [User, "findOneAndUpdate", async () => {
+      creditedPoints = true;
+      return { reward_points: 5 };
+    }],
+    [RewardPointLog, "create", async () => []],
+    [Ticket, "find", () => {
+      issuedTickets = true;
+      return {
+        select() {
+          return this;
+        },
+        session: async () => [],
+      };
+    }],
+  ], async () => {
+    const req = {
+      params: { id: String(bookingId) },
+      body: {
+        payment_status: "paid",
+        payment_provider: "manual",
+        payment_transaction_id: "",
+      },
+    };
+    const res = makeResponse();
+
+    await updateAdminBookingPayment(req, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.match(res.body.message, /ghế/i);
+    assert.equal(saved, false);
+    assert.equal(creditedPoints, false);
+    assert.equal(issuedTickets, false);
+    assert.equal(booking.status, "pending");
+    assert.equal(booking.payment_status, "pending");
+  });
+});
+
 test("create booking retries when generated booking_code collides", async () => {
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatId = new mongoose.Types.ObjectId().toString();
   const bookingId = new mongoose.Types.ObjectId().toString();
   const createPayloads = [];
+  const hold = makeActiveHold({ userId, showtimeId, seatIds: [seatId] });
 
   await withPatched([
     [mongoose, "startSession", async () => makeFakeSession()],
@@ -464,6 +606,8 @@ test("create booking retries when generated booking_code collides", async () => 
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
     })],
+    [SeatHold, "findOne", () => sessionResult(hold)],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
     [ShowtimeSeat, "find", () => populateSessionResult([
       makeSeat({ id: seatId, typeName: "Ghế thường", number: 1, price: 50000, heldBy: userId }),
     ])],
@@ -482,7 +626,7 @@ test("create booking retries when generated booking_code collides", async () => 
   ], async () => {
     const req = {
       user: { id: userId, role: "user" },
-      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId] },
+      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId], hold_token: hold.token },
     };
     const res = makeResponse();
 
@@ -499,7 +643,8 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatId = new mongoose.Types.ObjectId().toString();
-  const bookingId = new mongoose.Types.ObjectId().toString();
+  const hold = makeActiveHold({ userId, showtimeId, seatIds: [seatId] });
+  let createdPayload = null;
   const failingSession = {
     async withTransaction() {
       throw new Error("Only servers in a sharded cluster can start a new transaction at the active transaction number");
@@ -530,6 +675,16 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
         };
       },
     })],
+    [SeatHold, "findOne", () => ({
+      session: async (session) => {
+        sessionsUsed.push(session);
+        return hold;
+      },
+    })],
+    [SeatHold, "updateOne", async (filter, update, options) => {
+      sessionsUsed.push(options.session);
+      return { modifiedCount: 1 };
+    }],
     [ShowtimeSeat, "find", () => ({
       populate() {
         return {
@@ -545,12 +700,13 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
     [ShowtimeSeat, "updateMany", async () => ({ modifiedCount: 1 })],
     [Booking, "create", async ([payload], options) => {
       sessionsUsed.push(options.session);
-      return [{ _id: bookingId, ...payload }];
+      createdPayload = payload;
+      return [{ ...payload }];
     }],
   ], async () => {
     const req = {
       user: { id: userId, role: "user" },
-      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId] },
+      body: { showtime_id: showtimeId, showtime_seat_ids: [seatId], hold_token: hold.token },
     };
     const res = makeResponse();
 
@@ -558,7 +714,7 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
 
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.success, true);
-    assert.equal(res.body.data._id, bookingId);
+    assert.equal(String(res.body.data._id), String(createdPayload._id));
     assert.ok(sessionsUsed.length > 0);
     assert.ok(sessionsUsed.every((session) => session === null));
   });

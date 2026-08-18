@@ -184,6 +184,44 @@ test("ticket issuance is idempotent when every seat already has a ticket", async
   });
 });
 
+test("cancelled tickets do not block a new ticket allocation for the same showtime seat", async () => {
+  const booking = makePaidBooking(1);
+  const cancelledTicket = {
+    _id: new mongoose.Types.ObjectId(),
+    bookingId: new mongoose.Types.ObjectId(),
+    showtimeId: booking.showtime_id._id,
+    seatId: booking.showtime_seat_ids[0].seat_id._id,
+    status: "CANCELLED",
+  };
+  let capturedFilter = null;
+  let insertedDrafts = [];
+  let findCall = 0;
+
+  await withPatched([
+    [Booking, "findById", () => makePopulateQuery(booking)],
+    [Ticket, "find", (filter) => {
+      findCall += 1;
+      if (filter.showtimeId) {
+        return makeTicketFind(() => [cancelledTicket]);
+      }
+      return makeTicketFind(() => (findCall === 1 ? [] : insertedDrafts));
+    }],
+    [Ticket, "bulkWrite", async (operations) => {
+      capturedFilter = operations[0].updateOne.filter;
+      insertedDrafts = operations.map((operation) => ({
+        _id: new mongoose.Types.ObjectId(),
+        ...operation.updateOne.update.$setOnInsert,
+      }));
+      return { upsertedCount: insertedDrafts.length };
+    }],
+  ], async () => {
+    const result = await createTicketsForPaidBooking(booking._id);
+
+    assert.equal(result.tickets.length, 1);
+    assert.deepEqual(capturedFilter.status.$in, ["VALID", "CHECKED_IN"]);
+  });
+});
+
 test("customer cannot cancel a confirmed paid booking", async () => {
   const booking = {
     _id: new mongoose.Types.ObjectId(),

@@ -9,6 +9,8 @@ import {
 } from "../services/bookingService";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 import { getPublishedPolicies } from "../services/policyService";
+import { getRemainingSeconds, isBookingExpired } from "../utils/bookingExpiry";
+import { buildPaymentClosePath } from "../utils/paymentNavigation";
 
 const DEFAULT_PAYMENT_POLICIES = [
   {
@@ -54,6 +56,7 @@ function mapBookingToSummary(booking, current = {}) {
     bookingId: booking?._id || existing.bookingId,
     bookingCode: booking?.booking_code || existing.bookingCode,
     movieTitle: movie.title || existing.movieTitle,
+    movieId: movie._id || existing.movieId,
     ageClassification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
     cinemaName: cinema.name || existing.cinemaName || "Đang cập nhật",
     roomName: room.name || existing.roomName || "Đang cập nhật",
@@ -72,6 +75,7 @@ function mapBookingToSummary(booking, current = {}) {
     finalTotal: Number(booking?.total_price || 0),
     total_price: Number(booking?.total_price || 0),
     paymentStatus: booking?.payment_status || existing.paymentStatus || "pending",
+    paymentExpiresAt: booking?.payment_expires_at || existing.paymentExpiresAt || null,
   };
 }
 
@@ -139,12 +143,20 @@ function PaymentPage() {
   const [paymentError, setPaymentError] = useState("");
   const [hasConfirmedBooking, setHasConfirmedBooking] = useState(false);
   const [paymentPolicies, setPaymentPolicies] = useState([]);
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    getRemainingSeconds(summary?.paymentExpiresAt),
+  );
 
   const amount = useMemo(
     () => Number(summary?.finalTotal || summary?.total_price || 0),
     [summary?.finalTotal, summary?.total_price],
   );
   const bookingIsPaid = paymentStatus === "paid";
+  const serverBookingIsExpired = ["expired", "refund_pending"].includes(paymentStatus);
+  const bookingIsExpired = isBookingExpired(
+    paymentStatus,
+    summary?.paymentExpiresAt,
+  );
   const publishedPaymentPolicies = paymentPolicies.filter((policy) => policy.surface === "payment");
   const visiblePaymentPolicies = publishedPaymentPolicies.length > 0
     ? publishedPaymentPolicies
@@ -187,6 +199,7 @@ function PaymentPage() {
           finalTotal: current?.finalTotal || data.total_price || 0,
           total_price: data.total_price || current?.total_price || 0,
           paymentStatus: data.payment_status || current?.paymentStatus || "pending",
+          paymentExpiresAt: data.payment_expires_at || current?.paymentExpiresAt || null,
         }));
       } catch (error) {
         if (isActive) {
@@ -204,6 +217,31 @@ function PaymentPage() {
       window.clearInterval(intervalId);
     };
   }, [bookingId]);
+
+  useEffect(() => {
+    if (!summary?.paymentExpiresAt || bookingIsPaid) {
+      return undefined;
+    }
+
+    const updateCountdown = () => {
+      setRemainingSeconds(getRemainingSeconds(summary.paymentExpiresAt));
+    };
+    const initialTimerId = window.setTimeout(updateCountdown, 0);
+    const intervalId = window.setInterval(updateCountdown, 1000);
+    return () => {
+      window.clearTimeout(initialTimerId);
+      window.clearInterval(intervalId);
+    };
+  }, [bookingIsPaid, summary?.paymentExpiresAt]);
+
+  useEffect(() => {
+    if (!serverBookingIsExpired || bookingIsPaid) return;
+    showToast("error", "Đơn vé đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn.");
+    navigate("/lich-chieu", {
+      replace: true,
+      state: { message: "Đơn vé đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn." },
+    });
+  }, [serverBookingIsExpired, bookingIsPaid, navigate]);
 
   useEffect(() => {
     if (!bookingId) return undefined;
@@ -319,7 +357,7 @@ function PaymentPage() {
   };
 
   const closePayment = () => {
-    navigate("/tai-khoan?tab=tickets");
+    navigate(buildPaymentClosePath(summary));
   };
 
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
@@ -344,7 +382,14 @@ function PaymentPage() {
 
           <div className="mt-7 grid gap-3 border-t border-white/5 pt-5">
             <DetailRow label="Mã đơn" value={summary?.bookingCode || bookingId} strong />
-            <DetailRow label="Trạng thái" value="Đang thanh toán" strong />
+            <DetailRow label="Trạng thái" value={bookingIsExpired ? "Đã hết hạn" : "Đang thanh toán"} strong />
+            {!bookingIsExpired && remainingSeconds > 0 && (
+              <DetailRow
+                label="Thời gian còn lại"
+                value={`${String(Math.floor(remainingSeconds / 60)).padStart(2, "0")}:${String(remainingSeconds % 60).padStart(2, "0")}`}
+                strong
+              />
+            )}
             <DetailRow label="Tiền vé" value={formatCurrency(summary?.seatTotal || amount)} />
             <DetailRow label="Tiền bắp nước" value={formatCurrency(summary?.concessionTotal)} />
             <DetailRow label="Giảm giá" value={`- ${formatCurrency(summary?.discountAmount)}`} />
@@ -440,14 +485,14 @@ function PaymentPage() {
               {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
             </button>
             <button className="h-11 rounded-[var(--aura-radius-sm)] border border-white/15 bg-white/[0.04] px-4 text-sm font-bold text-white hover:border-white/30" type="button" onClick={closePayment}>
-              Đóng
+              Quay lại phim
             </button>
           </div>
           <button
             className="h-11 rounded-[var(--aura-radius-sm)] bg-[var(--aura-coral)] px-5 text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
             onClick={completeSelectedPayment}
-            disabled={isPaying || isCancellingBooking || !amount || !hasConfirmedBooking}
+            disabled={isPaying || isCancellingBooking || bookingIsExpired || !amount || !hasConfirmedBooking}
           >
             {isPaying ? selectedPaymentLoadingText : selectedPaymentButtonText}
           </button>

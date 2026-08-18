@@ -24,6 +24,8 @@ const showtimeSeatSchema = new mongoose.Schema(
       trim: true,
     },
     held_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    hold_id: { type: mongoose.Schema.Types.ObjectId, ref: "SeatHold", default: null },
+    reserved_by_booking_id: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", default: null },
     hold_expires_at: { type: Date, default: null },
     deleted_at: {
       type: Date,
@@ -48,6 +50,9 @@ showtimeSeatSchema.index(
     },
   }
 );
+
+showtimeSeatSchema.index({ reserved_by_booking_id: 1 });
+showtimeSeatSchema.index({ hold_id: 1 });
 
 const ShowtimeSeat = mongoose.model("ShowtimeSeat", showtimeSeatSchema);
 

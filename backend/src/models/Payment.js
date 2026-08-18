@@ -8,7 +8,7 @@ const paymentSchema = new mongoose.Schema(
     amount: { type: Number, required: true, min: 0 },
     status: {
       type: String,
-      enum: ["pending", "paid", "failed", "cancelled", "refunded"],
+      enum: ["pending", "paid", "failed", "cancelled", "expired", "review_required", "refunded"],
       default: "pending",
     },
     transaction_ref: { type: String, required: true, trim: true },
