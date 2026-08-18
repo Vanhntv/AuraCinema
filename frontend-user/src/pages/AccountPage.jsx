@@ -140,8 +140,7 @@ const resolveImageUrl = (image) => {
 
 const getTicketDate = (ticket) => formatDate(ticket.showtime?.startTime);
 
-const getTicketTime = (ticket) => {
-  const value = ticket.showtime?.startTime;
+const formatTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -150,6 +149,36 @@ const getTicketTime = (ticket) => {
     minute: "2-digit",
   });
 };
+
+const getTicketTime = (ticket) => formatTime(ticket.showtime?.startTime);
+
+const getOrderSeatLabels = (order) =>
+  order.tickets.map((ticket) => ticket.seat?.label).filter(Boolean).join(", ") || "-";
+
+const getOrderSeatTypeLabels = (order) => {
+  const seatTypes = [...new Set(order.tickets.map((ticket) => ticket.seat?.type).filter(Boolean))];
+  if (seatTypes.length) return seatTypes.join(", ");
+  return order.tickets.length ? `${order.tickets.length} vé` : "Chưa có dữ liệu ghế";
+};
+
+const bookingPaymentStatusMeta = {
+  paid: { label: "Đã thanh toán", className: "text-emerald-300 bg-emerald-400/10" },
+  pending: { label: "Chờ thanh toán", className: "text-amber-200 bg-amber-400/10" },
+  failed: { label: "Thanh toán lỗi", className: "text-red-200 bg-red-400/10" },
+  cancelled: { label: "Đã hủy", className: "text-red-200 bg-red-400/10" },
+  expired: { label: "Đã hết hạn", className: "text-amber-200 bg-amber-400/10" },
+  refund_pending: { label: "Chờ hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
+  refunded: { label: "Đã hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
+};
+
+const getBookingPaymentStatusMeta = (status) =>
+  bookingPaymentStatusMeta[status] || {
+    label: "Đang cập nhật",
+    className: "text-slate-300 bg-white/[0.06]",
+  };
+
+const getOrderServiceLabels = (order) =>
+  order.services.map((service) => `${service.name} ×${service.quantity}`).join(", ") || "Không có";
 
 function EmptyState({ children = "Không có dữ liệu" }) {
   return (
@@ -316,7 +345,8 @@ function AccountPage() {
           : [];
         const allOrders = [firstPage, ...remainingPages]
           .flatMap((response) => response.data || [])
-          .map(mapBookingOrderView);
+          .map(mapBookingOrderView)
+          .filter((order) => order.status === "confirmed" && order.paymentStatus === "paid");
         if (isActive) {
           setBookingOrders(allOrders);
           setTickets(allOrders.flatMap((order) => order.tickets));
@@ -824,16 +854,11 @@ function AccountPage() {
     }
   };
 
-  const toggleOrderDetails = (orderId) => {
-    setExpandedOrderIds((current) => toggleBookingOrderExpanded(current, orderId));
-  };
-
-  const viewOrderQr = async (order) => {
-    setExpandedOrderIds((current) => {
-      if (isBookingOrderExpanded(current, order.id)) return current;
-      return toggleBookingOrderExpanded(current, order.id);
-    });
-    await loadOrderQr(order);
+  const toggleOrderDetails = (order, isExpanded) => {
+    setExpandedOrderIds((current) => toggleBookingOrderExpanded(current, order.id));
+    if (!isExpanded && order.ticketingVersion === 2 && !orderQrDataUrls[order.id]) {
+      void loadOrderQr(order);
+    }
   };
 
   const downloadOrderQr = async (order) => {
@@ -881,7 +906,6 @@ function AccountPage() {
             <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
               <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
               <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-              <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
               <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
               <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
               <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
@@ -929,83 +953,160 @@ function AccountPage() {
     );
   };
 
-  const renderBookingOrderCard = (order) => {
-    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
-    const detailsId = `booking-order-details-${order.id}`;
+  const renderBookingOrderActions = (order, isExpanded, detailsId) => (
+    <div className="grid gap-2">
+      {order.ticketingVersion === 2 && (
+        <button
+          className="min-h-10 rounded-full border border-white/15 bg-white/[0.05] px-3 py-2 text-sm font-black text-white hover:border-emerald-400/50 disabled:cursor-wait disabled:opacity-60"
+          type="button"
+          disabled={loadingOrderQrId === order.id}
+          onClick={() => downloadOrderQr(order)}
+        >
+          {loadingOrderQrId === order.id ? "Đang tải QR..." : "Tải QR đơn"}
+        </button>
+      )}
+      <button
+        className="min-h-10 whitespace-normal rounded-full border border-[#ff6070]/40 bg-[#ff6070]/10 px-3 py-2 text-sm font-black leading-5 text-[#ff9aa5] hover:bg-[#ff6070]/20"
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={detailsId}
+        onClick={() => toggleOrderDetails(order, isExpanded)}
+      >
+        {isExpanded ? "Thu gọn đơn vé" : "Hiển thị toàn bộ đơn vé"}
+      </button>
+    </div>
+  );
 
-    return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-[#111722]" key={order.id}>
-      <header className="grid gap-4 border-b border-white/10 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-        <div>
-          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#ff8f99]">Đơn vé</p>
-          <h3 className="mt-1 break-words text-xl font-black text-white">{order.bookingCode}</h3>
-          <p className="mt-2 text-sm font-bold text-slate-200">{order.movie.title || "Phim đang cập nhật"}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {formatDateTime(order.showtime.startTime)} · {order.cinema.name || "Rạp đang cập nhật"} · {order.room.name || "Phòng đang cập nhật"}
-          </p>
+  const renderBookingOrderDetails = (order, detailsId) => (
+    <div id={detailsId}>
+      {loadingOrderQrId === order.id && !orderQrDataUrls[order.id] && (
+        <div className="border-b border-white/10 bg-white/[0.025] px-5 py-4 text-sm font-bold text-slate-300">
+          Đang tải QR đơn vé...
         </div>
-        <div className="grid gap-2 text-sm md:justify-items-end md:text-right">
-          <span className="text-slate-500">{order.tickets.length} vé</span>
-          <strong className="text-lg text-[#ff9aa5]">{currencyFormatter.format(order.pricing.total)}</strong>
-          {order.voucher && <span className="text-xs font-bold text-emerald-300">Voucher {order.voucher.code}: −{currencyFormatter.format(order.voucher.discountAmount)}</span>}
-          <div className="mt-1 flex flex-wrap gap-2 md:justify-end">
-            {order.ticketingVersion === 2 && (
-              <>
-                <button
-                  className="h-10 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-xs font-black text-emerald-100 hover:bg-emerald-400/20 disabled:cursor-wait disabled:opacity-60"
-                  type="button"
-                  disabled={loadingOrderQrId === order.id}
-                  onClick={() => viewOrderQr(order)}
-                >
-                  {loadingOrderQrId === order.id ? "Đang tải..." : "Xem QR đơn"}
-                </button>
-                <button
-                  className="h-10 rounded-full border border-white/15 bg-white/[0.05] px-4 text-xs font-black text-white hover:border-emerald-400/50 disabled:cursor-wait disabled:opacity-60"
-                  type="button"
-                  disabled={loadingOrderQrId === order.id}
-                  onClick={() => downloadOrderQr(order)}
-                >
-                  Tải QR đơn
-                </button>
-              </>
-            )}
-            <button
-              className="h-10 rounded-full border border-[#ff6070]/40 bg-[#ff6070]/10 px-4 text-xs font-black text-[#ff9aa5] hover:bg-[#ff6070]/20"
-              type="button"
-              aria-expanded={isExpanded}
-              aria-controls={detailsId}
-              onClick={() => toggleOrderDetails(order.id)}
-            >
-              {isExpanded ? "Thu gọn đơn vé" : "Hiển thị toàn bộ đơn vé"}
-            </button>
+      )}
+      {orderQrDataUrls[order.id] && (
+        <div className="grid gap-4 border-b border-white/10 bg-white/[0.025] p-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
+          <div className="rounded-2xl bg-white p-3 text-black">
+            <img className="mx-auto h-32 w-32 object-contain" src={orderQrDataUrls[order.id]} alt={`QR đơn ${order.bookingCode}`} />
           </div>
-        </div>
-      </header>
-      {isExpanded && (
-        <div id={detailsId}>
-          {orderQrDataUrls[order.id] && (
-            <div className="grid gap-4 border-b border-white/10 bg-white/[0.025] p-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
-              <div className="rounded-2xl bg-white p-3 text-black">
-                <img className="mx-auto h-32 w-32 object-contain" src={orderQrDataUrls[order.id]} alt={`QR đơn ${order.bookingCode}`} />
-              </div>
-              <div>
-                <h4 className="font-black text-white">QR đơn vé</h4>
-                <p className="mt-2 text-sm leading-6 text-slate-400">Xuất trình tại quầy để tra cứu và in tất cả vé hợp lệ chưa in. Check-in vẫn sử dụng QR riêng của từng vé.</p>
-              </div>
-            </div>
-          )}
-          {(order.services.length > 0 || order.voucher) && (
-            <div className="grid gap-2 border-b border-white/10 bg-black/10 px-5 py-4 text-xs text-slate-300 sm:grid-cols-2">
-              <p><span className="text-slate-500">Dịch vụ:</span> {order.services.length ? order.services.map((service) => `${service.name} ×${service.quantity}`).join(", ") : "Không có"}</p>
-              <p><span className="text-slate-500">Giảm giá:</span> {currencyFormatter.format(order.pricing.discount)}</p>
-            </div>
-          )}
-          <div className="grid gap-5 p-5 xl:grid-cols-2">
-            {order.tickets.map(renderTicketCard)}
+          <div>
+            <h4 className="font-black text-white">QR đơn vé</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Xuất trình tại quầy để tra cứu và in tất cả vé hợp lệ chưa in. Check-in vẫn sử dụng QR riêng của từng vé.</p>
           </div>
         </div>
       )}
+      <div className="grid gap-5 border-b border-white/10 bg-black/10 px-5 py-5 text-slate-200 sm:grid-cols-[minmax(0,1.45fr)_minmax(150px,0.7fr)_minmax(190px,0.85fr)] sm:items-start">
+        <div className="min-w-0">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Dịch vụ</span>
+          <strong className="mt-2 block break-words text-base font-black leading-6 text-white sm:text-lg">
+            {getOrderServiceLabels(order)}
+          </strong>
+        </div>
+        <div className="min-w-0 sm:text-right">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Giảm giá</span>
+          <strong className="mt-2 block break-words text-lg font-black tabular-nums text-emerald-300 sm:text-xl">
+            {currencyFormatter.format(order.pricing.discount)}
+          </strong>
+        </div>
+        <div className="min-w-0 sm:text-right">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Tổng thanh toán</span>
+          <strong className="mt-2 block break-words text-2xl font-black leading-tight tabular-nums text-[#ff9aa5] sm:text-[28px]">
+            {currencyFormatter.format(order.pricing.total)}
+          </strong>
+        </div>
+      </div>
+      <div className="grid gap-5 p-5 xl:grid-cols-2">
+        {order.tickets.map(renderTicketCard)}
+      </div>
+    </div>
+  );
+
+  const renderBookingOrderMobileCard = (order) => {
+    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
+    const detailsId = `booking-order-mobile-details-${order.id}`;
+    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
+
+    return (
+      <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#111722]" key={order.id}>
+        <div className="grid gap-5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.1em] text-[#ff8f99]">Mã hóa đơn</p>
+              <h3 className="mt-1 break-words text-xl font-black text-white">{order.bookingCode}</h3>
+            </div>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
+          </div>
+          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-4 gap-y-4 text-base">
+            <dt className="text-slate-500">Phim</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {order.movie.title || "Đang cập nhật"}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
+            </dd>
+            <dt className="text-slate-500">Suất chiếu</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
+            </dd>
+            <dt className="text-slate-500">Ghế đã đặt</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {getOrderSeatLabels(order)}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{getOrderSeatTypeLabels(order)}</span>
+            </dd>
+            <dt className="text-slate-500">Ngày đặt</dt>
+            <dd className="min-w-0 break-words text-slate-200">
+              {formatDateTime(order.createdAt)}
+              <span className="mt-1 block text-sm font-bold text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</span>
+            </dd>
+            <dt className="text-slate-500">Điểm</dt>
+            <dd className="font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")} <span className="text-sm font-medium text-slate-500">điểm thưởng</span></dd>
+          </dl>
+          {renderBookingOrderActions(order, isExpanded, detailsId)}
+        </div>
+        {isExpanded && renderBookingOrderDetails(order, detailsId)}
       </article>
+    );
+  };
+
+  const renderBookingOrderTableRows = (order) => {
+    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
+    const detailsId = `booking-order-table-details-${order.id}`;
+    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
+
+    return (
+      <tbody className="divide-y divide-white/10" key={order.id}>
+        <tr className="align-top text-base leading-6 text-slate-300 hover:bg-white/[0.025]">
+          <td className="break-words px-4 py-5 [overflow-wrap:anywhere]">
+            <strong className="block font-black text-white">{order.bookingCode}</strong>
+            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block font-bold text-white">{order.movie.title || "Đang cập nhật"}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block text-white">{formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block font-bold text-white">{getOrderSeatLabels(order)}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{getOrderSeatTypeLabels(order)}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <span className="block">{formatDateTime(order.createdAt)}</span>
+            <strong className="mt-2 block text-sm text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</strong>
+          </td>
+          <td className="px-4 py-5 text-right">
+            <strong className="block text-lg font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")}</strong>
+            <span className="mt-2 block text-xs text-slate-500">điểm thưởng</span>
+          </td>
+          <td className="px-4 py-5">{renderBookingOrderActions(order, isExpanded, detailsId)}</td>
+        </tr>
+        {isExpanded && (
+          <tr>
+            <td className="bg-[#111722] p-0" colSpan={7}>{renderBookingOrderDetails(order, detailsId)}</td>
+          </tr>
+        )}
+      </tbody>
     );
   };
 
@@ -1015,7 +1116,6 @@ function AccountPage() {
     const searchableText = normalizeFilterText([
       order.bookingCode,
       order.movie.title,
-      order.cinema.name,
       order.room.name,
       ...order.tickets.flatMap((ticket) => [
         ticket.ticketCode,
@@ -1091,7 +1191,7 @@ function AccountPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-black text-white">Lịch sử đặt vé</h3>
-            <p className="mt-1 text-xs text-slate-500">Danh sách đơn vé và các vé tương ứng với từng ghế.</p>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi hóa đơn, suất chiếu, ghế và điểm nhận được.</p>
           </div>
           <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-black text-slate-300">
             {bookingOrders.length} đơn · {tickets.length} vé
@@ -1102,9 +1202,36 @@ function AccountPage() {
         ) : bookingOrders.length ? (
           <>
             {filteredBookingOrders.length ? (
-              <div className="grid gap-5">
-                {paginatedBookingOrders.map(renderBookingOrderCard)}
-              </div>
+              <>
+                <div className="grid gap-4 lg:hidden">
+                  {paginatedBookingOrders.map(renderBookingOrderMobileCard)}
+                </div>
+                <div className="hidden overflow-hidden rounded-2xl border border-white/10 lg:block">
+                  <table className="w-full table-fixed border-collapse text-left">
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[16%]" />
+                    </colgroup>
+                    <thead className="bg-white/[0.045] text-sm uppercase tracking-[0.04em] text-slate-400">
+                      <tr>
+                        <th className="break-words px-4 py-4 font-black">Mã hóa đơn</th>
+                        <th className="break-words px-4 py-4 font-black">Phim</th>
+                        <th className="break-words px-4 py-4 font-black">Suất chiếu</th>
+                        <th className="break-words px-4 py-4 font-black">Ghế đã đặt</th>
+                        <th className="break-words px-4 py-4 font-black">Ngày đặt</th>
+                        <th className="break-words px-4 py-4 text-right font-black">Điểm</th>
+                        <th className="break-words px-4 py-4 font-black">Thao tác</th>
+                      </tr>
+                    </thead>
+                    {paginatedBookingOrders.map(renderBookingOrderTableRows)}
+                  </table>
+                </div>
+              </>
             ) : (
               <EmptyState>Không có đơn vé phù hợp.</EmptyState>
             )}
@@ -1190,7 +1317,6 @@ function AccountPage() {
                     <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
                       <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-                      <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
                       <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
                       <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
                       <p><span className="text-slate-500">Loại ghế:</span> <strong className="text-white">{ticket.seat?.type || "Đang cập nhật"}</strong></p>

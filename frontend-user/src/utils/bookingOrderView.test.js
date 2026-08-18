@@ -11,6 +11,8 @@ test("booking order view keeps one order and sorts its child tickets", () => {
   const result = mapBookingOrderView({
     _id: "booking-1",
     booking_code: "AURA000000000001",
+    created_at: "2026-08-18T08:30:00.000Z",
+    reward_points_earned: 20,
     movie_snapshot: { title: "Phim", poster: "/poster.jpg", age_classification: "T13" },
     showtime_snapshot: { start_time: "2026-08-18T10:00:00.000Z", room_name: "Phòng 1", cinema_name: "Aura" },
     combos: [{ combo_id: "combo-1", name: "Combo", price: 50000, quantity: 2, subtotal: 100000 }],
@@ -23,6 +25,8 @@ test("booking order view keeps one order and sorts its child tickets", () => {
   });
 
   assert.equal(result.bookingCode, "AURA000000000001");
+  assert.equal(result.createdAt, "2026-08-18T08:30:00.000Z");
+  assert.equal(result.rewardPointsEarned, 20);
   assert.equal(result.services[0].subtotal, 100000);
   assert.equal(result.voucher.code, "GIAM20");
   assert.equal(result.pricing.total, 200000);

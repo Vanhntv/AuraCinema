@@ -38,6 +38,8 @@ export const mapBookingOrderView = (booking = {}) => {
     raw: booking,
     id: booking._id || booking.id,
     bookingCode: booking.booking_code || booking.bookingCode || "",
+    createdAt: booking.created_at || booking.createdAt || null,
+    rewardPointsEarned: numberValue(booking.reward_points_earned || booking.rewardPointsEarned),
     ticketingVersion: Number(booking.ticketing_version || 1),
     status: booking.status,
     paymentStatus: booking.payment_status,

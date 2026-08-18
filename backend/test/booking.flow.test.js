@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { authMiddleware } from "../src/middleware/authMiddleware.js";
 import { updateAdminBookingPayment } from "../src/controllers/adminBookingsControllers.js";
-import { confirmBookingPayment, createBooking } from "../src/controllers/bookingsControllers.js";
+import { confirmBookingPayment, createBooking, getMyBookings } from "../src/controllers/bookingsControllers.js";
 import { holdShowtimeSeats } from "../src/controllers/showtimeSeatsControllers.js";
 import Booking from "../src/models/Booking.js";
 import SeatHold from "../src/models/SeatHold.js";
@@ -759,5 +759,58 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
     assert.equal(String(res.body.data._id), String(createdPayload._id));
     assert.ok(sessionsUsed.length > 0);
     assert.ok(sessionsUsed.every((session) => session === null));
+  });
+});
+
+test("my booking history only returns confirmed paid bookings", async () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  const expectedFilter = {
+    user_id: userId,
+    status: "confirmed",
+    payment_status: "paid",
+  };
+  let findFilter = null;
+  let countFilter = null;
+
+  await withPatched([
+    [Booking, "find", (filter) => {
+      findFilter = filter;
+      return {
+        populate() {
+          return this;
+        },
+        sort() {
+          return this;
+        },
+        skip() {
+          return this;
+        },
+        async limit() {
+          return [];
+        },
+      };
+    }],
+    [Ticket, "find", () => {
+      throw new Error("tickets must not be queried when no paid bookings are returned");
+    }],
+    [Booking, "countDocuments", async (filter) => {
+      countFilter = filter;
+      return 0;
+    }],
+  ], async () => {
+    const req = {
+      user: { id: userId },
+      query: { page: "1", limit: "50" },
+    };
+    const res = makeResponse();
+
+    await getMyBookings(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.deepEqual(findFilter, expectedFilter);
+    assert.deepEqual(countFilter, expectedFilter);
+    assert.deepEqual(res.body.data, []);
+    assert.equal(res.body.pagination.totalItems, 0);
   });
 });

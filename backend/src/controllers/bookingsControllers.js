@@ -827,8 +827,12 @@ export const getMyBookings = async (req, res) => {
   try {
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 10, 1), 100);
-    const filter = { user_id: req.user.id };
-    const bookings = await Booking.find({ user_id: req.user.id })
+    const filter = {
+      user_id: req.user.id,
+      status: "confirmed",
+      payment_status: "paid",
+    };
+    const bookings = await Booking.find(filter)
       .populate({
         path: "showtime_id",
         select: "movie_id room_id start_time end_time",
