@@ -64,6 +64,7 @@ const getBookingCode = (booking) => booking?.booking_code || booking?._id || "-"
 const getMovieTitle = (booking) => booking?.movie_snapshot?.title || booking?.showtime_id?.movie_id?.title || "-";
 const getRoomName = (booking) => booking?.showtime_snapshot?.room_name || booking?.showtime_id?.room_id?.name || "-";
 const getCustomerName = (booking) => booking?.user_id?.full_name || booking?.customer_name || "-";
+const getCustomerPhone = (booking) => booking?.customer_phone || booking?.user_id?.phone || "-";
 
 const getSeatNames = (booking) =>
   ((booking?.seat_items || []).length
@@ -329,7 +330,7 @@ const BookingsPage = () => {
               <tr>
                 <th>Mã đơn</th>
                 <th>Khách hàng</th>
-                <th>Phòng</th>
+                <th>SĐT</th>
                 <th>Suất</th>
                 <th>Ghế</th>
                 <th>Tổng tiền</th>
@@ -355,7 +356,7 @@ const BookingsPage = () => {
                       <span className="table-muted booking-cell-sub">{booking.customer_email || booking.user_id?.email || "-"}</span>
                     </td>
                     <td>
-                      <span className="booking-cell-main">{getRoomName(booking)}</span>
+                      <span className="booking-cell-main">{getCustomerPhone(booking)}</span>
                     </td>
                     <td>{formatDateTime(booking.showtime_id?.start_time)}</td>
                     <td>{getSeatNames(booking)}</td>
