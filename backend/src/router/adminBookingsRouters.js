@@ -8,6 +8,7 @@ import {
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
 import {
   lookupAdminBookingOrder,
+  lookupAdminBookingOrderPrint,
   reprintBookingTickets,
   scanPrintBookingOrder,
 } from "../controllers/adminBookingPrintControllers.js";
@@ -18,6 +19,7 @@ router.use(authMiddleware, authorizeRoles("admin"));
 
 router.get("/", getAdminBookings);
 router.post("/lookup", lookupAdminBookingOrder);
+router.post("/lookup-print", lookupAdminBookingOrderPrint);
 router.post("/scan-print", scanPrintBookingOrder);
 router.post("/:id/reprint", reprintBookingTickets);
 router.get("/:id", getAdminBookingById);

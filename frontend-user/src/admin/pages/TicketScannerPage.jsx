@@ -18,9 +18,10 @@ import {
   verifyTicketQr,
 } from "../services/ticketAdminService";
 import { showToast } from "../../utils/toast";
-import { scanPrintBookingOrder } from "../services/bookingAdminService";
+import { lookupBookingOrderPrint, scanPrintBookingOrder } from "../services/bookingAdminService";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
+const BOOKING_QR_PREFIX = "AURA_BOOKING_V2:";
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
@@ -106,6 +107,7 @@ const TicketScannerPage = () => {
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [printingTicket, setPrintingTicket] = useState(false);
+  const [printingBookingOrder, setPrintingBookingOrder] = useState(false);
   const [lookingUpTicket, setLookingUpTicket] = useState(false);
   const [ticketCodeQuery, setTicketCodeQuery] = useState("");
   const [currentQrToken, setCurrentQrToken] = useState("");
@@ -167,15 +169,15 @@ const TicketScannerPage = () => {
     await stopScanner();
 
     try {
-      if (qrToken.startsWith("AURA_BOOKING_V2:")) {
-        const response = await scanPrintBookingOrder(qrToken);
+      if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
+        const response = await lookupBookingOrderPrint({ qrToken });
         if (!mountedRef.current) return;
-        setBookingPrintResult(response);
-        const { printBookingOrder } = await import("../../utils/bookingOrderPrint");
-        await printBookingOrder(response.data);
-        const printedCount = response.data?.tickets?.length || 0;
+        setBookingPrintResult({ ...response, action: "lookup" });
+        const printableCount = response.data?.tickets?.length || 0;
         const skippedCount = response.data?.skippedTickets?.length || 0;
-        const successMessage = `Đã mở bản in ${printedCount} vé${skippedCount ? `, bỏ qua ${skippedCount} vé` : ""}.`;
+        const successMessage = printableCount
+          ? `Đã tải đơn ${response.data?.booking?.bookingCode || ""}. Bấm In đơn vé để in ${printableCount} vé hợp lệ chưa in${skippedCount ? `, bỏ qua ${skippedCount} vé` : ""}.`
+          : `Đã tải đơn ${response.data?.booking?.bookingCode || ""}. Không còn vé hợp lệ chưa in.`;
         setCameraMessage(successMessage);
         showToast("success", successMessage);
       } else {
@@ -189,8 +191,8 @@ const TicketScannerPage = () => {
     } catch (error) {
       const message = getApiMessage(error, "Không thể đọc thông tin từ mã QR.");
       if (!mountedRef.current) return;
-      if (qrToken.startsWith("AURA_BOOKING_V2:")) {
-        setBookingPrintResult({ success: false, message, data: error?.response?.data?.data || null });
+      if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
+        setBookingPrintResult({ success: false, message, data: error?.response?.data?.data || null, action: "lookup" });
       } else {
         setVerifyResult({
           success: false,
@@ -349,6 +351,40 @@ const TicketScannerPage = () => {
       showToast("error", getApiMessage(error, "Không thể mở hộp thoại in vé."));
     } finally {
       setPrintingTicket(false);
+    }
+  };
+
+  const handlePrintBookingOrder = async () => {
+    if (!currentQrToken.startsWith(BOOKING_QR_PREFIX) || printingBookingOrder || processing) return;
+
+    try {
+      setPrintingBookingOrder(true);
+      const response = await scanPrintBookingOrder(currentQrToken);
+      if (!mountedRef.current) return;
+      setBookingPrintResult({ ...response, action: "printed" });
+
+      const { printBookingOrder } = await import("../../utils/bookingOrderPrint");
+      await printBookingOrder(response.data);
+
+      const printedCount = response.data?.tickets?.length || 0;
+      const skippedCount = response.data?.skippedTickets?.length || 0;
+      const successMessage = `Đã mở bản in ${printedCount} vé${skippedCount ? `, bỏ qua ${skippedCount} vé` : ""}.`;
+      setCameraMessage(successMessage);
+      showToast("success", successMessage);
+    } catch (error) {
+      const message = getApiMessage(error, "Không thể in đơn vé.");
+      if (!mountedRef.current) return;
+      setBookingPrintResult((current) => ({
+        ...(current || {}),
+        success: false,
+        message,
+        data: error?.response?.data?.data || current?.data || null,
+        action: current?.action || "lookup",
+      }));
+      setCameraMessage(message);
+      showToast("error", message);
+    } finally {
+      if (mountedRef.current) setPrintingBookingOrder(false);
     }
   };
 
@@ -512,8 +548,8 @@ const TicketScannerPage = () => {
         <section className={`ticket-scanner-panel ticket-result-panel ${verificationTone}`}>
           <div className="ticket-scanner-panel-header">
             <div>
-              <h2>Kết quả xác minh vé</h2>
-              <p>Thông tin vé sau khi quét hoặc tra cứu, sẵn sàng để in và check-in.</p>
+              <h2>Kết quả quét</h2>
+              <p>QR đơn chỉ tải thông tin đơn; QR vé dùng để in hoặc check-in từng vé.</p>
             </div>
             <HiOutlineTicket />
           </div>
@@ -551,7 +587,10 @@ const TicketScannerPage = () => {
                   <InfoItem label="Phim" value={bookingPrintResult.data.booking.movie?.title || "-"} />
                   <InfoItem label="Suất chiếu" value={formatDateTime(bookingPrintResult.data.booking.showtime?.start_time)} />
                   <InfoItem label="Phòng" value={bookingPrintResult.data.booking.showtime?.room_name || "-"} />
-                  <InfoItem label="Đã in" value={`${bookingPrintResult.data.tickets?.length || 0} vé`} />
+                  <InfoItem
+                    label={bookingPrintResult.action === "printed" ? "Vừa in" : "Vé chưa in"}
+                    value={`${bookingPrintResult.data.tickets?.length || 0} vé`}
+                  />
                   <InfoItem label="Bỏ qua" value={`${bookingPrintResult.data.skippedTickets?.length || 0} vé`} />
                 </div>
               )}
@@ -578,6 +617,23 @@ const TicketScannerPage = () => {
             {printingTicket ? "Đang chuẩn bị..." : ticket?.printedAt ? "Đã in" : "In vé"}
           </button>}
 
+          {bookingPrintResult && <button
+            className="btn btn-primary ticket-print-btn"
+            disabled={
+              !bookingPrintResult.success
+              || bookingPrintResult.action === "printed"
+              || processing
+              || printingBookingOrder
+              || (bookingPrintResult.data?.tickets?.length || 0) === 0
+            }
+            onClick={handlePrintBookingOrder}
+            title={(bookingPrintResult.data?.tickets?.length || 0) === 0 ? "Không còn vé hợp lệ chưa in trong đơn." : "In tất cả vé hợp lệ chưa in trong đơn"}
+            type="button"
+          >
+            <HiOutlinePrinter />
+            {printingBookingOrder ? "Đang chuẩn bị..." : bookingPrintResult.action === "printed" ? "Đã chuẩn bị in" : "In đơn vé"}
+          </button>}
+
           {!bookingPrintResult && <button
             className="btn btn-success ticket-checkin-btn"
             disabled={!ticket || !currentQrToken || processing || lookingUpTicket || printingTicket || checkingIn || ticket.status !== "VALID"}
@@ -590,7 +646,7 @@ const TicketScannerPage = () => {
 
           {bookingPrintResult?.success && (
             <div className="ticket-checkin-feedback success">
-              QR đơn chỉ dùng để in. Check-in vẫn thực hiện bằng QR riêng trên từng vé.
+              QR đơn chỉ dùng để tra cứu và in đơn. Check-in vẫn thực hiện bằng QR riêng của từng vé.
             </div>
           )}
 
