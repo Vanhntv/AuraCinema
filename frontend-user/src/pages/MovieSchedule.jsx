@@ -204,7 +204,7 @@ function MovieSchedule() {
                         type="button"
                         onClick={() => navigate(`/phim/${movie._id}?showtime=${showtime.id || showtime._id}&date=${selectedDate}#lich-chieu`)}
                         className="group min-h-11 min-w-[112px] rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-[16px] font-bold text-white transition hover:border-[var(--aura-coral)] hover:bg-[var(--aura-coral)] hover:text-[var(--aura-coral-ink)]"
-                        title={`${showtime.cinemaName || "Rạp chiếu"} · ${showtime.roomName || "Phòng chiếu"}`}
+                        title={showtime.roomName || "Phòng chiếu"}
                       >
                         <span className="block">{showtime.startTime}</span>
                         <span className="mt-1 block text-[11px] font-semibold text-slate-400 group-hover:text-[var(--aura-coral-ink)]">

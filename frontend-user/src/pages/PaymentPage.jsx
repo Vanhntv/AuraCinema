@@ -22,7 +22,7 @@ const DEFAULT_PAYMENT_POLICIES = [
     _id: "default-payment-policy",
     title: "Kiểm tra thông tin trước khi thanh toán",
     summary: "Vui lòng kiểm tra kỹ thông tin phim, suất chiếu, phòng và ghế.",
-    content: "Vé đã thanh toán thành công không hỗ trợ khách hàng tự hủy, đổi hoặc hoàn vé, trừ trường hợp được rạp xử lý theo chính sách.",
+    content: "Vé đã thanh toán thành công không hỗ trợ khách hàng tự hủy, đổi hoặc hoàn vé, trừ trường hợp được AuraCinema xử lý theo chính sách.",
     requires_confirmation: true,
   },
 ];
@@ -194,7 +194,7 @@ function PaymentPage() {
   const visiblePaymentPolicies = publishedPaymentPolicies.length > 0
     ? publishedPaymentPolicies
     : DEFAULT_PAYMENT_POLICIES;
-  const cinemaPolicies = paymentPolicies.filter((policy) => policy.surface !== "payment");
+  const additionalPolicies = paymentPolicies.filter((policy) => policy.surface !== "payment");
   const hasRequiredPolicies = visiblePaymentPolicies.some((policy) => policy.requires_confirmation);
 
   useEffect(() => {
@@ -433,7 +433,6 @@ function PaymentPage() {
           <div className="grid gap-4">
             <DetailRow label="Phim" value={summary?.movieTitle || "Thanh toán đơn vé"} strong />
             <DetailRow label="Phân loại độ tuổi" value={summary?.ageClassification || "P"} strong />
-            <DetailRow label="Rạp" value={summary?.cinemaName || "Đang cập nhật"} />
             <DetailRow label="Phòng" value={summary?.roomName || "Đang cập nhật"} />
             <DetailRow label="Thời gian" value={`${summary?.showtimeLabel || "Đang cập nhật"} - ${summary?.dateLabel || ""}`} />
             <DetailRow label={`Ghế đã chọn (${summary?.seatLabels?.length || 0})`} value={summary?.seatLabels?.join(", ") || "Đang cập nhật"} />
@@ -502,12 +501,12 @@ function PaymentPage() {
             </div>
           </section>
 
-          {cinemaPolicies.length > 0 && (
-            <section className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-slate-200" aria-labelledby="cinema-policies-title">
-              <h2 className="text-sm font-black text-white" id="cinema-policies-title">Các chính sách của rạp</h2>
-              <p className="mt-1 text-xs text-slate-400">Thông tin được rạp công bố và áp dụng cho giao dịch của bạn.</p>
+          {additionalPolicies.length > 0 && (
+            <section className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-slate-200" aria-labelledby="additional-policies-title">
+              <h2 className="text-sm font-black text-white" id="additional-policies-title">Chính sách bổ sung</h2>
+              <p className="mt-1 text-xs text-slate-400">Thông tin được AuraCinema công bố và áp dụng cho giao dịch của bạn.</p>
               <div className="mt-3 grid gap-2">
-                {cinemaPolicies.map((policy) => (
+                {additionalPolicies.map((policy) => (
                   <details className="group rounded-lg bg-white/[0.04] px-3 py-2" key={policy._id}>
                     <summary className="cursor-pointer list-none font-bold text-slate-100 marker:hidden">
                       {policy.title}

@@ -94,6 +94,51 @@ const getResponsiveQrBox = (viewfinderWidth, viewfinderHeight) => {
 
 const getVerificationTone = (result) => (result?.success ? "success" : "error");
 
+const numberValue = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+};
+
+const formatOrderSeats = (seats = []) => {
+  const text = seats
+    .map((seat) => {
+      const label = seat.seat_label || seat.seatLabel || seat.label || seat.seat_code || seat.seatCode || "";
+      const type = seat.seat_type || seat.seatType || seat.type || "";
+      if (!label) return "";
+      return type ? `${label} - ${type}` : label;
+    })
+    .filter(Boolean)
+    .join(", ");
+
+  return text || "Không có dữ liệu ghế";
+};
+
+const formatOrderServices = (services = []) => {
+  const text = services
+    .map((service) => {
+      const name = service.name || service.combo_id?.name || "Dịch vụ";
+      const quantity = Math.max(Math.trunc(numberValue(service.quantity, 1)), 1);
+      const subtotal = numberValue(service.subtotal, numberValue(service.price) * quantity);
+      const priceText = subtotal > 0 ? ` · ${currencyFormatter.format(subtotal)}` : "";
+      return `${name} x${quantity}${priceText}`;
+    })
+    .filter(Boolean)
+    .join(", ");
+
+  return text || "Không có";
+};
+
+const formatOrderDiscount = (booking = {}) => {
+  const discount = numberValue(booking.pricing?.discount ?? booking.voucher?.discount_amount);
+  const code = String(booking.voucher?.code || "").trim().toUpperCase();
+  if (!code && discount <= 0) return "Không áp dụng";
+  if (!code) return `-${currencyFormatter.format(discount)}`;
+  return discount > 0 ? `${code} · -${currencyFormatter.format(discount)}` : code;
+};
+
+const formatOrderTotal = (booking = {}) =>
+  currencyFormatter.format(numberValue(booking.pricing?.total ?? booking.total_price));
+
 const TicketScannerPage = () => {
   const scannerRef = useRef(null);
   const mountedRef = useRef(false);
@@ -588,6 +633,22 @@ const TicketScannerPage = () => {
                   <InfoItem label="Suất chiếu" value={formatDateTime(bookingPrintResult.data.booking.showtime?.start_time)} />
                   <InfoItem label="Phòng" value={bookingPrintResult.data.booking.showtime?.room_name || "-"} />
                   <InfoItem
+                    className="full"
+                    label="Ghế đã đặt"
+                    value={formatOrderSeats(bookingPrintResult.data.booking.seats)}
+                  />
+                  <InfoItem
+                    className="full"
+                    label="Dịch vụ"
+                    value={formatOrderServices(bookingPrintResult.data.booking.services)}
+                  />
+                  <InfoItem label="Giảm giá" value={formatOrderDiscount(bookingPrintResult.data.booking)} />
+                  <InfoItem
+                    className="important"
+                    label="Tổng tiền"
+                    value={formatOrderTotal(bookingPrintResult.data.booking)}
+                  />
+                  <InfoItem
                     label={bookingPrintResult.action === "printed" ? "Vừa in" : "Vé chưa in"}
                     value={`${bookingPrintResult.data.tickets?.length || 0} vé`}
                   />
@@ -666,8 +727,8 @@ const TicketScannerPage = () => {
   );
 };
 
-const InfoItem = ({ label, value }) => (
-  <div className="ticket-info-item">
+const InfoItem = ({ label, value, className = "" }) => (
+  <div className={`ticket-info-item ${className}`.trim()}>
     <span>{label}</span>
     <strong>{value}</strong>
   </div>

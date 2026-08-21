@@ -9,7 +9,6 @@ import {
   HiOutlineFilm,
   HiOutlineClock,
   HiOutlineLogout,
-  HiOutlineOfficeBuilding,
   HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineShoppingBag,
@@ -543,13 +542,6 @@ const DashboardPage = () => {
         icon: <HiOutlineCheckCircle />,
         tone: "purple",
         hint: "Đã thanh toán và xác nhận",
-      },
-      {
-        label: "Rạp phim",
-        value: dashboard.stats.cinemas,
-        icon: <HiOutlineOfficeBuilding />,
-        tone: "green",
-        hint: "Địa điểm hoạt động",
       },
       {
         label: "Vé đã bán",
@@ -1200,7 +1192,7 @@ const DashboardPage = () => {
                   >
                     <div>
                       <strong>{showtime.movieTitle}</strong>
-                      <span>{showtime.cinemaName}</span>
+                      <span>{showtime.roomName || "Phòng chiếu"}</span>
                     </div>
                     <time>{showtime.startTime}</time>
                   </div>

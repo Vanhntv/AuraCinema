@@ -211,7 +211,7 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
                       <tr>
                         <th>Mã vé</th>
                         <th>Phim</th>
-                        <th>Rạp / Phòng</th>
+                        <th>Phòng</th>
                         <th>Suất chiếu</th>
                         <th>Ghế</th>
                         <th>Tổng tiền</th>
@@ -232,8 +232,6 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
                             <td>{String(booking._id).slice(-8).toUpperCase()}</td>
                             <td>{booking.showtime_id?.movie_id?.title || "-"}</td>
                             <td>
-                              {booking.showtime_id?.room_id?.cinema_id?.name || "-"}
-                              <br />
                               <span style={{ color: "var(--color-text-secondary)" }}>
                                 {booking.showtime_id?.room_id?.name || "-"}
                               </span>

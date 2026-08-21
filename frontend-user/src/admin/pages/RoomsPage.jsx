@@ -503,7 +503,7 @@ function RoomsPage() {
     const seatTypeMap = new Map(seatTypes.map((seatType) => [seatType._id, seatType]));
 
     const resolvedCinemaId = formData.cinema_id || defaultCinemaId;
-    if (!resolvedCinemaId) errors.cinema_id = "Hệ thống chưa có rạp mặc định để gán phòng.";
+    if (!resolvedCinemaId) errors.cinema_id = "Hệ thống chưa có cấu hình mặc định để gán phòng.";
     if (!formData.name.trim()) errors.name = "Vui lòng nhập tên phòng.";
     if (!errors.name && resolvedCinemaId) {
       const duplicateRoom = rooms.find((room) => {
@@ -516,7 +516,7 @@ function RoomsPage() {
       });
 
       if (duplicateRoom) {
-        errors.name = "Tên phòng đã tồn tại trong rạp này.";
+        errors.name = "Tên phòng đã tồn tại.";
       }
     }
     if (!Number.isInteger(rowCount) || rowCount <= 0) {

@@ -19,10 +19,10 @@ const PAGE_SIZE = 10;
 
 const paymentStatusLabels = {
   pending: "Chờ thanh toán",
-  paid: "Đã thanh toán",
+  paid: "Đã TT",
   failed: "Thanh toán lỗi",
   cancelled: "Đã hủy",
-  expired: "Hết hạn thanh toán",
+  expired: "Hết hạn TT",
   refund_pending: "Chờ đối soát hoàn tiền",
   refunded: "Đã hoàn tiền",
 };
@@ -62,7 +62,6 @@ const statusBadgeClass = (status) => {
 
 const getBookingCode = (booking) => booking?.booking_code || booking?._id || "-";
 const getMovieTitle = (booking) => booking?.movie_snapshot?.title || booking?.showtime_id?.movie_id?.title || "-";
-const getCinemaName = (booking) => booking?.showtime_snapshot?.cinema_name || booking?.showtime_id?.room_id?.cinema_id?.name || "-";
 const getRoomName = (booking) => booking?.showtime_snapshot?.room_name || booking?.showtime_id?.room_id?.name || "-";
 const getCustomerName = (booking) => booking?.user_id?.full_name || booking?.customer_name || "-";
 
@@ -269,7 +268,7 @@ const BookingsPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Đơn vé</h1>
-          <p>Tra cứu mã đơn, theo dõi thanh toán và xử lý hủy do rạp</p>
+          <p>Tra cứu mã đơn, theo dõi thanh toán và xử lý hủy đơn</p>
         </div>
         <button className="btn btn-secondary" onClick={() => fetchBookings(currentPage)} disabled={loading} type="button">
           <HiOutlineRefresh />
@@ -330,7 +329,7 @@ const BookingsPage = () => {
               <tr>
                 <th>Mã đơn</th>
                 <th>Khách hàng</th>
-                <th>Rạp / Phòng</th>
+                <th>Phòng</th>
                 <th>Suất</th>
                 <th>Ghế</th>
                 <th>Tổng tiền</th>
@@ -356,8 +355,7 @@ const BookingsPage = () => {
                       <span className="table-muted booking-cell-sub">{booking.customer_email || booking.user_id?.email || "-"}</span>
                     </td>
                     <td>
-                      <span className="booking-cell-main">{getCinemaName(booking)}</span>
-                      <span className="table-muted booking-cell-sub">{getRoomName(booking)}</span>
+                      <span className="booking-cell-main">{getRoomName(booking)}</span>
                     </td>
                     <td>{formatDateTime(booking.showtime_id?.start_time)}</td>
                     <td>{getSeatNames(booking)}</td>
@@ -487,7 +485,6 @@ const BookingDetailModal = ({
             <InfoItem label="Email" value={booking.customer_email || booking.user_id?.email || "-"} />
             <InfoItem label="Điện thoại" value={booking.customer_phone || booking.user_id?.phone || "-"} />
             <InfoItem label="Phim" value={getMovieTitle(booking)} />
-            <InfoItem label="Rạp" value={getCinemaName(booking)} />
             <InfoItem label="Phòng" value={getRoomName(booking)} />
             <InfoItem label="Suất chiếu" value={formatDateTime(booking.showtime_snapshot?.start_time || booking.showtime_id?.start_time)} />
             <InfoItem label="Ghế" value={getSeatNames(booking)} />
@@ -582,7 +579,7 @@ const BookingDetailModal = ({
             </div>
 
             <div>
-              <h3>Hủy đơn do rạp</h3>
+              <h3>Hủy đơn</h3>
               {booking.payment_status === "paid" && (
                 <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ Ticket. Hoàn tiền cần được xử lý và đối soát trong workflow thanh toán riêng.</p>
               )}
