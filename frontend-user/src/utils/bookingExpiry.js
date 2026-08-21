@@ -6,6 +6,19 @@ export function getRemainingSeconds(expiresAt, now = new Date()) {
   return Math.max(0, Math.ceil((deadlineMs - nowMs) / 1000));
 }
 
+export function formatPaymentCountdown(remainingSeconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(remainingSeconds) || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+export function getPaymentCountdownTone(remainingSeconds) {
+  const safeSeconds = Math.max(0, Number(remainingSeconds) || 0);
+  if (safeSeconds === 0) return "expired";
+  return safeSeconds <= 120 ? "urgent" : "default";
+}
+
 export function isBookingExpired(paymentStatus, expiresAt, now = new Date()) {
   if (paymentStatus === "paid") return false;
   if (["expired", "refund_pending"].includes(String(paymentStatus || ""))) return true;

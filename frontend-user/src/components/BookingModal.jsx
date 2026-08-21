@@ -18,7 +18,7 @@ import { getAvailableConcessions } from "../services/concessionService";
 import { getEligibleVouchers, verifyVoucher } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import useCurrentTime from "../hooks/useCurrentTime";
-import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, isShowtimeUpcoming } from "../utils/dateTime";
+import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, getShowtimeStartDate, isShowtimeUpcoming } from "../utils/dateTime";
 import { getVoucherBookingPricing, mergeBookingVoucherPricing } from "../utils/voucherBooking";
 
 const SEAT_TYPES = {
@@ -128,6 +128,37 @@ function calculateSelectedSeatTotal(selectedSeats, allSeats) {
 
 function getShowtimeId(showtime) {
   return showtime?.id || showtime?._id || "";
+}
+
+function getPaymentReturnSeatIds(state) {
+  return Array.isArray(state?.selectedSeatIds)
+    ? state.selectedSeatIds.map(String).filter(Boolean)
+    : [];
+}
+
+function hasFutureDeadline(value) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() > Date.now();
+}
+
+function isAlreadyCancelledBookingError(error) {
+  const statusCode = Number(error?.response?.status || 0);
+  const message = normalizeText(error?.response?.data?.message || error?.message || "");
+  return statusCode === 409 && (
+    message.includes("huy truoc do") ||
+    message.includes("da duoc huy") ||
+    message.includes("cancel")
+  );
+}
+
+async function cancelBookingIfNeeded(bookingId, reason) {
+  try {
+    await cancelBooking(bookingId, { reason });
+  } catch (error) {
+    if (isAlreadyCancelledBookingError(error)) return;
+    throw error;
+  }
 }
 
 function formatCurrency(value) {
@@ -301,10 +332,26 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [isLoadingEligibleVouchers, setIsLoadingEligibleVouchers] = useState(false);
   const [eligibleVouchersError, setEligibleVouchersError] = useState("");
   const [showLoginNotice, setShowLoginNotice] = useState(false);
+  const [releasedPaymentReturnBookingId, setReleasedPaymentReturnBookingId] = useState("");
   const [initialRequestedDate] = useState(
     () => new URLSearchParams(location.search).get("date") || "",
   );
   const initialShowtimeId = getShowtimeId(initialShowtime);
+  const paymentReturnState = location.state?.paymentReturnState || null;
+  const paymentReturnBookingId = paymentReturnState?.bookingId || "";
+  const paymentReturnExpiresAt = paymentReturnState?.paymentExpiresAt || null;
+  const paymentReturnSeatIds = useMemo(
+    () => getPaymentReturnSeatIds(paymentReturnState),
+    [paymentReturnState],
+  );
+  const canRestorePaymentReturn = Boolean(
+    paymentReturnBookingId &&
+      String(releasedPaymentReturnBookingId) !== String(paymentReturnBookingId) &&
+      initialShowtimeId &&
+      String(paymentReturnState.showtimeId || "") === String(initialShowtimeId) &&
+      paymentReturnSeatIds.length > 0 &&
+      hasFutureDeadline(paymentReturnExpiresAt),
+  );
   const initialShowtimeDateValue = getShowtimeDateValue(initialShowtime);
   const shouldLoadInitialShowtime = Boolean(
     initialShowtimeId &&
@@ -389,6 +436,100 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   }, []);
 
+  const cancelPaymentReturnBooking = useCallback(async () => {
+    if (!canRestorePaymentReturn || !paymentReturnBookingId) return false;
+
+    try {
+      setIsCancellingBooking(true);
+      setSeatError("");
+      await cancelBookingIfNeeded(paymentReturnBookingId, "Khách chọn lại ghế trước khi thanh toán");
+      setReleasedPaymentReturnBookingId(paymentReturnBookingId);
+      setBookingResult(null);
+      setConfirmedBookingSummary(null);
+      setSelectedSeats([]);
+      setHoldExpiresAt(null);
+      holdTokenRef.current = "";
+      setHoldToken("");
+      setRemainingSeconds(0);
+      setSelectedConcessions({});
+      setAppliedVoucher(null);
+      setVoucherCode("");
+      setVoucherError("");
+      setVoucherMessage("");
+
+      const showtimeId = getShowtimeId(selectedShowtimeRef.current);
+      if (showtimeId) {
+        const latestSeats = await getShowtimeSeats(showtimeId);
+        setShowtimeSeats(latestSeats?.data || []);
+      }
+
+      setSeatError("Đã hủy đơn đang thanh toán. Ghế cũ đã được mở lại, bạn có thể chọn ghế khác.");
+      return true;
+    } catch (requestError) {
+      setSeatError(requestError.response?.data?.message || "Không thể hủy đơn đang thanh toán để chọn lại ghế.");
+      return false;
+    } finally {
+      setIsCancellingBooking(false);
+    }
+  }, [canRestorePaymentReturn, paymentReturnBookingId]);
+
+  const replacePaymentReturnSelection = useCallback(async (nextSelectedSeats) => {
+    if (!canRestorePaymentReturn || !paymentReturnBookingId) return false;
+
+    const showtimeId = getShowtimeId(selectedShowtimeRef.current);
+    const nextSeatIds = [...new Set(nextSelectedSeats.map((seat) => String(seat._id)).filter(Boolean))];
+
+    try {
+      setIsCancellingBooking(true);
+      setSeatError("");
+      await cancelBookingIfNeeded(paymentReturnBookingId, "Khách chỉnh lại ghế trước khi thanh toán");
+      setReleasedPaymentReturnBookingId(paymentReturnBookingId);
+      setBookingResult(null);
+      setConfirmedBookingSummary(null);
+      setSelectedConcessions({});
+      setAppliedVoucher(null);
+      setVoucherCode("");
+      setVoucherError("");
+      setVoucherMessage("");
+      holdTokenRef.current = "";
+      setHoldToken("");
+      setHoldExpiresAt(null);
+      setRemainingSeconds(0);
+
+      const latestSeatsResponse = showtimeId ? await getShowtimeSeats(showtimeId) : null;
+      const latestSeats = latestSeatsResponse?.data || [];
+      const latestSeatMap = new Map(latestSeats.map((item) => [String(item._id), item]));
+      const restoredSeats = nextSeatIds.map((seatId) => latestSeatMap.get(seatId)).filter(Boolean);
+      setShowtimeSeats(latestSeats);
+
+      if (!restoredSeats.length) {
+        setSelectedSeats([]);
+        setSeatError("Đã bỏ chọn ghế. Bạn có thể chọn ghế khác như bình thường.");
+        return true;
+      }
+
+      const unavailableSeat = restoredSeats.find((item) => getSeatStatus(item) !== "available");
+      if (unavailableSeat) {
+        setSelectedSeats([]);
+        setSeatError("Một số ghế vừa không còn trống. Vui lòng chọn lại ghế.");
+        return false;
+      }
+
+      const holdResponse = await holdShowtimeSeats(showtimeId, nextSeatIds, "");
+      holdTokenRef.current = holdResponse.data.hold_token || "";
+      setHoldToken(holdTokenRef.current);
+      setHoldExpiresAt(holdResponse.data.expires_at || null);
+      setSelectedSeats(restoredSeats);
+      setSeatError("");
+      return true;
+    } catch (requestError) {
+      setSeatError(requestError.response?.data?.message || "Không thể cập nhật ghế đang chọn.");
+      return false;
+    } finally {
+      setIsCancellingBooking(false);
+    }
+  }, [canRestorePaymentReturn, paymentReturnBookingId]);
+
   const restoreActiveHold = useCallback(async (showtimeId, seats) => {
     if (!isAuthenticated || !showtimeId) {
       setHoldToken("");
@@ -422,6 +563,20 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     }
   }, [isAuthenticated]);
 
+  const restorePaymentReturnSelection = useCallback((seats) => {
+    if (!canRestorePaymentReturn) return false;
+
+    const returnSeatIds = new Set(paymentReturnSeatIds);
+    const restoredSeats = seats.filter((seat) => returnSeatIds.has(String(seat._id)));
+    if (!restoredSeats.length) return false;
+
+    setSelectedSeats(restoredSeats);
+    setHoldExpiresAt(paymentReturnExpiresAt);
+    setRemainingSeconds(Math.max(0, Math.ceil((new Date(paymentReturnExpiresAt).getTime() - Date.now()) / 1000)));
+    setSeatError("");
+    return true;
+  }, [canRestorePaymentReturn, paymentReturnExpiresAt, paymentReturnSeatIds]);
+
   useEffect(() => {
     if (!movie?._id) return;
 
@@ -440,10 +595,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setError("");
     setSeatError("");
     setBookingResult(null);
-    setConfirmedBookingSummary(null);
-    setHoldExpiresAt(null);
+    setConfirmedBookingSummary(canRestorePaymentReturn ? { bookingId: paymentReturnBookingId, paymentStatus: "pending" } : null);
+    setHoldExpiresAt(canRestorePaymentReturn ? paymentReturnExpiresAt : null);
     setHoldToken("");
-    setRemainingSeconds(0);
+    setRemainingSeconds(
+      canRestorePaymentReturn
+        ? Math.max(0, Math.ceil((new Date(paymentReturnExpiresAt).getTime() - Date.now()) / 1000))
+        : 0,
+    );
     setSelectedConcessions({});
     setVoucherCode("");
     setAppliedVoucher(null);
@@ -459,6 +618,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     initialShowtime,
     isInlineVariant,
     movie?._id,
+    canRestorePaymentReturn,
+    paymentReturnBookingId,
+    paymentReturnExpiresAt,
     shouldLoadInitialShowtime,
     dateOptions,
   ]);
@@ -533,7 +695,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         if (isActive) {
           const seats = response?.data || [];
           setShowtimeSeats(seats);
-          await restoreActiveHold(initialShowtimeId, seats);
+          if (!restorePaymentReturnSelection(seats)) {
+            await restoreActiveHold(initialShowtimeId, seats);
+          }
         }
       } catch (requestError) {
         if (isActive) {
@@ -550,7 +714,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     return () => {
       isActive = false;
     };
-  }, [initialShowtime, initialShowtimeId, movie?._id, restoreActiveHold, shouldLoadInitialShowtime]);
+  }, [initialShowtime, initialShowtimeId, movie?._id, restoreActiveHold, restorePaymentReturnSelection, shouldLoadInitialShowtime]);
 
   useEffect(() => {
     if (!holdExpiresAt) return undefined;
@@ -603,6 +767,13 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         if (!isActive) return;
 
         setShowtimeSeats(seats);
+        if (
+          canRestorePaymentReturn &&
+          selectedSeatsRef.current.length === 0 &&
+          restorePaymentReturnSelection(seats)
+        ) {
+          return;
+        }
         const hasUnrestoredOwnHold =
           !holdTokenRef.current &&
           selectedSeatsRef.current.length === 0 &&
@@ -624,7 +795,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       isActive = false;
       window.clearInterval(timer);
     };
-  }, [currentUserId, restoreActiveHold, selectedShowtime, step]);
+  }, [canRestorePaymentReturn, currentUserId, restoreActiveHold, restorePaymentReturnSelection, selectedShowtime, step]);
 
   const selectedTypeSummary = useMemo(() => {
     const selectedTypes = Array.from(
@@ -767,7 +938,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   );
 
   const handleDateChange = async (dateOption) => {
-    await releaseHeldSeats();
+    if (canRestorePaymentReturn) {
+      const cancelled = await cancelPaymentReturnBooking();
+      if (!cancelled) return;
+    } else {
+      await releaseHeldSeats();
+    }
 
     if (variant === "page") {
       const nextSearchParams = new URLSearchParams(location.search);
@@ -789,7 +965,12 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   };
 
   const handleShowtimeSelect = async (showtime) => {
-    await releaseHeldSeats();
+    if (canRestorePaymentReturn) {
+      const cancelled = await cancelPaymentReturnBooking();
+      if (!cancelled) return;
+    } else {
+      await releaseHeldSeats();
+    }
     const showtimeId = getShowtimeId(showtime);
     setSelectedShowtime(showtime);
     setSelectedSeats([]);
@@ -841,6 +1022,41 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     if (isCoupleSeat && !couplePair) {
       setSeatError("Ghế đôi này chưa có đủ cặp liền kề để đặt vé.");
+      return;
+    }
+
+    if (canRestorePaymentReturn) {
+      if (exists) {
+        const releaseIds = selectedSeatsInGroup.map((item) => item._id);
+        const nextSelectedSeats = selectedSeats.filter(
+          (item) => !releaseIds.includes(item._id),
+        );
+        const selectionError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+        if (selectionError) {
+          setSeatError(selectionError);
+          return;
+        }
+        await replacePaymentReturnSelection(nextSelectedSeats);
+        return;
+      }
+
+      const unavailablePairSeat = seatsToToggle.find((item) => {
+        const itemSelected = selectedSeatIds.has(item._id);
+        return getSeatStatus(item) !== "available" && !itemSelected;
+      });
+      if (unavailablePairSeat) {
+        setSeatError("Cặp ghế đôi này đã có ghế không còn trống.");
+        return;
+      }
+
+      const newSeats = seatsToToggle.filter((item) => !selectedSeatIds.has(item._id));
+      const nextSelectedSeats = [...selectedSeats, ...newSeats];
+      const selectionError = validateSeatSpacing(nextSelectedSeats, showtimeSeats);
+      if (selectionError) {
+        setSeatError(selectionError);
+        return;
+      }
+      await replacePaymentReturnSelection(nextSelectedSeats);
       return;
     }
 
@@ -1052,10 +1268,13 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         movieId: movie._id,
         movieTitle: movie.title,
         ageClassification: Number(movie.age_limit || movie.ageLimit) > 0 ? `T${movie.age_limit || movie.ageLimit}` : "P",
+        showtimeId: getShowtimeId(selectedShowtime),
+        showtimeStartTime: getShowtimeStartDate(selectedShowtime)?.toISOString() || selectedShowtime?.start_time || null,
         dateLabel: `${selectedDate.fullLabel || selectedDate.label} · ${selectedDate.displayDate}`,
         showtimeLabel: selectedShowtime?.startTime || "Chưa chọn",
         roomName: selectedShowtime?.roomName || "Chưa chọn",
         seatType: selectedTypeSummary,
+        selectedSeatIds: selectedSeats.map((seat) => seat._id),
         seatLabels: selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`),
         seatTotal,
         concessionTotal,
@@ -1200,6 +1419,42 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
     if (!isAuthenticated) {
       requestLoginNotice();
+      return;
+    }
+
+    if (canRestorePaymentReturn && paymentReturnBookingId) {
+      navigate(`/payment/${paymentReturnBookingId}`, {
+        state: {
+          bookingSummary: {
+            movieId: movie._id,
+            movieTitle: movie.title,
+            ageClassification,
+            showtimeId: getShowtimeId(selectedShowtime),
+            showtimeStartTime: getShowtimeStartDate(selectedShowtime)?.toISOString() || selectedShowtime?.start_time || null,
+            dateLabel: `${selectedDate.fullLabel || selectedDate.label} · ${selectedDate.displayDate}`,
+            showtimeLabel: selectedShowtime?.startTime || "Chưa chọn",
+            roomName: selectedShowtime?.roomName || "Chưa chọn",
+            seatType: selectedTypeSummary,
+            selectedSeatIds: selectedSeats.map((seat) => seat._id),
+            seatLabels: selectedSeats.map((seat) => `${seat.seat_id?.seat_row}${seat.seat_id?.seat_number}`),
+            seatTotal,
+            concessionTotal,
+            concessionItems: selectedConcessionItems.map((item) => ({
+              id: item._id,
+              name: item.name,
+              quantity: item.quantity,
+              subtotal: Number(item.price || 0) * item.quantity,
+            })),
+            voucherCode: verifiedVoucherCode,
+            discountAmount,
+            totalPrice,
+            finalTotal,
+            bookingId: paymentReturnBookingId,
+            paymentStatus: "pending",
+            paymentExpiresAt: paymentReturnExpiresAt,
+          },
+        },
+      });
       return;
     }
 

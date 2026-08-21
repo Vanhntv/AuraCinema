@@ -43,6 +43,7 @@ const getSepayOrderAmount = (order = {}) => normalizeMoney(
 
 const SEPAY_PG_SUCCESS_STATUSES = new Set(["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "CAPTURED", "APPROVED"]);
 const SEPAY_PG_FAILED_STATUSES = new Set(["FAILED", "CANCELLED", "CANCELED", "VOIDED", "EXPIRED", "ERROR"]);
+const SEPAY_PG_RETURN_FAILURE_RESULTS = new Set(["cancel", "cancelled", "canceled", "error", "failed", "failure"]);
 
 const restoreComboStock = async ({ combos = [], session }) => {
   const restorableCombos = combos
@@ -419,6 +420,8 @@ export const verifySepayPgReturn = async (req, res) => {
   try {
     const bookingId = String(req.query.booking_id || "").trim();
     const invoiceNumber = String(req.query.invoice || req.query.order_invoice_number || "").trim().toUpperCase();
+    const returnResult = String(req.query.sepay_result || req.query.result || "").trim().toLowerCase();
+    const isExplicitFailureReturn = SEPAY_PG_RETURN_FAILURE_RESULTS.has(returnResult);
 
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, message: "booking_id không hợp lệ" });
@@ -428,10 +431,10 @@ export const verifySepayPgReturn = async (req, res) => {
       return res.status(400).json({ success: false, message: "Thiếu mã đơn SePay" });
     }
 
-    const orderResponse = await fetchSepayPgOrder(invoiceNumber);
-    const order = getSepayOrderData(orderResponse);
-    const orderStatus = getSepayOrderStatus(order);
-    const sepayAmount = getSepayOrderAmount(order);
+    const orderResponse = isExplicitFailureReturn ? { query: req.query } : await fetchSepayPgOrder(invoiceNumber);
+    const order = isExplicitFailureReturn ? {} : getSepayOrderData(orderResponse);
+    const orderStatus = isExplicitFailureReturn ? returnResult.toUpperCase() : getSepayOrderStatus(order);
+    const sepayAmount = isExplicitFailureReturn ? 0 : getSepayOrderAmount(order);
     const success = SEPAY_PG_SUCCESS_STATUSES.has(orderStatus);
 
     const result = await runWithOptionalTransaction(async (session) => {
@@ -499,7 +502,7 @@ export const verifySepayPgReturn = async (req, res) => {
         return { booking: paidBooking, payment };
       }
 
-      if (SEPAY_PG_FAILED_STATUSES.has(orderStatus)) {
+      if (isExplicitFailureReturn || SEPAY_PG_FAILED_STATUSES.has(orderStatus)) {
         payment.status = "failed";
         await payment.save({ session });
 
@@ -507,7 +510,7 @@ export const verifySepayPgReturn = async (req, res) => {
           booking,
           provider: "sepay_pg",
           transactionId: String(order.transaction_id || order.payment_id || order.id || ""),
-          reason: "Thanh toán SePay thất bại hoặc bị hủy",
+          reason: isExplicitFailureReturn ? "Khách hủy thanh toán SePay" : "Thanh toán SePay thất bại hoặc bị hủy",
           session,
         });
 
@@ -522,7 +525,7 @@ export const verifySepayPgReturn = async (req, res) => {
       success: success && !requiresRefundReview,
       message: requiresRefundReview
         ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch đang chờ đối soát và hoàn tiền"
-        : success ? "Thanh toán SePay thành công" : "Thanh toán SePay chưa hoàn tất",
+        : success ? "Thanh toán SePay thành công" : isExplicitFailureReturn ? "Thanh toán SePay đã bị hủy" : "Thanh toán SePay chưa hoàn tất",
       data: {
         booking_id: result.booking._id,
         booking_status: result.booking.status,

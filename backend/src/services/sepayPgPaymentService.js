@@ -74,6 +74,7 @@ export const buildSepayPgCheckoutFields = ({ booking, amount, frontendUrl, custo
   const origin = normalizeString(frontendUrl || process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
   const invoiceNumber = normalizeString(booking.booking_code).toUpperCase();
   const buyerName = normalizeBankTransferText(customerName || booking.user_id?.full_name || "Khach hang");
+  const returnUrl = `${origin}/payment/sepay-pg-return?booking_id=${booking._id}&invoice=${invoiceNumber}`;
 
   const fields = {
     merchant: merchantId,
@@ -84,9 +85,9 @@ export const buildSepayPgCheckoutFields = ({ booking, amount, frontendUrl, custo
     order_invoice_number: invoiceNumber,
     order_description: `${buyerName} thanh toan don ve ${invoiceNumber}`,
     customer_id: String(booking.user_id?._id || booking.user_id || ""),
-    success_url: `${origin}/payment/sepay-pg-return?booking_id=${booking._id}&invoice=${invoiceNumber}`,
-    error_url: `${origin}/booking/failed`,
-    cancel_url: `${origin}/booking/failed`,
+    success_url: `${returnUrl}&sepay_result=success`,
+    error_url: `${returnUrl}&sepay_result=error`,
+    cancel_url: `${returnUrl}&sepay_result=cancel`,
   };
 
   fields.signature = signSepayPgCheckoutFields(fields);

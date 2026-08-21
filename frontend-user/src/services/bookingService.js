@@ -30,6 +30,11 @@ export const getBookingDetail = async (bookingId) => {
   return response.data;
 };
 
+export const getBookingOrderQr = async (bookingId) => {
+  const response = await axiosClient.get(`/bookings/${bookingId}/order-qr`);
+  return response.data;
+};
+
 export const verifyVnpayReturn = async (queryString) => {
   const response = await axiosClient.get(`/payments/vnpay/return${queryString}`);
   return response.data;
@@ -45,7 +50,7 @@ export const cancelBooking = async (bookingId, payload = {}) => {
   return response.data;
 };
 
-export const getMyBookings = async () => {
-  const response = await axiosClient.get("/bookings/my");
+export const getMyBookings = async (params = {}) => {
+  const response = await axiosClient.get("/bookings/my", { params });
   return response.data;
 };

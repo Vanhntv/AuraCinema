@@ -21,3 +21,18 @@ export const cancelAdminBooking = async (id, data = {}) => {
   const res = await axiosClient.patch(`${API_URL}/${id}/cancel`, data);
   return res.data;
 };
+
+export const lookupBookingOrder = async (bookingCode) => {
+  const res = await axiosClient.post(`${API_URL}/lookup`, { bookingCode });
+  return res.data;
+};
+
+export const scanPrintBookingOrder = async (qrToken) => {
+  const res = await axiosClient.post(`${API_URL}/scan-print`, { qrToken });
+  return res.data;
+};
+
+export const reprintBookingTickets = async (id, ticketIds, reason) => {
+  const res = await axiosClient.post(`${API_URL}/${id}/reprint`, { ticketIds, reason });
+  return res.data;
+};

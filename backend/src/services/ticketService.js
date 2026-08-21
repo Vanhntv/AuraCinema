@@ -115,7 +115,8 @@ const populatePaidBookingForTickets = (query) =>
       select: "showtime_id seat_id price",
       populate: {
         path: "seat_id",
-        select: "seat_row seat_number seat_code room_id",
+        select: "seat_row seat_number seat_code room_id seat_type_id",
+        populate: { path: "seat_type_id", select: "name" },
       },
     });
 
@@ -146,6 +147,7 @@ const buildTicketDraft = ({ booking, showtime, showtimeSeat }) => {
     roomId: showtime.room_id,
     seatId: seat._id,
     seatLabel,
+    seatType: String(seat.seat_type_id?.name || "").trim(),
     price: Number(showtimeSeat.price || 0),
     qrTokenHash: hashQrToken(qrToken),
     qrTokenEncrypted: encryptQrToken(qrToken),

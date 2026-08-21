@@ -4,6 +4,7 @@ import {
   confirmBookingPayment,
   createBooking,
   getBookingDetail,
+  getBookingOrderQr,
   getBookingPaymentStatus,
   getMyBookings,
 } from "../controllers/bookingsControllers.js";
@@ -13,6 +14,7 @@ const router = express.Router();
 router.use(authMiddleware);
 router.get("/my", getMyBookings);
 router.get("/:id/status", getBookingPaymentStatus);
+router.get("/:id/order-qr", getBookingOrderQr);
 router.get("/:id", getBookingDetail);
 router.post("/", createBooking);
 router.post("/:id/pay", confirmBookingPayment);

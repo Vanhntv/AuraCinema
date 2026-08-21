@@ -10,10 +10,17 @@ import {
   HiOutlineUser,
 } from "react-icons/hi";
 import { changePassword, updateProfile } from "../api/authApi";
-import { getMyTicketDetail, getMyTicketQr, getMyTickets } from "../services/ticketService";
+import { getMyTicketDetail, getMyTicketQr } from "../services/ticketService";
+import { getBookingOrderQr, getMyBookings } from "../services/bookingService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import { getApiErrorMessage, showToast } from "../utils/toast";
+import {
+  buildBookingOrderQrFilename,
+  isBookingOrderExpanded,
+  mapBookingOrderView,
+  toggleBookingOrderExpanded,
+} from "../utils/bookingOrderView";
 
 const tierTargets = {
   member: { label: "Member", next: "VIP", target: 3000000 },
@@ -41,7 +48,7 @@ const tabs = [
   { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
 ];
 
-const TICKETS_PER_PAGE = 10;
+const ORDERS_PER_PAGE = 10;
 
 const formatDateInput = (value) => {
   if (!value) return "";
@@ -133,8 +140,7 @@ const resolveImageUrl = (image) => {
 
 const getTicketDate = (ticket) => formatDate(ticket.showtime?.startTime);
 
-const getTicketTime = (ticket) => {
-  const value = ticket.showtime?.startTime;
+const formatTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -143,6 +149,44 @@ const getTicketTime = (ticket) => {
     minute: "2-digit",
   });
 };
+
+const getTicketTime = (ticket) => formatTime(ticket.showtime?.startTime);
+
+const getOrderSeatLabels = (order) =>
+  order.tickets.map((ticket) => ticket.seat?.label).filter(Boolean).join(", ") || "-";
+
+const getOrderSeatTypeLabels = (order) => {
+  const seatTypes = [...new Set(order.tickets.map((ticket) => ticket.seat?.type).filter(Boolean))];
+  if (seatTypes.length) return seatTypes.join(", ");
+  return order.tickets.length ? `${order.tickets.length} vé` : "Chưa có dữ liệu ghế";
+};
+
+const formatTicketSeatWithType = (ticket) => {
+  const seatLabel = String(ticket?.seat?.label || "").trim();
+  const seatType = String(ticket?.seat?.type || "").trim();
+
+  if (seatLabel && seatType) return `${seatLabel} - ${seatType}`;
+  return seatLabel || seatType || "-";
+};
+
+const bookingPaymentStatusMeta = {
+  paid: { label: "Đã thanh toán", className: "text-emerald-300 bg-emerald-400/10" },
+  pending: { label: "Chờ thanh toán", className: "text-amber-200 bg-amber-400/10" },
+  failed: { label: "Thanh toán lỗi", className: "text-red-200 bg-red-400/10" },
+  cancelled: { label: "Đã hủy", className: "text-red-200 bg-red-400/10" },
+  expired: { label: "Đã hết hạn", className: "text-amber-200 bg-amber-400/10" },
+  refund_pending: { label: "Chờ hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
+  refunded: { label: "Đã hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
+};
+
+const getBookingPaymentStatusMeta = (status) =>
+  bookingPaymentStatusMeta[status] || {
+    label: "Đang cập nhật",
+    className: "text-slate-300 bg-white/[0.06]",
+  };
+
+const getOrderServiceLabels = (order) =>
+  order.services.map((service) => `${service.name} ×${service.quantity}`).join(", ") || "Không có";
 
 function EmptyState({ children = "Không có dữ liệu" }) {
   return (
@@ -247,6 +291,10 @@ function AccountPage() {
     confirm_password: "",
   });
   const [tickets, setTickets] = useState([]);
+  const [bookingOrders, setBookingOrders] = useState([]);
+  const [orderQrDataUrls, setOrderQrDataUrls] = useState({});
+  const [expandedOrderIds, setExpandedOrderIds] = useState(() => new Set());
+  const [loadingOrderQrId, setLoadingOrderQrId] = useState("");
   const [vouchers, setVouchers] = useState([]);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -297,14 +345,20 @@ function AccountPage() {
       try {
         setLoadingTickets(true);
         setTicketsError("");
-        const firstPage = await getMyTickets({ page: 1, limit: 50 });
+        const firstPage = await getMyBookings({ page: 1, limit: 50 });
         const totalPages = Number(firstPage.pagination?.totalPages || 1);
         const remainingPages = totalPages > 1
           ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) =>
-            getMyTickets({ page: index + 2, limit: 50 })))
+            getMyBookings({ page: index + 2, limit: 50 })))
           : [];
-        const allTickets = [firstPage, ...remainingPages].flatMap((response) => response.data || []);
-        if (isActive) setTickets(allTickets);
+        const allOrders = [firstPage, ...remainingPages]
+          .flatMap((response) => response.data || [])
+          .map(mapBookingOrderView)
+          .filter((order) => order.status === "confirmed" && order.paymentStatus === "paid");
+        if (isActive) {
+          setBookingOrders(allOrders);
+          setTickets(allOrders.flatMap((order) => order.tickets));
+        }
       } catch (error) {
         if (isActive) {
           const message = getApiErrorMessage(error, "Không thể tải vé điện tử.");
@@ -781,6 +835,53 @@ function AccountPage() {
     }
   };
 
+  const loadOrderQr = async (order) => {
+    if (!order?.id) return "";
+    if (orderQrDataUrls[order.id]) return orderQrDataUrls[order.id];
+
+    try {
+      setLoadingOrderQrId(order.id);
+      const response = await getBookingOrderQr(order.id);
+      const payload = response.data?.qrPayload;
+      if (!payload?.startsWith("AURA_BOOKING_V2:")) {
+        throw new Error("QR đơn vé chưa sẵn sàng.");
+      }
+      const dataUrl = await QRCode.toDataURL(payload, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 260,
+        color: { dark: "#101010", light: "#ffffff" },
+      });
+      setOrderQrDataUrls((current) => ({ ...current, [order.id]: dataUrl }));
+      return dataUrl;
+    } catch (error) {
+      showToast("error", getApiErrorMessage(error, "Không thể tải QR đơn vé."));
+      return "";
+    } finally {
+      setLoadingOrderQrId("");
+    }
+  };
+
+  const toggleOrderDetails = (order, isExpanded) => {
+    setExpandedOrderIds((current) => toggleBookingOrderExpanded(current, order.id));
+    if (!isExpanded && order.ticketingVersion === 2 && !orderQrDataUrls[order.id]) {
+      void loadOrderQr(order);
+    }
+  };
+
+  const downloadOrderQr = async (order) => {
+    const dataUrl = await loadOrderQr(order);
+    if (!dataUrl) return;
+
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = buildBookingOrderQrFilename(order.bookingCode);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    showToast("success", "Đã tải QR đơn vé.");
+  };
+
   const renderTicketCard = (ticket) => {
     const status = getTicketStatusMeta(ticket.status);
     const poster = resolveImageUrl(ticket.movie?.poster);
@@ -813,9 +914,8 @@ function AccountPage() {
             <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
               <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
               <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-              <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
               <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
+              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
               <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
               <p><span className="text-slate-500">Check-in:</span> <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
             </div>
@@ -861,30 +961,187 @@ function AccountPage() {
     );
   };
 
-  const filteredTickets = tickets.filter((ticket) => {
+  const renderBookingOrderActions = (order, isExpanded, detailsId) => (
+    <div className="grid gap-2">
+      {order.ticketingVersion === 2 && (
+        <button
+          className="min-h-10 rounded-full border border-white/15 bg-white/[0.05] px-3 py-2 text-sm font-black text-white hover:border-emerald-400/50 disabled:cursor-wait disabled:opacity-60"
+          type="button"
+          disabled={loadingOrderQrId === order.id}
+          onClick={() => downloadOrderQr(order)}
+        >
+          {loadingOrderQrId === order.id ? "Đang tải QR..." : "Tải QR đơn"}
+        </button>
+      )}
+      <button
+        className="min-h-10 whitespace-normal rounded-full border border-[#ff6070]/40 bg-[#ff6070]/10 px-3 py-2 text-sm font-black leading-5 text-[#ff9aa5] hover:bg-[#ff6070]/20"
+        type="button"
+        aria-expanded={isExpanded}
+        aria-controls={detailsId}
+        onClick={() => toggleOrderDetails(order, isExpanded)}
+      >
+        {isExpanded ? "Thu gọn đơn vé" : "Hiển thị toàn bộ đơn vé"}
+      </button>
+    </div>
+  );
+
+  const renderBookingOrderDetails = (order, detailsId) => (
+    <div id={detailsId}>
+      {loadingOrderQrId === order.id && !orderQrDataUrls[order.id] && (
+        <div className="border-b border-white/10 bg-white/[0.025] px-5 py-4 text-sm font-bold text-slate-300">
+          Đang tải QR đơn vé...
+        </div>
+      )}
+      {orderQrDataUrls[order.id] && (
+        <div className="grid gap-4 border-b border-white/10 bg-white/[0.025] p-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
+          <div className="rounded-2xl bg-white p-3 text-black">
+            <img className="mx-auto h-32 w-32 object-contain" src={orderQrDataUrls[order.id]} alt={`QR đơn ${order.bookingCode}`} />
+          </div>
+          <div>
+            <h4 className="font-black text-white">QR đơn vé</h4>
+            <p className="mt-2 text-sm leading-6 text-slate-400">Xuất trình tại quầy để tra cứu và in tất cả vé hợp lệ chưa in. Check-in vẫn sử dụng QR riêng của từng vé.</p>
+          </div>
+        </div>
+      )}
+      <div className="grid gap-5 border-b border-white/10 bg-black/10 px-5 py-5 text-slate-200 sm:grid-cols-[minmax(0,1.45fr)_minmax(150px,0.7fr)_minmax(190px,0.85fr)] sm:items-start">
+        <div className="min-w-0">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Dịch vụ</span>
+          <strong className="mt-2 block break-words text-base font-black leading-6 text-white sm:text-lg">
+            {getOrderServiceLabels(order)}
+          </strong>
+        </div>
+        <div className="min-w-0 sm:text-right">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Giảm giá</span>
+          <strong className="mt-2 block break-words text-lg font-black tabular-nums text-emerald-300 sm:text-xl">
+            {currencyFormatter.format(order.pricing.discount)}
+          </strong>
+        </div>
+        <div className="min-w-0 sm:text-right">
+          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Tổng thanh toán</span>
+          <strong className="mt-2 block break-words text-2xl font-black leading-tight tabular-nums text-[#ff9aa5] sm:text-[28px]">
+            {currencyFormatter.format(order.pricing.total)}
+          </strong>
+        </div>
+      </div>
+      <div className="grid gap-5 p-5 xl:grid-cols-2">
+        {order.tickets.map(renderTicketCard)}
+      </div>
+    </div>
+  );
+
+  const renderBookingOrderMobileCard = (order) => {
+    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
+    const detailsId = `booking-order-mobile-details-${order.id}`;
+    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
+
+    return (
+      <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#111722]" key={order.id}>
+        <div className="grid gap-5 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.1em] text-[#ff8f99]">Mã hóa đơn</p>
+              <h3 className="mt-1 break-words text-xl font-black text-white">{order.bookingCode}</h3>
+            </div>
+            <span className={`rounded-full px-3 py-1.5 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
+          </div>
+          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-4 gap-y-4 text-base">
+            <dt className="text-slate-500">Phim</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {order.movie.title || "Đang cập nhật"}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
+            </dd>
+            <dt className="text-slate-500">Suất chiếu</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
+            </dd>
+            <dt className="text-slate-500">Ghế đã đặt</dt>
+            <dd className="min-w-0 break-words font-bold text-white">
+              {getOrderSeatLabels(order)}
+              <span className="mt-1 block text-sm font-medium text-slate-500">{getOrderSeatTypeLabels(order)}</span>
+            </dd>
+            <dt className="text-slate-500">Ngày đặt</dt>
+            <dd className="min-w-0 break-words text-slate-200">
+              {formatDateTime(order.createdAt)}
+              <span className="mt-1 block text-sm font-bold text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</span>
+            </dd>
+            <dt className="text-slate-500">Điểm</dt>
+            <dd className="font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")} <span className="text-sm font-medium text-slate-500">điểm thưởng</span></dd>
+          </dl>
+          {renderBookingOrderActions(order, isExpanded, detailsId)}
+        </div>
+        {isExpanded && renderBookingOrderDetails(order, detailsId)}
+      </article>
+    );
+  };
+
+  const renderBookingOrderTableRows = (order) => {
+    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
+    const detailsId = `booking-order-table-details-${order.id}`;
+    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
+
+    return (
+      <tbody className="divide-y divide-white/10" key={order.id}>
+        <tr className="align-top text-base leading-6 text-slate-300 hover:bg-white/[0.025]">
+          <td className="break-words px-4 py-5 [overflow-wrap:anywhere]">
+            <strong className="block font-black text-white">{order.bookingCode}</strong>
+            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block font-bold text-white">{order.movie.title || "Đang cập nhật"}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block text-white">{formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <strong className="block font-bold text-white">{getOrderSeatLabels(order)}</strong>
+            <span className="mt-2 block text-sm text-slate-500">{getOrderSeatTypeLabels(order)}</span>
+          </td>
+          <td className="break-words px-4 py-5">
+            <span className="block">{formatDateTime(order.createdAt)}</span>
+            <strong className="mt-2 block text-sm text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</strong>
+          </td>
+          <td className="px-4 py-5 text-right">
+            <strong className="block text-lg font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")}</strong>
+            <span className="mt-2 block text-xs text-slate-500">điểm thưởng</span>
+          </td>
+          <td className="px-4 py-5">{renderBookingOrderActions(order, isExpanded, detailsId)}</td>
+        </tr>
+        {isExpanded && (
+          <tr>
+            <td className="bg-[#111722] p-0" colSpan={7}>{renderBookingOrderDetails(order, detailsId)}</td>
+          </tr>
+        )}
+      </tbody>
+    );
+  };
+
+  const filteredBookingOrders = bookingOrders.filter((order) => {
     const query = normalizeFilterText(ticketFilters.query);
     const statusFilter = ticketFilters.status;
-    const statusLabel = getTicketStatusMeta(ticket.status).label;
     const searchableText = normalizeFilterText([
-      ticket.ticketCode,
-      ticket.movie?.title,
-      getTicketDate(ticket),
-      getTicketTime(ticket),
-      ticket.room?.name,
-      ticket.seat?.label,
-      statusLabel,
+      order.bookingCode,
+      order.movie.title,
+      order.room.name,
+      ...order.tickets.flatMap((ticket) => [
+        ticket.ticketCode,
+        ticket.seat?.label,
+        getTicketStatusMeta(ticket.status).label,
+      ]),
     ].join(" "));
 
     if (query && !searchableText.includes(query)) return false;
-    if (statusFilter && statusLabel !== statusFilter) return false;
+    if (statusFilter && !order.tickets.some((ticket) => getTicketStatusMeta(ticket.status).label === statusFilter)) return false;
 
     return true;
   });
-  const ticketTotalPages = Math.max(1, Math.ceil(filteredTickets.length / TICKETS_PER_PAGE));
+  const ticketTotalPages = Math.max(1, Math.ceil(filteredBookingOrders.length / ORDERS_PER_PAGE));
   const normalizedTicketPage = Math.min(ticketPage, ticketTotalPages);
-  const paginatedTickets = filteredTickets.slice(
-    (normalizedTicketPage - 1) * TICKETS_PER_PAGE,
-    normalizedTicketPage * TICKETS_PER_PAGE,
+  const paginatedBookingOrders = filteredBookingOrders.slice(
+    (normalizedTicketPage - 1) * ORDERS_PER_PAGE,
+    normalizedTicketPage * ORDERS_PER_PAGE,
   );
 
   useEffect(() => {
@@ -901,7 +1158,7 @@ function AccountPage() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-white">Vé của tôi</h2>
-          <p className="mt-1 text-sm text-slate-400">Mỗi vé điện tử có một mã QR riêng để xuất trình tại cửa phòng chiếu.</p>
+          <p className="mt-1 text-sm text-slate-400">Mỗi lần đặt vé là một đơn; bên trong đơn, từng ghế vẫn có QR riêng để check-in.</p>
         </div>
         <button
           className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-5 text-sm font-black text-white hover:border-[#ff6070]"
@@ -917,7 +1174,7 @@ function AccountPage() {
           type="search"
           value={ticketFilters.query}
           onChange={(event) => setTicketFilters((current) => ({ ...current, query: event.target.value }))}
-          placeholder="Tìm mã vé, phim, phòng, ghế..."
+          placeholder="Tìm mã đơn, mã vé, phim, phòng, ghế..."
         />
         <select
           className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none focus:border-[#ff6070]"
@@ -942,28 +1199,55 @@ function AccountPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-black text-white">Lịch sử đặt vé</h3>
-            <p className="mt-1 text-xs text-slate-500">Danh sách vé hiện tại, mỗi ghế là một vé QR riêng.</p>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi hóa đơn, suất chiếu, ghế và điểm nhận được.</p>
           </div>
           <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-black text-slate-300">
-            {tickets.length} vé
+            {bookingOrders.length} đơn · {tickets.length} vé
           </span>
         </div>
         {loadingTickets ? (
           <EmptyState>Đang tải vé điện tử...</EmptyState>
-        ) : tickets.length ? (
+        ) : bookingOrders.length ? (
           <>
-            {filteredTickets.length ? (
-              <div className="grid gap-5 xl:grid-cols-2">
-                {paginatedTickets.map(renderTicketCard)}
-              </div>
+            {filteredBookingOrders.length ? (
+              <>
+                <div className="grid gap-4 lg:hidden">
+                  {paginatedBookingOrders.map(renderBookingOrderMobileCard)}
+                </div>
+                <div className="hidden overflow-hidden rounded-2xl border border-white/10 lg:block">
+                  <table className="w-full table-fixed border-collapse text-left">
+                    <colgroup>
+                      <col className="w-[18%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[7%]" />
+                      <col className="w-[16%]" />
+                    </colgroup>
+                    <thead className="bg-white/[0.045] text-sm uppercase tracking-[0.04em] text-slate-400">
+                      <tr>
+                        <th className="break-words px-4 py-4 font-black">Mã hóa đơn</th>
+                        <th className="break-words px-4 py-4 font-black">Phim</th>
+                        <th className="break-words px-4 py-4 font-black">Suất chiếu</th>
+                        <th className="break-words px-4 py-4 font-black">Ghế đã đặt</th>
+                        <th className="break-words px-4 py-4 font-black">Ngày đặt</th>
+                        <th className="break-words px-4 py-4 text-right font-black">Điểm</th>
+                        <th className="break-words px-4 py-4 font-black">Thao tác</th>
+                      </tr>
+                    </thead>
+                    {paginatedBookingOrders.map(renderBookingOrderTableRows)}
+                  </table>
+                </div>
+              </>
             ) : (
-              <EmptyState>Không có vé phù hợp.</EmptyState>
+              <EmptyState>Không có đơn vé phù hợp.</EmptyState>
             )}
-            {filteredTickets.length > 0 && (
+            {filteredBookingOrders.length > 0 && (
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-slate-400">
                 <span>
-                  Hiển thị {(normalizedTicketPage - 1) * TICKETS_PER_PAGE + 1}-
-                  {Math.min(normalizedTicketPage * TICKETS_PER_PAGE, filteredTickets.length)} / {filteredTickets.length} vé
+                  Hiển thị {(normalizedTicketPage - 1) * ORDERS_PER_PAGE + 1}-
+                  {Math.min(normalizedTicketPage * ORDERS_PER_PAGE, filteredBookingOrders.length)} / {filteredBookingOrders.length} đơn
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -997,7 +1281,7 @@ function AccountPage() {
             )}
           </>
         ) : (
-          <EmptyState>Bạn chưa có vé điện tử QR nào.</EmptyState>
+          <EmptyState>Bạn chưa có đơn vé điện tử nào.</EmptyState>
         )}
       </div>
     </section>
@@ -1041,10 +1325,8 @@ function AccountPage() {
                     <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
                       <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-                      <p><span className="text-slate-500">Rạp:</span> <strong className="text-white">{ticket.cinema?.name || "-"}</strong></p>
                       <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
-                      <p><span className="text-slate-500">Loại ghế:</span> <strong className="text-white">{ticket.seat?.type || "Đang cập nhật"}</strong></p>
+                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
                     </div>
                   </div>

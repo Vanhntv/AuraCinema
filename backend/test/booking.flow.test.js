@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import mongoose from "mongoose";
 import { authMiddleware } from "../src/middleware/authMiddleware.js";
 import { updateAdminBookingPayment } from "../src/controllers/adminBookingsControllers.js";
-import { confirmBookingPayment, createBooking } from "../src/controllers/bookingsControllers.js";
+import { confirmBookingPayment, createBooking, getMyBookings } from "../src/controllers/bookingsControllers.js";
 import { holdShowtimeSeats } from "../src/controllers/showtimeSeatsControllers.js";
 import Booking from "../src/models/Booking.js";
 import SeatHold from "../src/models/SeatHold.js";
@@ -27,6 +27,9 @@ const makeResponse = () => ({
 });
 
 const sessionResult = (value) => ({
+  populate() {
+    return this;
+  },
   session: async () => value,
 });
 
@@ -65,8 +68,10 @@ const makeSeat = ({ id, typeName, row = "A", number = 1, price = 50000, heldBy }
   _id: id,
   price,
   seat_id: {
+    _id: new mongoose.Types.ObjectId(),
     seat_row: row,
     seat_number: number,
+    seat_code: `${row}${number}`,
     seat_type_id: { name: typeName },
   },
   held_by: heldBy,
@@ -275,6 +280,9 @@ test("create booking allows multiple seat types in one booking", async () => {
   ];
   const bookingId = new mongoose.Types.ObjectId().toString();
   const hold = makeActiveHold({ userId, showtimeId, seatIds });
+  const movieId = new mongoose.Types.ObjectId();
+  const roomId = new mongoose.Types.ObjectId();
+  const cinemaId = new mongoose.Types.ObjectId();
   let createdPayload = null;
   let reservedUpdate = null;
 
@@ -288,7 +296,23 @@ test("create booking allows multiple seat types in one booking", async () => {
     })],
     [Showtime, "findOne", () => sessionResult({
       _id: showtimeId,
-      movie_id: new mongoose.Types.ObjectId(),
+      start_time: new Date("2026-08-18T10:00:00.000Z"),
+      end_time: new Date("2026-08-18T12:00:00.000Z"),
+      movie_id: {
+        _id: movieId,
+        title: "Phim thu nghiem",
+        poster: "/poster.jpg",
+        age_limit: 13,
+      },
+      room_id: {
+        _id: roomId,
+        name: "Phong 1",
+        cinema_id: {
+          _id: cinemaId,
+          name: "AuraCinema",
+          address: "Ha Noi",
+        },
+      },
     })],
     [SeatHold, "findOne", () => sessionResult(hold)],
     [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
@@ -316,6 +340,7 @@ test("create booking allows multiple seat types in one booking", async () => {
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.success, true);
     assert.equal(String(res.body.data._id), String(createdPayload._id));
+    assert.equal(res.body.data.order_qr, undefined);
     assert.deepEqual(reservedUpdate.filter._id.$in.map(String), seatIds);
     assert.equal(reservedUpdate.update.$set.status, "reserved");
     assert.equal(String(reservedUpdate.update.$set.reserved_by_booking_id), String(createdPayload._id));
@@ -325,6 +350,20 @@ test("create booking allows multiple seat types in one booking", async () => {
     assert.equal(createdPayload.payment_status, "pending");
     assert.equal(String(createdPayload.seat_hold_id), String(hold._id));
     assert.ok(createdPayload.payment_expires_at instanceof Date);
+    assert.equal(createdPayload.ticketing_version, 2);
+    assert.equal(createdPayload.order_qr.token_hash.length, 64);
+    assert.match(createdPayload.order_qr.token_encrypted, /^v1:/);
+    assert.equal(createdPayload.movie_snapshot.title, "Phim thu nghiem");
+    assert.equal(createdPayload.showtime_snapshot.room_name, "Phong 1");
+    assert.equal(createdPayload.seat_items.length, 2);
+    assert.deepEqual(createdPayload.seat_items.map((item) => item.seat_type), ["Ghế thường", "VIP"]);
+    assert.deepEqual(createdPayload.pricing, {
+      ticket_subtotal: 120000,
+      service_subtotal: 0,
+      subtotal: 120000,
+      discount: 0,
+      total: 120000,
+    });
   });
 });
 
@@ -667,6 +706,9 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
       },
     })],
     [Showtime, "findOne", () => ({
+      populate() {
+        return this;
+      },
       session: async (session) => {
         sessionsUsed.push(session);
         return {
@@ -717,5 +759,58 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
     assert.equal(String(res.body.data._id), String(createdPayload._id));
     assert.ok(sessionsUsed.length > 0);
     assert.ok(sessionsUsed.every((session) => session === null));
+  });
+});
+
+test("my booking history only returns confirmed paid bookings", async () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  const expectedFilter = {
+    user_id: userId,
+    status: "confirmed",
+    payment_status: "paid",
+  };
+  let findFilter = null;
+  let countFilter = null;
+
+  await withPatched([
+    [Booking, "find", (filter) => {
+      findFilter = filter;
+      return {
+        populate() {
+          return this;
+        },
+        sort() {
+          return this;
+        },
+        skip() {
+          return this;
+        },
+        async limit() {
+          return [];
+        },
+      };
+    }],
+    [Ticket, "find", () => {
+      throw new Error("tickets must not be queried when no paid bookings are returned");
+    }],
+    [Booking, "countDocuments", async (filter) => {
+      countFilter = filter;
+      return 0;
+    }],
+  ], async () => {
+    const req = {
+      user: { id: userId },
+      query: { page: "1", limit: "50" },
+    };
+    const res = makeResponse();
+
+    await getMyBookings(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.success, true);
+    assert.deepEqual(findFilter, expectedFilter);
+    assert.deepEqual(countFilter, expectedFilter);
+    assert.deepEqual(res.body.data, []);
+    assert.equal(res.body.pagination.totalItems, 0);
   });
 });

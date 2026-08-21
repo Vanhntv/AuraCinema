@@ -85,6 +85,7 @@ const makePaidBooking = (seatCount = 3) => {
       seat_row: "A",
       seat_number: index + 1,
       seat_code: `A${index + 1}`,
+      seat_type_id: { name: "Ghế thường" },
     },
   }));
 
@@ -155,6 +156,7 @@ test("paid booking issues exactly one independently secured ticket per seat", as
     result.qrPayloads.forEach((item) => assert.match(item.qrPayload, /^AURA_TICKET:/));
     insertedDrafts.forEach((ticket) => {
       assert.ok(decryptQrToken(ticket.qrTokenEncrypted));
+      assert.equal(ticket.seatType, "Ghế thường");
     });
   });
 });
