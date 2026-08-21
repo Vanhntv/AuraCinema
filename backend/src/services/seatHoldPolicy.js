@@ -1,5 +1,5 @@
 export const SEAT_HOLD_DURATION_MS = 5 * 60 * 1000;
-export const PAYMENT_DURATION_MS = 10 * 60 * 1000;
+export const PAYMENT_DURATION_MS = 5 * 60 * 1000;
 export const MAX_SEATS_PER_HOLD = 8;
 
 const addDuration = (now, durationMs) =>

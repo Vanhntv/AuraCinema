@@ -389,19 +389,27 @@ function PaymentPage() {
     }
   };
 
-  const closePayment = () => {
-    navigate(buildPaymentClosePath(summary), {
-      state: {
-        paymentReturnState: {
-          bookingId,
-          movieId: summary?.movieId,
-          showtimeId: summary?.showtimeId,
-          showtimeStartTime: summary?.showtimeStartTime,
-          selectedSeatIds: summary?.selectedSeatIds || [],
-          paymentExpiresAt: summary?.paymentExpiresAt,
-        },
-      },
-    });
+  const closePayment = async () => {
+    if (!bookingId || bookingIsPaid) {
+      navigate(buildPaymentClosePath(summary));
+      return;
+    }
+
+    try {
+      setIsCancellingBooking(true);
+      setPaymentError("");
+      await cancelBooking(bookingId, { reason: "Khách quay lại trang phim trước khi thanh toán" });
+      navigate(buildPaymentClosePath(summary), {
+        replace: true,
+        state: { message: "Đơn thanh toán đã được hủy. Ghế đã được mở lại." },
+      });
+      return;
+    } catch (requestError) {
+      const message = getApiErrorMessage(requestError, "Không thể hủy đơn thanh toán để quay lại phim.");
+      setPaymentError(message);
+      showToast("error", message);
+      setIsCancellingBooking(false);
+    }
   };
 
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
@@ -530,8 +538,8 @@ function PaymentPage() {
             <button className="h-11 rounded-[var(--aura-radius-sm)] border border-red-400/30 bg-red-500/10 px-4 text-sm font-bold text-red-100 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={cancelPendingBooking} disabled={isCancellingBooking || isPaying}>
               {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
             </button>
-            <button className="h-11 rounded-[var(--aura-radius-sm)] border border-white/15 bg-white/[0.04] px-4 text-sm font-bold text-white hover:border-white/30" type="button" onClick={closePayment}>
-              Quay lại phim
+            <button className="h-11 rounded-[var(--aura-radius-sm)] border border-white/15 bg-white/[0.04] px-4 text-sm font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={closePayment} disabled={isCancellingBooking || isPaying}>
+              {isCancellingBooking ? "Đang mở ghế..." : "Quay lại phim"}
             </button>
           </div>
           <button

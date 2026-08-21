@@ -161,6 +161,14 @@ const getOrderSeatTypeLabels = (order) => {
   return order.tickets.length ? `${order.tickets.length} vé` : "Chưa có dữ liệu ghế";
 };
 
+const formatTicketSeatWithType = (ticket) => {
+  const seatLabel = String(ticket?.seat?.label || "").trim();
+  const seatType = String(ticket?.seat?.type || "").trim();
+
+  if (seatLabel && seatType) return `${seatLabel} - ${seatType}`;
+  return seatLabel || seatType || "-";
+};
+
 const bookingPaymentStatusMeta = {
   paid: { label: "Đã thanh toán", className: "text-emerald-300 bg-emerald-400/10" },
   pending: { label: "Chờ thanh toán", className: "text-amber-200 bg-amber-400/10" },
@@ -907,7 +915,7 @@ function AccountPage() {
               <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
               <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
               <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
+              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
               <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
               <p><span className="text-slate-500">Check-in:</span> <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
             </div>
@@ -1318,8 +1326,7 @@ function AccountPage() {
                       <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
                       <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{ticket.seat?.label || "-"}</strong></p>
-                      <p><span className="text-slate-500">Loại ghế:</span> <strong className="text-white">{ticket.seat?.type || "Đang cập nhật"}</strong></p>
+                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
                       <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
                     </div>
                   </div>

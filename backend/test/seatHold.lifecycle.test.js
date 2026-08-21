@@ -47,12 +47,12 @@ test("seat holds keep the first selection deadline for exactly five minutes", ()
   );
 });
 
-test("pending bookings have exactly ten minutes to complete payment", () => {
+test("pending bookings have exactly five minutes to complete payment", () => {
   const now = new Date("2026-08-18T00:00:00.000Z");
 
   assert.equal(
     createPaymentExpiry(now).toISOString(),
-    "2026-08-18T00:10:00.000Z",
+    "2026-08-18T00:05:00.000Z",
   );
 });
 
@@ -254,7 +254,7 @@ test("an expired booking releases owned seats and combo stock only once", async 
     combos: [{ combo_id: comboId, quantity: 2 }],
     status: "pending",
     payment_status: "pending",
-    payment_expires_at: new Date("2026-08-18T00:10:00.000Z"),
+    payment_expires_at: new Date("2026-08-18T00:05:00.000Z"),
   };
   let claimCount = 0;
   let restoredComboCount = 0;
@@ -277,7 +277,7 @@ test("an expired booking releases owned seats and combo stock only once", async 
     }],
     [Payment, "updateMany", async () => ({ modifiedCount: 1 })],
   ], async () => {
-    const now = new Date("2026-08-18T00:10:00.000Z");
+    const now = new Date("2026-08-18T00:05:00.000Z");
     const first = await expirePendingBooking({ booking, now });
     const second = await expirePendingBooking({ booking, now });
 
