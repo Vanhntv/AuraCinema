@@ -6663,3 +6663,166 @@
     background: transparent;
   }
 }
+
+/* Stronger buttons for the light admin theme */
+.admin-layout .btn,
+.admin-layout .pagination-btn,
+.admin-layout .action-btn,
+.admin-layout .quick-action {
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.admin-layout .btn {
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+}
+
+.admin-layout .btn svg,
+.admin-layout .action-btn svg,
+.admin-layout .pagination-btn svg {
+  stroke-width: 2.25;
+}
+
+.admin-layout .btn-primary {
+  border-color: #3641f5;
+  background: #3641f5;
+  color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.08),
+    0 8px 18px rgba(54, 65, 245, 0.22);
+}
+
+.admin-layout .btn-primary:hover:not(:disabled) {
+  border-color: #2a31d8;
+  background: #2a31d8;
+  color: #ffffff;
+  box-shadow:
+    0 2px 4px rgba(16, 24, 40, 0.1),
+    0 10px 22px rgba(42, 49, 216, 0.26);
+}
+
+.admin-layout .btn-secondary {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1d2939;
+}
+
+.admin-layout .btn-secondary:hover:not(:disabled) {
+  border-color: #98a2b3;
+  background: #f2f4f7;
+  color: #101828;
+}
+
+.admin-layout .btn-danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.08),
+    0 8px 18px rgba(220, 38, 38, 0.2);
+}
+
+.admin-layout .btn-danger:hover:not(:disabled) {
+  border-color: #b91c1c;
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.admin-layout .btn-success {
+  border-color: #059669;
+  background: #059669;
+  color: #ffffff;
+}
+
+.admin-layout .btn-success:hover:not(:disabled) {
+  border-color: #047857;
+  background: #047857;
+  color: #ffffff;
+}
+
+.admin-layout .btn-ghost,
+.admin-layout .action-btn,
+.admin-layout .pagination-btn {
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+}
+
+.admin-layout .btn-ghost:hover:not(:disabled),
+.admin-layout .action-btn:hover:not(:disabled),
+.admin-layout .pagination-btn:hover:not(:disabled) {
+  border-color: #98a2b3;
+  background: #eef2ff;
+  color: #3641f5;
+}
+
+.admin-layout .btn-danger-text {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.admin-layout .btn-danger-text:hover:not(:disabled) {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-layout .quick-action {
+  border-color: #d0d5dd;
+  background: #ffffff;
+  color: #1d2939;
+}
+
+.admin-layout .quick-action:hover:not(:disabled) {
+  border-color: #9cb9ff;
+  background: #ecf3ff;
+  color: #252dae;
+}
+
+.admin-layout .btn:disabled,
+.admin-layout .pagination-btn:disabled {
+  border-color: #e4e7ec;
+  background: #f2f4f7;
+  color: #98a2b3;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.admin-layout .room-status-select {
+  min-height: 34px;
+  border-width: 2px;
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.admin-layout .room-status-select.active {
+  border-color: #16a34a;
+  background: #ecfdf3;
+  color: #15803d;
+}
+
+.admin-layout .room-status-select.maintenance {
+  border-color: #d97706;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.admin-layout .room-status-select.inactive {
+  border-color: #dc2626;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.admin-layout .room-status-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(70, 95, 255, 0.16);
+}
+
+.admin-layout .room-status-select option {
+  background: #ffffff;
+  color: #1d2939;
+  font-weight: 800;
+}
