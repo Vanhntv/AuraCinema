@@ -14,18 +14,18 @@
   --color-bg-overlay: rgba(0, 0, 0, 0.6);
 
   /* Accent Colors */
-  --color-accent: var(--aura-violet, #8b5cf6);
-  --color-accent-light: #a78bfa;
-  --color-accent-dark: #7c3aed;
-  --color-accent-glow: rgba(139, 92, 246, 0.16);
+  --color-accent: #2563eb;
+  --color-accent-light: #3b82f6;
+  --color-accent-dark: #1d4ed8;
+  --color-accent-glow: rgba(37, 99, 235, 0.16);
 
   /* Gradient */
   --gradient-primary: var(--color-accent);
   --gradient-secondary: var(--color-accent-dark);
   --gradient-card: linear-gradient(
     135deg,
-    rgba(139, 92, 246, 0.08) 0%,
-    rgba(236, 72, 153, 0.05) 100%
+    rgba(37, 99, 235, 0.08) 0%,
+    rgba(14, 165, 233, 0.05) 100%
   );
   --gradient-sidebar: var(--color-bg-primary);
 
@@ -33,7 +33,7 @@
   --color-text-primary: var(--aura-projector-white, #f3f4f6);
   --color-text-secondary: var(--aura-text-secondary, #a6afbf);
   --color-text-muted: var(--aura-text-muted, #7f8998);
-  --color-text-accent: #a78bfa;
+  --color-text-accent: #3b82f6;
   --color-accent-ink: #0a0e1a;
 
   /* Status Colors */
@@ -48,7 +48,7 @@
 
   /* Border */
   --color-border: rgba(148, 163, 184, 0.1);
-  --color-border-hover: rgba(139, 92, 246, 0.3);
+  --color-border-hover: rgba(37, 99, 235, 0.3);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -7045,6 +7045,70 @@
 
 .admin-layout .showtime-status-filter option:checked {
   background: #f1f5f9;
+}
+
+/* Blue admin primary accents */
+.admin-layout {
+  --color-accent: #2563eb;
+  --color-accent-light: #3b82f6;
+  --color-accent-dark: #1d4ed8;
+  --color-accent-glow: rgba(37, 99, 235, 0.16);
+  --color-text-accent: #3b82f6;
+  --color-border-hover: rgba(37, 99, 235, 0.3);
+}
+
+.admin-layout .btn-primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(16, 24, 40, 0.08),
+    0 8px 18px rgba(37, 99, 235, 0.22);
+}
+
+.admin-layout .btn-primary:hover:not(:disabled) {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow:
+    0 2px 4px rgba(16, 24, 40, 0.1),
+    0 10px 22px rgba(29, 78, 216, 0.26);
+}
+
+.admin-layout .sidebar-link.active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.admin-layout .sidebar-link.active svg,
+.admin-layout .sidebar-link.active .sidebar-link-icon {
+  color: #2563eb;
+}
+
+.admin-layout .header-user-avatar,
+.admin-layout .sidebar-footer-avatar {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.admin-layout .home-banner-option.selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+.admin-layout .home-banner-option input {
+  accent-color: #2563eb;
+}
+
+.admin-layout input[type="checkbox"],
+.admin-layout input[type="radio"] {
+  accent-color: #2563eb;
+}
+
+.admin-layout .seat-layout-total {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .admin-layout .showtime-slot-chip {
