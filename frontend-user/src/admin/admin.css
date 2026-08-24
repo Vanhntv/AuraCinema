@@ -6851,9 +6851,33 @@
   font-weight: 900;
 }
 
+.admin-layout .seat-type-chip.normal {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.admin-layout .seat-type-chip.vip {
+  border-color: #f59e0b;
+  background: #fff7ed;
+  color: #b45309;
+}
+
+.admin-layout .seat-type-chip.couple {
+  border-color: #f472b6;
+  background: #fdf2f8;
+  color: #be185d;
+}
+
+.admin-layout .seat-type-chip.broken {
+  border-color: #f87171;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 .admin-layout .seat-type-chip.normal.active {
-  border-color: #16a34a;
-  background: #16a34a;
+  border-color: #334155;
+  background: #475569;
   color: #ffffff;
 }
 
@@ -6909,9 +6933,9 @@
 }
 
 .admin-layout .room-seat.couple {
-  border-color: #9d174d;
-  background: #db2777;
-  color: #ffffff;
+  border-color: #f472b6;
+  background: #f9a8d4;
+  color: #831843;
 }
 
 .admin-layout .room-seat.wheelchair {
@@ -6939,6 +6963,90 @@
     0 10px 20px rgba(15, 23, 42, 0.28);
 }
 
+.admin-layout .layout-editor-seat.room-seat:hover {
+  border-color: #475569;
+  background: #64748b;
+  color: #ffffff;
+}
+
+.admin-layout .layout-editor-seat.room-seat.vip:hover {
+  border-color: #78350f;
+  background: #b45309;
+  color: #ffffff;
+}
+
+.admin-layout .layout-editor-seat.room-seat.couple:hover {
+  border-color: #ec4899;
+  background: #fbcfe8;
+  color: #831843;
+}
+
+.admin-layout .layout-editor-seat.room-seat.broken:hover {
+  border-color: #991b1b;
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.normal:hover {
+  border-color: #64748b;
+  background: #475569;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.vip:hover {
+  border-color: #92400e;
+  background: #d97706;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.couple:hover {
+  border-color: #f472b6;
+  background: #f9a8d4;
+  color: #831843;
+}
+
+.admin-layout .seat-type-chip.broken:hover {
+  border-color: #991b1b;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* Showtime status select text colors */
+.admin-layout .showtime-status-filter,
+.admin-layout .showtime-status-filter option {
+  background: #ffffff;
+  font-weight: 800;
+}
+
+.admin-layout .showtime-status-filter.status-all,
+.admin-layout .showtime-status-filter option.status-all {
+  color: #475569;
+}
+
+.admin-layout .showtime-status-filter.status-scheduled,
+.admin-layout .showtime-status-filter option.status-scheduled {
+  color: #1d4ed8;
+}
+
+.admin-layout .showtime-status-filter.status-now_showing,
+.admin-layout .showtime-status-filter option.status-now_showing {
+  color: #15803d;
+}
+
+.admin-layout .showtime-status-filter.status-completed,
+.admin-layout .showtime-status-filter option.status-completed {
+  color: #475569;
+}
+
+.admin-layout .showtime-status-filter.status-cancelled,
+.admin-layout .showtime-status-filter option.status-cancelled {
+  color: #b91c1c;
+}
+
+.admin-layout .showtime-status-filter option:checked {
+  background: #f1f5f9;
+}
+
 .admin-layout .showtime-slot-chip {
   border: 1px solid #cbd5e1;
   background: #ffffff;
@@ -6955,43 +7063,43 @@
 .admin-layout .showtime-slot-chip.scheduled {
   border-color: #cbd5e1;
   background: #ffffff;
-  color: #1e293b;
+  color: #1d4ed8;
 }
 
 .admin-layout .showtime-slot-chip.scheduled small {
-  color: #475569;
+  color: #1d4ed8;
 }
 
 .admin-layout .showtime-slot-chip.now_showing {
   border-color: #cbd5e1;
   background: #ffffff;
-  color: #1e293b;
+  color: #15803d;
 }
 
 .admin-layout .showtime-slot-chip.now_showing small {
-  color: #475569;
+  color: #15803d;
 }
 
 .admin-layout .showtime-slot-chip.completed {
   border-color: #cbd5e1;
   background: #ffffff;
-  color: #1e293b;
+  color: #64748b;
 }
 
 .admin-layout .showtime-slot-chip.completed small {
   border-left-color: #cbd5e1;
-  color: #475569;
+  color: #64748b;
 }
 
 .admin-layout .showtime-slot-chip.cancelled {
   border-color: #cbd5e1;
   background: #ffffff;
-  color: #1e293b;
+  color: #b91c1c;
 }
 
 .admin-layout .showtime-slot-chip.cancelled small {
   border-left-color: #cbd5e1;
-  color: #475569;
+  color: #b91c1c;
 }
 
 .admin-layout .showtime-slot-chip.completed,
@@ -7095,4 +7203,67 @@
   color: #64748b;
   border-bottom-color: #cbd5e1;
   font-weight: 800;
+}
+
+/* Seat editor colors should stay tied to each seat type */
+.admin-layout .room-seat.couple-connected-left::before {
+  background: #f9a8d4;
+  border-top-color: #f472b6;
+  border-bottom-color: #f472b6;
+}
+
+.admin-layout .room-seat.couple-connected-left {
+  border-left-color: #f9a8d4;
+}
+
+.admin-layout .room-seat.couple-connected-right {
+  border-right-color: #f9a8d4;
+}
+
+.admin-layout .layout-editor-seat.room-seat:hover {
+  border-color: #475569;
+  background: #64748b;
+  color: #ffffff;
+}
+
+.admin-layout .layout-editor-seat.room-seat.vip:hover {
+  border-color: #78350f;
+  background: #b45309;
+  color: #ffffff;
+}
+
+.admin-layout .layout-editor-seat.room-seat.couple:hover {
+  border-color: #ec4899;
+  background: #fbcfe8;
+  color: #831843;
+}
+
+.admin-layout .layout-editor-seat.room-seat.broken:hover {
+  border-color: #991b1b;
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.normal:hover {
+  border-color: #64748b;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.admin-layout .seat-type-chip.vip:hover {
+  border-color: #d97706;
+  background: #ffedd5;
+  color: #92400e;
+}
+
+.admin-layout .seat-type-chip.couple:hover {
+  border-color: #ec4899;
+  background: #fce7f3;
+  color: #9d174d;
+}
+
+.admin-layout .seat-type-chip.broken:hover {
+  border-color: #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
 }
