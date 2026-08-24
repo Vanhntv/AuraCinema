@@ -6826,3 +6826,115 @@
   color: #1d2939;
   font-weight: 800;
 }
+
+.admin-layout .seat-layout-header h3 {
+  color: #0f172a;
+  font-weight: 900;
+}
+
+.admin-layout .seat-layout-header p {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.admin-layout .seat-layout-total {
+  border: 2px solid #7c3aed;
+  background: #f3e8ff;
+  color: #6d28d9;
+  font-weight: 900;
+}
+
+.admin-layout .seat-type-chip {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 900;
+}
+
+.admin-layout .seat-type-chip.normal.active {
+  border-color: #16a34a;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.vip.active {
+  border-color: #b45309;
+  background: #b45309;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.couple.active {
+  border-color: #be185d;
+  background: #be185d;
+  color: #ffffff;
+}
+
+.admin-layout .seat-type-chip.broken.active {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.admin-layout .room-seat-map {
+  border: 1px solid #d0d5dd;
+  border-radius: 12px;
+  background: #94a3b8;
+}
+
+.admin-layout .room-screen {
+  background: linear-gradient(90deg, transparent, #334155, transparent);
+  color: #1e293b;
+  font-weight: 900;
+}
+
+.admin-layout .room-seat-row-label {
+  color: #334155;
+  font-weight: 900;
+}
+
+.admin-layout .room-seat {
+  border: 1px solid #64748b;
+  background: #475569;
+  color: #ffffff;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 6px 12px rgba(15, 23, 42, 0.18);
+}
+
+.admin-layout .room-seat.vip {
+  border-color: #92400e;
+  background: #d97706;
+  color: #ffffff;
+}
+
+.admin-layout .room-seat.couple {
+  border-color: #9d174d;
+  background: #db2777;
+  color: #ffffff;
+}
+
+.admin-layout .room-seat.wheelchair {
+  border-color: #1d4ed8;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.admin-layout .room-seat.broken {
+  border-color: #991b1b;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.admin-layout .room-seat.disabled {
+  border-color: #64748b;
+  background: #475569;
+  color: #e2e8f0;
+}
+
+.admin-layout .room-seat.selected {
+  border-color: #e2e8f0;
+  box-shadow:
+    0 0 0 2px rgba(226, 232, 240, 0.55),
+    0 10px 20px rgba(15, 23, 42, 0.28);
+}
