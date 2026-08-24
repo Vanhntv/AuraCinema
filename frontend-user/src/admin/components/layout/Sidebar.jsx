@@ -3,14 +3,19 @@ import {
   HiOutlineClipboardList,
   HiOutlineDocumentText,
   HiOutlineFilm,
+  HiOutlineGift,
+  HiOutlineNewspaper,
   HiOutlineQrcode,
   HiOutlineShoppingBag,
+  HiOutlineSparkles,
   HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUsers,
+  HiOutlineVideoCamera,
   HiOutlineViewGrid,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
+import auraCinemaLogo from "../../../assets/logo-datn-auracinema.jpg";
 
 const menuItems = [
   {
@@ -24,7 +29,7 @@ const menuItems = [
     ],
   },
   {
-    section: "Quản lý nội dung",
+    section: "Vận hành rạp",
     items: [
       { path: "/admin/genres", icon: <HiOutlineTag />, label: "Thể loại" },
       { path: "/admin/movies", icon: <HiOutlineFilm />, label: "Phim" },
@@ -52,16 +57,36 @@ const menuItems = [
       {
         path: "/admin/concessions",
         icon: <HiOutlineShoppingBag />,
-        label: "Bắp Nước",
+        label: "Bắp nước",
       },
       { path: "/admin/vouchers", icon: <HiOutlineTag />, label: "Mã giảm giá" },
+    ],
+  },
+  {
+    section: "Marketing",
+    items: [
+      {
+        path: "/admin/marketing",
+        icon: <HiOutlineNewspaper />,
+        label: "Nội dung",
+      },
+      { path: "/admin/gifts", icon: <HiOutlineGift />, label: "Quà tặng" },
+      {
+        path: "/admin/trailers",
+        icon: <HiOutlineVideoCamera />,
+        label: "Trailer",
+      },
     ],
   },
   {
     section: "Hệ thống",
     items: [
       { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
-      { path: "/admin/policies", icon: <HiOutlineDocumentText />, label: "Chính sách" },
+      {
+        path: "/admin/policies",
+        icon: <HiOutlineDocumentText />,
+        label: "Chính sách",
+      },
     ],
   },
 ];
@@ -80,8 +105,14 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
     <>
       <aside className={sidebarClasses}>
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">A</div>
-          <span className="sidebar-logo-text">AuraCinema</span>
+          <img
+            className="sidebar-logo-image"
+            src={auraCinemaLogo}
+            alt="AuraCinema"
+          />
+          <div className="sidebar-logo-copy">
+            <span className="sidebar-logo-text">AuraCinema</span>
+          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -106,6 +137,10 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
         </nav>
 
         <div className="sidebar-footer">
+          <div className="sidebar-footer-kicker">
+            <HiOutlineSparkles />
+            <span>Quản trị rạp phim</span>
+          </div>
           <div className="sidebar-footer-info">
             <div className="sidebar-footer-avatar">
               {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
