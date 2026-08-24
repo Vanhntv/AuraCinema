@@ -6938,3 +6938,161 @@
     0 0 0 2px rgba(226, 232, 240, 0.55),
     0 10px 20px rgba(15, 23, 42, 0.28);
 }
+
+.admin-layout .showtime-slot-chip {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+  font-weight: 900;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.admin-layout .showtime-slot-chip small {
+  border-left-color: #cbd5e1;
+  color: #475569;
+}
+
+.admin-layout .showtime-slot-chip.scheduled {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.admin-layout .showtime-slot-chip.scheduled small {
+  color: #475569;
+}
+
+.admin-layout .showtime-slot-chip.now_showing {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.admin-layout .showtime-slot-chip.now_showing small {
+  color: #475569;
+}
+
+.admin-layout .showtime-slot-chip.completed {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.admin-layout .showtime-slot-chip.completed small {
+  border-left-color: #cbd5e1;
+  color: #475569;
+}
+
+.admin-layout .showtime-slot-chip.cancelled {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.admin-layout .showtime-slot-chip.cancelled small {
+  border-left-color: #cbd5e1;
+  color: #475569;
+}
+
+.admin-layout .showtime-slot-chip.completed,
+.admin-layout .showtime-slot-chip.cancelled,
+.admin-layout .showtime-slot-chip:disabled {
+  opacity: 1;
+}
+
+.admin-layout .showtime-slot-chip:not(:disabled):hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* White showtime editor and light-blue admin hover states */
+.admin-layout {
+  --color-bg-card-hover: #eff6ff;
+  --color-border-hover: #bfdbfe;
+  --gradient-card: none;
+}
+
+.admin-layout .showtime-form-panel,
+.admin-layout .showtime-pricing-panel,
+.admin-layout .showtime-auto-slots,
+.admin-layout .showtime-preview {
+  border-color: #e4e7ec;
+  background: #ffffff;
+}
+
+.admin-layout .showtime-form-panel {
+  box-shadow: 0 14px 36px rgba(16, 24, 40, 0.08);
+}
+
+.admin-layout .showtime-form-header {
+  border-bottom-color: #e4e7ec;
+  background: #ffffff;
+}
+
+.admin-layout .showtime-pricing-mode,
+.admin-layout .showtime-pricing-mode.custom,
+.admin-layout .showtime-auto-slot,
+.admin-layout .showtime-auto-slot.selected {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.admin-layout .showtime-auto-slot-remove {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.admin-layout .sidebar-link:hover,
+.admin-layout .header-toggle-btn:hover,
+.admin-layout .header-icon-btn:hover,
+.admin-layout .stat-card:hover,
+.admin-layout .dashboard-movie-result:hover,
+.admin-layout .quick-action:hover:not(:disabled),
+.admin-layout .btn:hover:not(:disabled),
+.admin-layout .btn-primary:hover:not(:disabled),
+.admin-layout .btn-secondary:hover:not(:disabled),
+.admin-layout .btn-danger:hover:not(:disabled),
+.admin-layout .btn-success:hover:not(:disabled),
+.admin-layout .btn-ghost:hover:not(:disabled),
+.admin-layout .btn-danger-text:hover:not(:disabled),
+.admin-layout .action-btn:hover:not(:disabled),
+.admin-layout .pagination-btn:hover:not(:disabled),
+.admin-layout .pagination-go-btn:hover:not(:disabled),
+.admin-layout .modal-close:hover,
+.admin-layout .policy-list-item:hover,
+.admin-layout .multi-select-option:hover,
+.admin-layout .room-seat-row-action:hover,
+.admin-layout .seat-type-chip:hover,
+.admin-layout .showtime-slot-chip:not(:disabled):hover,
+.admin-layout .showtime-auto-slot:hover,
+.admin-layout .showtime-auto-clear:hover,
+.admin-layout .showtime-auto-slot-remove:hover,
+.admin-layout .data-table tbody tr:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-layout .showtime-auto-slot-remove:hover svg,
+.admin-layout .modal-close:hover svg,
+.admin-layout .header-toggle-btn:hover svg,
+.admin-layout .header-icon-btn:hover svg {
+  color: #1d4ed8;
+}
+
+/* Light gray table headers across admin */
+.admin-layout .data-table thead,
+.admin-layout .data-table thead tr,
+.admin-layout .data-table th,
+.admin-layout .bookings-table th:last-child,
+.admin-layout .ticket-scan-table th {
+  background: #f1f5f9;
+}
+
+.admin-layout .data-table th {
+  color: #64748b;
+  border-bottom-color: #cbd5e1;
+  font-weight: 800;
+}
