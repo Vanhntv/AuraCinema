@@ -15,6 +15,7 @@ import {
   HiOutlineViewGrid,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
+import auraCinemaLogo from "../../../assets/logo-datn-auracinema.jpg";
 
 const menuItems = [
   {
@@ -104,14 +105,13 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
     <>
       <aside className={sidebarClasses}>
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
+          <img
+            className="sidebar-logo-image"
+            src={auraCinemaLogo}
+            alt="AuraCinema"
+          />
           <div className="sidebar-logo-copy">
             <span className="sidebar-logo-text">AuraCinema</span>
-            <span className="sidebar-logo-subtitle">Admin Console</span>
           </div>
         </div>
 

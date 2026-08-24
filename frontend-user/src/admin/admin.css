@@ -6368,6 +6368,14 @@
   box-shadow: 0 10px 24px rgba(70, 95, 255, 0.22);
 }
 
+.sidebar-logo-image {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
 .sidebar-logo-icon span {
   display: block;
   width: 5px;
@@ -6389,23 +6397,15 @@
 
 .sidebar-logo-copy {
   display: grid;
+  align-content: center;
   min-width: 0;
   transition: opacity var(--transition-base);
 }
 
 .sidebar-logo-text {
   color: var(--color-text-primary);
-  font-size: 20px;
+  font-size: 19px;
   line-height: 1.1;
-}
-
-.sidebar-logo-subtitle {
-  margin-top: 2px;
-  color: var(--color-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0;
-  white-space: nowrap;
 }
 
 .sidebar.collapsed .sidebar-logo-copy {
