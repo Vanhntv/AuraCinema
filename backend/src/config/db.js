@@ -1,8 +1,27 @@
 import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
 
-const DEFAULT_MONGODB_URI =
-  "mongodb+srv://taovohoang2k6_db_user:sb0euxYwl8c6jbEY@cluster0.hdnuiwm.mongodb.net/?appName=Cluster0";
+const LOCAL_MONGODB_URI = "mongodb://localhost:27017/nodejs";
+
+const DEFAULT_MONGODB_TARGET = "local";
+
+const getMongoUri = () => {
+  if (process.env.MONGODB_URI) {
+    return process.env.MONGODB_URI;
+  }
+
+  const target = process.env.MONGODB_TARGET || DEFAULT_MONGODB_TARGET;
+
+  if (target === "atlas") {
+    if (!process.env.MONGODB_ATLAS_URI) {
+      throw new Error("Missing MONGODB_ATLAS_URI for MongoDB Atlas connection");
+    }
+
+    return process.env.MONGODB_ATLAS_URI;
+  }
+
+  return LOCAL_MONGODB_URI;
+};
 
 const ticketAllocationIndexKeys = { showtimeId: 1, seatId: 1 };
 
@@ -34,7 +53,7 @@ const reconcileTicketAllocationIndex = async () => {
 
 export const connectDB = async () => {
   try {
-    const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
+    const mongoUri = getMongoUri();
 
     await mongoose.connect(mongoUri);
     await reconcileTicketAllocationIndex();
