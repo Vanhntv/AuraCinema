@@ -339,6 +339,20 @@ function AccountPage() {
   }, [user]);
 
   useEffect(() => {
+    if (activeTab !== "points") return;
+
+    let isActive = true;
+    refreshProfile().catch((error) => {
+      if (!isActive) return;
+      showToast("error", getApiErrorMessage(error, "Không thể tải lịch sử điểm thưởng mới nhất."));
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [activeTab, refreshProfile]);
+
+  useEffect(() => {
     let isActive = true;
 
     async function loadTickets() {

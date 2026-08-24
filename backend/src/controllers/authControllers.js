@@ -2,6 +2,7 @@ import { randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } fro
 import { promisify } from "util";
 import User from "../models/User.js";
 import RewardPointLog from "../models/RewardPointLog.js";
+import { syncMissingRewardPointLogsForUser } from "../services/rewardPointService.js";
 import { signJwt } from "../utils/jwt.js";
 
 const scrypt = promisify(scryptCallback);
@@ -497,13 +498,7 @@ export const resetPassword = async (req, res) => {
 
 export const profile = async (req, res) => {
   try {
-    const [user, rewardPointLogs] = await Promise.all([
-      User.findOne({ _id: req.user.id, deleted_at: null }).select("-password"),
-      RewardPointLog.find({ user_id: req.user.id })
-        .sort({ created_at: -1 })
-        .limit(50)
-        .select("type points balance_after reason created_at booking_id"),
-    ]);
+    const user = await User.findOne({ _id: req.user.id, deleted_at: null }).select("-password");
 
     if (!user) {
       return res.status(404).json({
@@ -511,6 +506,13 @@ export const profile = async (req, res) => {
         message: "Không tìm thấy người dùng",
       });
     }
+
+    await syncMissingRewardPointLogsForUser({ userId: user._id });
+
+    const rewardPointLogs = await RewardPointLog.find({ user_id: req.user.id })
+      .sort({ created_at: -1 })
+      .limit(50)
+      .select("type points balance_after reason created_at booking_id");
 
     return res.status(200).json({
       success: true,

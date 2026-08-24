@@ -65,7 +65,7 @@ const text = {
   roomLabel: "Ph\u00f2ng chi\u1ebfu",
   saveShowtime: "L\u01b0u su\u1ea5t chi\u1ebfu",
   saving: "\u0110ang l\u01b0u...",
-  searchPlaceholder: "T\u00ecm theo phim, ph\u00f2ng ho\u1eb7c r\u1ea1p...",
+  searchPlaceholder: "T\u00ecm theo phim ho\u1eb7c ph\u00f2ng...",
   startDate: "Ng\u00e0y chi\u1ebfu",
   showTime: "Khung gi\u1edd chi\u1ebfu",
   successCreate:
@@ -73,7 +73,6 @@ const text = {
   successUpdate:
     "\u0110\u00e3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu th\u00e0nh c\u00f4ng.",
   tableActions: "Thao t\u00e1c",
-  tableCinema: "R\u1ea1p",
   tableEnd: "Gi\u1edd k\u1ebft th\u00fac",
   tableStart: "Gi\u1edd b\u1eaft \u0111\u1ea7u",
   tableStatus: "Tr\u1ea1ng th\u00e1i",
@@ -520,10 +519,8 @@ const ShowtimesPage = () => {
     return showtimes.filter((showtime) => {
       const movieTitle = showtime.movieTitle || "";
       const roomName = showtime.roomName || "";
-      const cinemaName = showtime.cinemaName || "";
-
       return searchTerms.every((term) => {
-        return [movieTitle, roomName, cinemaName].some((value) =>
+        return [movieTitle, roomName].some((value) =>
           matchesSearchQuery(value, term),
         );
       });

@@ -269,6 +269,82 @@ export const scanPrintBookingOrder = async (req, res) => {
   }
 };
 
+export const lookupAdminBookingOrderPrint = async (req, res) => {
+  try {
+    const qrToken = String(req.body?.qrToken || "").trim();
+    const bookingCode = String(req.body?.bookingCode || "").trim().toUpperCase();
+    let booking;
+
+    if (qrToken) {
+      const token = parseBookingQrPayload(qrToken);
+      if (!token) {
+        await createBookingActionLogSafe({
+          action: "LOOKUP",
+          result: "INVALID_TOKEN",
+          ...getRequestMeta(req),
+        });
+        return res.status(400).json({ success: false, code: "INVALID_TOKEN", message: "QR đơn vé không hợp lệ" });
+      }
+      booking = await Booking.findOne({
+        ticketing_version: 2,
+        "order_qr.token_hash": hashQrToken(token),
+      });
+    } else if (bookingCode) {
+      booking = await Booking.findOne({ booking_code: bookingCode });
+    } else {
+      return res.status(400).json({ success: false, message: "Vui lòng cung cấp mã đơn hoặc QR đơn vé" });
+    }
+
+    assertPrintableBooking(booking);
+
+    const allTickets = await Ticket.find({ bookingId: booking._id })
+      .select("+qrTokenEncrypted")
+      .sort({ seatLabel: 1 });
+    const expectedCount = booking.seat_items?.length || booking.showtime_seat_ids?.length || 0;
+    if (!expectedCount || allTickets.length !== expectedCount) {
+      throw Object.assign(new Error("Vé trong đơn chưa được phát hành đầy đủ"), {
+        statusCode: 409,
+        code: "TICKETS_NOT_READY",
+      });
+    }
+
+    const { eligible, skipped } = getInitialPrintEligibility(allTickets);
+    const printPayload = buildBookingPrintPayload({
+      booking,
+      tickets: eligible,
+      qrPayloadByTicketId: createQrPayloadMap(eligible),
+      skippedTickets: skipped,
+    });
+
+    await createBookingActionLogSafe({
+      bookingId: booking._id,
+      action: "LOOKUP",
+      result: "SUCCESS",
+      metadata: {
+        source: qrToken ? "ORDER_QR" : "BOOKING_CODE",
+        eligibleTicketCount: eligible.length,
+        skippedTicketCount: skipped.length,
+      },
+      ...getRequestMeta(req),
+    });
+
+    return res.json({
+      success: true,
+      message: eligible.length
+        ? "Đã tải đơn vé. Bấm In đơn vé để in các vé hợp lệ chưa in."
+        : "Đơn vé không còn vé hợp lệ chưa in.",
+      data: printPayload,
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      code: error.code || "ERROR",
+      message: error.statusCode ? error.message : "Không thể tra cứu đơn vé để in",
+      data: error?.data || null,
+    });
+  }
+};
+
 export const lookupAdminBookingOrder = async (req, res) => {
   try {
     const bookingCode = String(req.body?.bookingCode || "").trim().toUpperCase();

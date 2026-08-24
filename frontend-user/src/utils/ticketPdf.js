@@ -57,8 +57,6 @@ const buildDetailRows = (ticket, { includeStatus = true } = {}) => [
   ["Phân loại", printableValue(ticket.movie?.ageClassification || (ticket.movie?.ageLimit ? `T${ticket.movie.ageLimit}` : "P"))],
   ["Ngày chiếu", formatDate(ticket.showtime?.startTime)],
   ["Giờ chiếu", formatTime(ticket.showtime?.startTime)],
-  ["Rạp", printableValue(ticket.cinema?.name)],
-  ["Địa chỉ", printableValue(ticket.cinema?.address)],
   ["Phòng", printableValue(ticket.room?.name)],
   ["Ghế", printableValue(ticket.seat?.label || ticket.seatLabel)],
   ["Loại ghế", printableValue(ticket.seat?.type)],

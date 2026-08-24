@@ -4213,55 +4213,74 @@
 
 .bookings-page .table-wrapper {
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .bookings-table {
-  min-width: 1060px;
+  width: 100%;
+  min-width: 0;
   table-layout: fixed;
 }
 
 .bookings-table th:nth-child(1) {
-  width: 220px;
+  width: 17%;
 }
 
 .bookings-table th:nth-child(2) {
-  width: 210px;
+  width: 16%;
 }
 
 .bookings-table th:nth-child(3) {
-  width: 170px;
+  width: 11%;
 }
 
 .bookings-table th:nth-child(4) {
-  width: 130px;
+  width: 11%;
 }
 
 .bookings-table th:nth-child(5) {
-  width: 90px;
+  width: 7%;
 }
 
 .bookings-table th:nth-child(6) {
-  width: 110px;
+  width: 10%;
 }
 
 .bookings-table th:nth-child(7),
 .bookings-table th:nth-child(8) {
-  width: 120px;
+  width: 9%;
 }
 
 .bookings-table th:nth-child(9) {
-  width: 82px;
+  width: 8%;
 }
 
 .bookings-table th,
 .bookings-table td {
-  padding-left: 16px;
-  padding-right: 16px;
+  padding-left: 14px;
+  padding-right: 14px;
 }
 
 .bookings-table td {
   overflow: hidden;
+}
+
+.bookings-table th:nth-child(3),
+.bookings-table td:nth-child(3),
+.bookings-table th:nth-child(5),
+.bookings-table td:nth-child(5),
+.bookings-table th:nth-child(6),
+.bookings-table td:nth-child(6) {
+  text-align: left;
+}
+
+.bookings-table th:nth-child(7),
+.bookings-table td:nth-child(7),
+.bookings-table th:nth-child(8),
+.bookings-table td:nth-child(8),
+.bookings-table th:nth-child(9),
+.bookings-table td:nth-child(9) {
+  text-align: center;
 }
 
 .bookings-table th:last-child,
@@ -4299,9 +4318,9 @@
 }
 
 .bookings-table .status-badge {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  justify-content: center;
+  min-width: 82px;
+  max-width: none;
 }
 
 .booking-detail-modal {
@@ -5916,6 +5935,15 @@
   background: var(--color-bg-input);
 }
 
+.ticket-info-item.full {
+  grid-column: 1 / -1;
+}
+
+.ticket-info-item.important {
+  border-color: rgba(251, 113, 133, 0.36);
+  background: rgba(251, 113, 133, 0.08);
+}
+
 .ticket-info-item span,
 .ticket-info-item strong {
   display: block;
@@ -5933,6 +5961,11 @@
   color: var(--color-text-primary);
   font-size: 14px;
   word-break: break-word;
+}
+
+.ticket-info-item.important strong {
+  color: #fda4af;
+  font-size: 16px;
 }
 
 .ticket-print-btn {

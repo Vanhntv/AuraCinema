@@ -144,7 +144,6 @@ function BookingResultPage({ result = "success" }) {
     const showtime = booking?.showtime_id || {};
     const movie = showtime.movie_id || {};
     const room = showtime.room_id || {};
-    const cinema = room.cinema_id || {};
     const purchaseDetails = getBookingResultPurchaseDetails(booking);
     return {
       bookingCode: booking?.booking_code || bookingId,
@@ -153,7 +152,6 @@ function BookingResultPage({ result = "success" }) {
       ageClassification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
       date: formatDate(showtime.start_time || tickets[0]?.showtime?.startTime),
       time: formatTime(showtime.start_time || tickets[0]?.showtime?.startTime),
-      cinema: cinema.name || tickets[0]?.cinema?.name || "Rạp đang cập nhật",
       room: room.name || tickets[0]?.room?.name || "Phòng đang cập nhật",
       provider: getProviderLabel(booking?.payment_provider),
       services: purchaseDetails.services,
@@ -218,7 +216,7 @@ function BookingResultPage({ result = "success" }) {
               <div><dt className="text-slate-500">Mã đơn</dt><dd className="break-words font-bold text-white">{bookingSummary.bookingCode}</dd></div>
               <div><dt className="text-slate-500">Thanh toán</dt><dd className="font-bold text-white">{bookingSummary.provider}</dd></div>
               <div><dt className="text-slate-500">Suất chiếu</dt><dd className="font-bold text-white">{bookingSummary.time} · {bookingSummary.date}</dd></div>
-              <div><dt className="text-slate-500">Rạp / Phòng</dt><dd className="font-bold text-white">{bookingSummary.cinema} · {bookingSummary.room}</dd></div>
+              <div><dt className="text-slate-500">Phòng</dt><dd className="font-bold text-white">{bookingSummary.room}</dd></div>
             </dl>
           </div>
         </div>
