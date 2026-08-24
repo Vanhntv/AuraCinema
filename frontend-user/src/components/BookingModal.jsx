@@ -1597,6 +1597,10 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
                 {!bookingIsPaid && (
                   <div className="mt-6 border-t border-white/10 pt-5">
+                    <div className="mb-5 border-b border-white/10 pb-4">
+                      <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
+                    </div>
+
                     <p className="text-sm font-black text-white">Chọn phương thức thanh toán</p>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <button
@@ -1627,10 +1631,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                           </span>
                         </span>
                       </button>
-                    </div>
-
-                    <div className="mt-5 border-t border-white/10 pt-4">
-                      <p className="flex justify-between gap-4 text-base"><span className="text-slate-300">Tổng thanh toán</span><strong className="text-[#ff9aa5]">{formatCurrency(confirmedBookingSummary.finalTotal)}</strong></p>
                     </div>
                   </div>
                 )}

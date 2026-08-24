@@ -456,6 +456,11 @@ function PaymentPage() {
             </div>
           </div>
 
+          <div className="mt-7 flex items-end justify-between border-t border-white/5 pt-5">
+            <span className="text-sm text-slate-400">Tổng thanh toán</span>
+            <strong className="text-3xl font-black text-[var(--aura-coral)]">{formatCurrency(amount)}</strong>
+          </div>
+
           <div className="mt-6">
             <p className="text-xs font-bold text-slate-300">Chọn phương thức thanh toán</p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -474,11 +479,6 @@ function PaymentPage() {
                 onClick={() => setSelectedPaymentMethod("vnpay")}
               />
             </div>
-          </div>
-
-          <div className="mt-7 flex items-end justify-between border-t border-white/5 pt-5">
-            <span className="text-sm text-slate-400">Tổng thanh toán</span>
-            <strong className="text-3xl font-black text-[var(--aura-coral)]">{formatCurrency(amount)}</strong>
           </div>
 
           <section className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-6 text-amber-100" aria-labelledby="payment-policies-title">
