@@ -54,15 +54,15 @@ const ConcessionTable = ({
       <table className="data-table concession-table">
         <thead>
           <tr>
-            <th style={{ width: "58px" }}>#</th>
-            <th style={{ width: "92px" }}>Ảnh</th>
+            <th style={{ width: "42px" }}>#</th>
+            <th style={{ width: "62px" }}>Ảnh</th>
             <th>Dịch vụ</th>
-            <th style={{ width: "120px" }}>Loại</th>
-            <th style={{ width: "150px" }}>Giá bán</th>
-            <th style={{ width: "110px" }}>Tồn kho</th>
-            <th style={{ width: "150px" }}>Trạng thái</th>
-            <th style={{ width: "160px" }}>Cập nhật</th>
-            <th style={{ width: "150px", textAlign: "center" }}>Thao tác</th>
+            <th style={{ width: "82px" }}>Loại</th>
+            <th style={{ width: "108px" }}>Giá bán</th>
+            <th style={{ width: "72px" }}>Tồn kho</th>
+            <th style={{ width: "116px" }}>Trạng thái</th>
+            <th style={{ width: "116px" }}>Cập nhật</th>
+            <th style={{ width: "112px", textAlign: "center" }}>Thao tác</th>
           </tr>
         </thead>
         <tbody>

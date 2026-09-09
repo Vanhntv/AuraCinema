@@ -212,7 +212,7 @@ const ConcessionsPage = () => {
 
   return (
     <>
-      <div className="page-header">
+      <div className="page-header concessions-page-header">
         <div className="page-header-info">
           <h1>Quản lý Bắp Nước</h1>
           <p>Quản lý danh sách dịch vụ ăn uống đang kinh doanh tại AuraCinema</p>
@@ -232,7 +232,7 @@ const ConcessionsPage = () => {
         </div>
       </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid concessions-stats-grid">
         <div className="stat-card">
           <div className="stat-card-icon purple">
             <HiOutlineShoppingBag />
@@ -262,30 +262,24 @@ const ConcessionsPage = () => {
         </div>
       </div>
 
-      <div className="table-container">
-        <div className="table-toolbar">
+      <div className="table-container concession-list-container">
+        <div className="table-toolbar concession-list-toolbar">
           <div className="table-toolbar-left">
             <span className="table-toolbar-title">Danh sách dịch vụ</span>
             <span className="table-toolbar-count">{totalItems} kết quả</span>
           </div>
 
-          <div className="table-search">
-            <HiOutlineSearch className="table-search-icon" />
-            <input
-              type="text"
-              className="table-search-input"
-              placeholder="Tìm theo tên dịch vụ..."
-              value={searchQuery}
-              onChange={handleSearch}
-            />
-          </div>
-        </div>
-
-        <div
-          className="table-toolbar"
-          style={{ borderTop: "1px solid var(--color-border)" }}
-        >
-          <div className="table-toolbar-left">
+          <div className="concession-list-controls">
+            <div className="table-search">
+              <HiOutlineSearch className="table-search-icon" />
+              <input
+                type="text"
+                className="table-search-input"
+                placeholder="Tìm theo tên dịch vụ..."
+                value={searchQuery}
+                onChange={handleSearch}
+              />
+            </div>
             <select
               className="user-filter-select"
               value={typeFilter}
