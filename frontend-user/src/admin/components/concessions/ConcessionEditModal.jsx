@@ -1,38 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
-import { HiOutlineX } from "react-icons/hi";
-
-const emptyForm = {
-  name: "",
-  type: "popcorn",
-  price: "",
-  stock: "0",
-  description: "",
-  status: true,
-  image: null,
-};
+import { HiOutlinePhotograph, HiOutlineX } from "react-icons/hi";
 
 const acceptedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 
-const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
-  const [formData, setFormData] = useState(emptyForm);
+const resolveImageUrl = (image) => {
+  if (!image) return "";
+  if (/^https?:\/\//i.test(image)) return image;
+
+  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+  const origin = apiBase.replace(/\/api\/?$/, "");
+  return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
+};
+
+const ConcessionEditForm = ({ item, isLoading, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState(() => ({
+    name: item.name || "",
+    type: item.type || "combo",
+    price: String(item.price ?? ""),
+    stock: String(item.stock ?? 0),
+    description: item.description || "",
+    status: Boolean(item.status),
+    image: null,
+  }));
   const [errors, setErrors] = useState({});
 
+  const currentImageUrl = resolveImageUrl(item.image);
   const previewUrl = useMemo(() => {
     if (!formData.image) return "";
     return URL.createObjectURL(formData.image);
   }, [formData.image]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setFormData(emptyForm);
-    setErrors({});
-  }, [isOpen]);
-
-  useEffect(() => {
     return () => {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  const updateField = (field, value) => {
+    setFormData((previous) => ({ ...previous, [field]: value }));
+    if (errors[field]) {
+      setErrors((previous) => ({ ...previous, [field]: "" }));
+    }
+  };
 
   const validate = () => {
     const nextErrors = {};
@@ -53,21 +62,16 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
       nextErrors.stock = "Tồn kho phải là số nguyên không âm";
     }
 
-    if (!formData.image) {
-      nextErrors.image = "Vui lòng chọn ảnh minh họa";
-    } else if (!acceptedImageTypes.includes(formData.image.type)) {
+    if (formData.image && !acceptedImageTypes.includes(formData.image.type)) {
       nextErrors.image = "Ảnh chỉ hỗ trợ jpg, jpeg, png hoặc webp";
+    }
+
+    if (!formData.image && !currentImageUrl) {
+      nextErrors.image = "Dịch vụ cần có ít nhất một ảnh minh họa";
     }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  };
-
-  const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
-    }
   };
 
   const handleSubmit = (event) => {
@@ -81,25 +85,23 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
     payload.append("stock", String(Number(formData.stock)));
     payload.append("description", formData.description.trim());
     payload.append("status", String(formData.status));
-    payload.append("image", formData.image);
+    if (formData.image) payload.append("image", formData.image);
 
-    onSubmit(payload, formData.name.trim());
+    onSubmit(item, payload);
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Thêm dịch vụ bắp nước</h2>
-          <button type="button" className="modal-close" onClick={onClose}>
+          <h2 className="modal-title">Chỉnh sửa dịch vụ bắp nước</h2>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Đóng">
             <HiOutlineX />
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="modal-body">
+          <div className="modal-body concession-edit-body">
             <div className="form-row">
               <div className="form-group form-group-2">
                 <label className="form-label">
@@ -108,9 +110,8 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                 <input
                   type="text"
                   className={`form-input ${errors.name ? "error" : ""}`}
-                  placeholder="Ví dụ: Bắp rang bơ lớn"
                   value={formData.name}
-                  onChange={(event) => handleChange("name", event.target.value)}
+                  onChange={(event) => updateField("name", event.target.value)}
                   autoFocus
                 />
                 {errors.name && <p className="form-error">{errors.name}</p>}
@@ -121,7 +122,7 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                 <select
                   className="form-input"
                   value={formData.type}
-                  onChange={(event) => handleChange("type", event.target.value)}
+                  onChange={(event) => updateField("type", event.target.value)}
                 >
                   <option value="popcorn">Bắp</option>
                   <option value="drink">Nước</option>
@@ -141,9 +142,8 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                   min="1000"
                   step="1000"
                   className={`form-input ${errors.price ? "error" : ""}`}
-                  placeholder="59000"
                   value={formData.price}
-                  onChange={(event) => handleChange("price", event.target.value)}
+                  onChange={(event) => updateField("price", event.target.value)}
                 />
                 {errors.price && <p className="form-error">{errors.price}</p>}
               </div>
@@ -156,7 +156,7 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                   step="1"
                   className={`form-input ${errors.stock ? "error" : ""}`}
                   value={formData.stock}
-                  onChange={(event) => handleChange("stock", event.target.value)}
+                  onChange={(event) => updateField("stock", event.target.value)}
                 />
                 {errors.stock && <p className="form-error">{errors.stock}</p>}
               </div>
@@ -166,48 +166,47 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
               <label className="form-label">Mô tả</label>
               <textarea
                 className="form-input form-textarea"
-                placeholder="Thành phần hoặc ghi chú ngắn cho dịch vụ..."
+                placeholder="Thành phần hoặc thông tin dịch vụ..."
                 value={formData.description}
-                onChange={(event) => handleChange("description", event.target.value)}
+                onChange={(event) => updateField("description", event.target.value)}
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">
-                Hình ảnh <span className="required">*</span>
-              </label>
+              <label className="form-label">Hình ảnh</label>
+              <div className="content-image-preview concession-edit-image">
+                {previewUrl || currentImageUrl ? (
+                  <img src={previewUrl || currentImageUrl} alt={formData.name} />
+                ) : (
+                  <HiOutlinePhotograph />
+                )}
+              </div>
               <input
                 type="file"
                 className={`form-input ${errors.image ? "error" : ""}`}
                 accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                onChange={(event) =>
-                  handleChange("image", event.target.files?.[0] || null)
-                }
+                onChange={(event) => updateField("image", event.target.files?.[0] || null)}
               />
+              <p className="form-hint">Để trống nếu muốn giữ nguyên ảnh hiện tại.</p>
               {errors.image && <p className="form-error">{errors.image}</p>}
-              {previewUrl && (
-                <div className="form-preview concession-preview">
-                  <img src={previewUrl} alt="Xem trước dịch vụ" />
-                </div>
-              )}
             </div>
 
             <label className="form-check">
               <input
                 type="checkbox"
                 checked={formData.status}
-                onChange={(event) => handleChange("status", event.target.checked)}
+                onChange={(event) => updateField("status", event.target.checked)}
               />
               <span>Đang bán</span>
             </label>
           </div>
 
           <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isLoading}>
               Hủy bỏ
             </button>
             <button type="submit" className="btn btn-primary" disabled={isLoading}>
-              {isLoading ? "Đang lưu..." : "Thêm dịch vụ"}
+              {isLoading ? "Đang lưu..." : "Lưu thay đổi"}
             </button>
           </div>
         </form>
@@ -216,4 +215,9 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
   );
 };
 
-export default ConcessionModal;
+const ConcessionEditModal = (props) => {
+  if (!props.item) return null;
+  return <ConcessionEditForm key={props.item._id} {...props} />;
+};
+
+export default ConcessionEditModal;
