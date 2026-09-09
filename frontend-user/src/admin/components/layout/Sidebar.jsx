@@ -61,7 +61,11 @@ const menuItems = [
     section: "Hệ thống",
     items: [
       { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
-      { path: "/admin/policies", icon: <HiOutlineDocumentText />, label: "Chính sách" },
+      {
+        path: "/admin/policies",
+        icon: <HiOutlineDocumentText />,
+        label: "Chính sách",
+      },
     ],
   },
 ];
@@ -83,7 +87,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
           <div className="sidebar-logo-icon">A</div>
           <span className="sidebar-logo-text">AuraCinema</span>
         </div>
-
         <nav className="sidebar-nav">
           {menuItems.map((section) => (
             <div key={section.section}>
@@ -104,7 +107,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
             </div>
           ))}
         </nav>
-
         <div className="sidebar-footer">
           <div className="sidebar-footer-info">
             <div className="sidebar-footer-avatar">
