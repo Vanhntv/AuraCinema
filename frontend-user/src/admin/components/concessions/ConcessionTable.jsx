@@ -45,8 +45,7 @@ const ConcessionTable = ({
   items,
   rowStart = 0,
   onToggleStatus,
-  onEditPrice,
-  onEditContent,
+  onEdit,
   onDelete,
 }) => {
   return (
@@ -125,18 +124,11 @@ const ConcessionTable = ({
                     <button
                       className="btn btn-icon btn-ghost"
                       style={{ color: "var(--color-info)" }}
-                      onClick={() => onEditPrice(item)}
-                      title="Cập nhật giá bán"
+                      onClick={() => onEdit(item)}
+                      title="Chỉnh sửa thông tin dịch vụ"
+                      aria-label={`Chỉnh sửa ${item.name}`}
                     >
                       <HiOutlinePencil />
-                    </button>
-                    <button
-                      className="btn btn-icon btn-ghost"
-                      style={{ color: "var(--color-accent-light)" }}
-                      onClick={() => onEditContent(item)}
-                      title="Cập nhật hình ảnh và mô tả"
-                    >
-                      <HiOutlinePhotograph />
                     </button>
                     <button
                       className="btn btn-icon btn-ghost"

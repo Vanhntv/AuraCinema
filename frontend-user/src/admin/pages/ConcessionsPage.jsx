@@ -9,17 +9,15 @@ import {
 } from "react-icons/hi";
 import Toast from "../components/common/Toast";
 import ConfirmDialog from "../components/common/ConfirmDialog";
-import ConcessionContentModal from "../components/concessions/ConcessionContentModal";
+import ConcessionEditModal from "../components/concessions/ConcessionEditModal";
 import ConcessionModal from "../components/concessions/ConcessionModal";
-import ConcessionPriceModal from "../components/concessions/ConcessionPriceModal";
 import ConcessionStatusModal from "../components/concessions/ConcessionStatusModal";
 import ConcessionTable from "../components/concessions/ConcessionTable";
 import {
   createConcession,
   deleteConcession,
   getConcessions,
-  updateConcessionContent,
-  updateConcessionPrice,
+  updateConcession,
   updateConcessionStatus,
 } from "../services/concessionService";
 
@@ -37,8 +35,7 @@ const ConcessionsPage = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [toasts, setToasts] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [priceTarget, setPriceTarget] = useState(null);
-  const [contentTarget, setContentTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -154,34 +151,17 @@ const ConcessionsPage = () => {
     }
   };
 
-  const handleUpdatePrice = async (item, price) => {
+  const handleUpdate = async (item, formData) => {
     try {
       setSubmitting(true);
-      await updateConcessionPrice(item._id, price);
-      addToast("success", `Đã cập nhật giá bán cho "${item.name}"`);
-      setPriceTarget(null);
+      await updateConcession(item._id, formData);
+      addToast("success", `Đã cập nhật dịch vụ "${formData.get("name") || item.name}"`);
+      setEditTarget(null);
       fetchConcessions(currentPage);
     } catch (error) {
       addToast(
         "error",
-        error.response?.data?.message || "Không thể cập nhật giá bán",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleUpdateContent = async (item, formData) => {
-    try {
-      setSubmitting(true);
-      await updateConcessionContent(item._id, formData);
-      addToast("success", `Đã cập nhật hình ảnh và mô tả cho "${item.name}"`);
-      setContentTarget(null);
-      fetchConcessions(currentPage);
-    } catch (error) {
-      addToast(
-        "error",
-        error.response?.data?.message || "Không thể cập nhật hình ảnh và mô tả",
+        error.response?.data?.message || "Không thể cập nhật thông tin dịch vụ",
       );
     } finally {
       setSubmitting(false);
@@ -313,8 +293,7 @@ const ConcessionsPage = () => {
               items={items}
               rowStart={(currentPage - 1) * PAGE_SIZE}
               onToggleStatus={setStatusTarget}
-              onEditPrice={setPriceTarget}
-              onEditContent={setContentTarget}
+              onEdit={setEditTarget}
               onDelete={setDeleteTarget}
             />
 
@@ -348,17 +327,10 @@ const ConcessionsPage = () => {
         isLoading={submitting}
       />
 
-      <ConcessionPriceModal
-        item={priceTarget}
-        onClose={() => setPriceTarget(null)}
-        onSubmit={handleUpdatePrice}
-        isLoading={submitting}
-      />
-
-      <ConcessionContentModal
-        item={contentTarget}
-        onClose={() => setContentTarget(null)}
-        onSubmit={handleUpdateContent}
+      <ConcessionEditModal
+        item={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={handleUpdate}
         isLoading={submitting}
       />
 

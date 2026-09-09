@@ -4111,6 +4111,15 @@
   object-fit: cover;
 }
 
+.concession-edit-body {
+  max-height: min(72vh, 680px);
+  overflow-y: auto;
+}
+
+.concession-edit-image {
+  width: 180px;
+}
+
 .status-update-summary {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);
