@@ -1291,7 +1291,7 @@ const ShowtimesPage = () => {
           />
         </div>
         <select
-          className="form-input showtime-filter-select"
+          className={`form-input showtime-filter-select showtime-status-filter status-${statusFilter || "all"}`}
           value={movieFilter}
           onChange={(event) => {
             setMovieFilter(event.target.value);
@@ -1337,9 +1337,9 @@ const ShowtimesPage = () => {
             setCurrentPage(1);
           }}
         >
-          <option value="">Tất cả trạng thái</option>
+          <option className="status-all" value="">Tất cả trạng thái</option>
           {Object.entries(statusLabels).map(([value, label]) => (
-            <option key={value} value={value}>
+            <option className={`status-${value}`} key={value} value={value}>
               {label}
             </option>
           ))}
