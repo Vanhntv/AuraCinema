@@ -18,6 +18,8 @@ const loginAttempts = new Map();
 const resolveUserRole = (user) =>
   String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1
     ? "admin"
+    : String(user?.role || "").trim().toLowerCase() === "staff" || Number(user?.role_id) === 2
+      ? "staff"
     : DEFAULT_ROLE;
 
 const hashPassword = async (password) => {

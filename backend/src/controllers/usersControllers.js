@@ -11,7 +11,7 @@ const scrypt = promisify(scryptCallback);
 
 const ALLOWED_GENDERS = ["male", "female", "other", null, ""];
 const ALLOWED_TIERS = ["member", "vip", "vvip"];
-const ALLOWED_ROLES = ["user", "admin"];
+const ALLOWED_ROLES = ["user", "staff", "admin"];
 const ALLOWED_ACCOUNT_STATUSES = ["active", "banned", "unverified"];
 const RESET_OTP_TTL_MS = 10 * 60 * 1000;
 
@@ -159,7 +159,7 @@ const validateProfilePayload = async (payload, userId) => {
       errors.push("Vai trò không hợp lệ");
     } else {
       data.role = payload.role;
-      data.role_id = payload.role === "admin" ? 1 : null;
+      data.role_id = payload.role === "admin" ? 1 : payload.role === "staff" ? 2 : null;
     }
   }
 
