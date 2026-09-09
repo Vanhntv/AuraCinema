@@ -29,15 +29,21 @@ import ticketsRoute from "./router/ticketsRouters.js";
 import adminTicketsRoute from "./router/adminTicketsRouters.js";
 import giftsRoute from "./router/giftsRouters.js";
 import policiesRoute from "./router/policiesRouters.js";
+import staffPosRoute from "./router/staffPosRouters.js";
 import { startBookingLifecycleWorker } from "./services/bookingLifecycleWorker.js";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+const localDevelopmentOrigins = process.env.NODE_ENV === "production"
+  ? []
+  : ["http://localhost:5173", "http://localhost:5174"];
 const allowedOrigins = [
   process.env.CLIENT_URL,
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
+  process.env.STAFF_URL,
   ...(process.env.CORS_ORIGINS || "").split(","),
+  ...localDevelopmentOrigins,
 ]
   .map((origin) => String(origin || "").trim())
   .filter(Boolean);
@@ -97,6 +103,7 @@ app.use("/api/sepay", sepayWebhookRoute);
 app.use("/api/tickets", ticketsRoute);
 app.use("/api/admin/tickets", adminTicketsRoute);
 app.use("/api/gifts", giftsRoute);
+app.use("/api/staff/pos", staffPosRoute);
 
 app.use((error, req, res, next) => {
   const statusCode = error.statusCode || 500;

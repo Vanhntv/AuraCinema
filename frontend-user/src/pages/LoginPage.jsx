@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
-import { isAdminUser } from "../utils/authRedirect";
+import { getStaffAppUrl, isAdminUser, isStaffUser } from "../utils/authRedirect";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
@@ -85,6 +85,11 @@ function LoginPage() {
 
       if (isAdminUser(response.data)) {
         navigate("/admin/dashboard", { replace: true });
+        return;
+      }
+
+      if (isStaffUser(response.data)) {
+        window.location.assign(getStaffAppUrl(response.token));
         return;
       }
 
