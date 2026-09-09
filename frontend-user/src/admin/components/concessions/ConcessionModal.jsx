@@ -45,6 +45,8 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
 
     if (!Number.isFinite(price) || price <= 0) {
       nextErrors.price = "Giá bán phải lớn hơn 0";
+    } else if (!Number.isInteger(price) || price % 1000 !== 0) {
+      nextErrors.price = "Giá bán phải là bội số của 1.000đ";
     }
 
     if (!Number.isInteger(stock) || stock < 0) {
@@ -136,7 +138,7 @@ const ConcessionModal = ({ isOpen, onClose, onSubmit, isLoading }) => {
                 </label>
                 <input
                   type="number"
-                  min="1"
+                  min="1000"
                   step="1000"
                   className={`form-input ${errors.price ? "error" : ""}`}
                   placeholder="59000"

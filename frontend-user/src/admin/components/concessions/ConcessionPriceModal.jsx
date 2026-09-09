@@ -29,6 +29,11 @@ const ConcessionPriceModal = ({ item, isLoading, onClose, onSubmit }) => {
       return;
     }
 
+    if (!Number.isInteger(nextPrice) || nextPrice % 1000 !== 0) {
+      setError("Giá bán phải là bội số của 1.000đ");
+      return;
+    }
+
     onSubmit(item, nextPrice);
   };
 
@@ -57,7 +62,7 @@ const ConcessionPriceModal = ({ item, isLoading, onClose, onSubmit }) => {
               </label>
               <input
                 type="number"
-                min="1"
+                min="1000"
                 step="1000"
                 className={`form-input ${error ? "error" : ""}`}
                 value={price}
