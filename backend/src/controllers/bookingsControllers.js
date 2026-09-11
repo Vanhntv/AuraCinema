@@ -898,14 +898,6 @@ export const getBookingOrderQr = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
     }
-    if (booking.status !== "confirmed" || booking.payment_status !== "paid") {
-      return res.status(409).json({
-        success: false,
-        code: "BOOKING_NOT_PAYABLE",
-        message: "QR đơn chỉ khả dụng sau khi thanh toán thành công",
-      });
-    }
-
     return res.json({
       success: true,
       data: {
