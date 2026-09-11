@@ -3,8 +3,7 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { HiOutlineCheckCircle } from "react-icons/hi";
 import { getBookingDetail, getBookingOrderQr } from "../services/bookingService";
-import { getMyTicketQr } from "../services/ticketService";
-import { getApiErrorMessage, showToast } from "../utils/toast";
+import { getApiErrorMessage } from "../utils/toast";
 import { getBookingResultPurchaseDetails } from "../utils/voucherBooking";
 
 const RETRY_DELAYS = [0, 1000, 2000, 3000];
@@ -42,6 +41,31 @@ const getProviderLabel = (provider) => {
   if (value.includes("sepay")) return "SePay";
   if (value.includes("vnpay")) return "VNPay";
   return provider || "Thanh toán trực tuyến";
+};
+
+const normalizeText = (value = "") => String(value)
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/đ/g, "d");
+
+const getSeatTone = (seatType = "") => {
+  const normalizedType = normalizeText(seatType);
+  if (normalizedType.includes("vip")) return "vip";
+  if (
+    normalizedType.includes("doi") ||
+    normalizedType.includes("couple") ||
+    normalizedType.includes("double")
+  ) return "couple";
+  if (normalizedType.includes("thuong") || normalizedType.includes("normal")) return "normal";
+  return "unknown";
+};
+
+const SEAT_TONE_CLASSES = {
+  normal: "border-sky-400/35 bg-sky-400/15 text-sky-100",
+  vip: "border-amber-300/45 bg-amber-400/20 text-amber-100",
+  couple: "border-fuchsia-300/45 bg-fuchsia-400/20 text-fuchsia-100",
+  unknown: "border-white/10 bg-white/[0.06] text-white",
 };
 
 const wait = (delay, timers) => new Promise((resolve) => {
@@ -88,23 +112,8 @@ function BookingResultPage({ result = "success" }) {
           const issuedTickets = nextBooking?.tickets || [];
           if (!issuedTickets.length) throw new Error("Vé điện tử chưa sẵn sàng.");
 
-          const ticketsWithQr = await Promise.all(issuedTickets.map(async (ticket) => {
-            const qrResponse = await getMyTicketQr(ticket.id);
-            const qrPayload = qrResponse.data?.qrPayload;
-            if (!qrPayload?.startsWith("AURA_TICKET:")) {
-              throw new Error(`QR của vé ${ticket.ticketCode} chưa sẵn sàng.`);
-            }
-            const qrDataUrl = await QRCode.toDataURL(qrPayload, {
-              errorCorrectionLevel: "M",
-              margin: 2,
-              width: 280,
-              color: { dark: "#101010", light: "#ffffff" },
-            });
-            return { ...ticket, qrPayload, qrDataUrl };
-          }));
-
           if (!active) return;
-          setTickets(ticketsWithQr);
+          setTickets(issuedTickets);
           if (Number(nextBooking.ticketing_version) === 2) {
             const orderQrResponse = await getBookingOrderQr(bookingId);
             const orderQrPayload = orderQrResponse.data?.qrPayload;
@@ -145,11 +154,22 @@ function BookingResultPage({ result = "success" }) {
     const movie = showtime.movie_id || {};
     const room = showtime.room_id || {};
     const purchaseDetails = getBookingResultPurchaseDetails(booking);
+    const seats = tickets
+      .map((ticket) => {
+        const label = ticket?.seat?.label;
+        const type = ticket?.seat?.type || "";
+        return label ? { label, type, tone: getSeatTone(type) } : null;
+      })
+      .filter(Boolean);
+    const seatTypes = [...new Set(tickets
+      .map((ticket) => ticket?.seat?.type)
+      .filter(Boolean))];
+
     return {
       bookingCode: booking?.booking_code || bookingId,
       movieTitle: movie.title || tickets[0]?.movie?.title || "Phim đang cập nhật",
       poster: resolveImageUrl(movie.poster || tickets[0]?.movie?.poster),
-      ageClassification: Number(movie.age_limit) > 0 ? `T${movie.age_limit}` : "P",
+      ageClassification: Number(movie.age_limit) > 0 ? `${movie.age_limit}+` : "P",
       date: formatDate(showtime.start_time || tickets[0]?.showtime?.startTime),
       time: formatTime(showtime.start_time || tickets[0]?.showtime?.startTime),
       room: room.name || tickets[0]?.room?.name || "Phòng đang cập nhật",
@@ -158,23 +178,16 @@ function BookingResultPage({ result = "success" }) {
       voucher: purchaseDetails.voucher,
       total: Number(booking?.total_price || 0),
       rewardPointsEarned: Number(booking?.reward_points_earned || 0),
+      seats,
+      seatTypes,
     };
   }, [booking, bookingId, tickets]);
 
-  const handlePdf = async (ticket) => {
-    try {
-      const { downloadTicketPdf } = await import("../utils/ticketPdf");
-      await downloadTicketPdf(ticket, ticket.qrPayload);
-    } catch (pdfError) {
-      showToast("error", getApiErrorMessage(pdfError, "Không thể tạo PDF vé."));
-    }
-  };
-
-  const downloadQr = (ticket) => {
-    if (!ticket.qrDataUrl) return;
+  const downloadOrderQr = () => {
+    if (!orderQrDataUrl) return;
     const link = document.createElement("a");
-    link.href = ticket.qrDataUrl;
-    link.download = `${ticket.ticketCode}-qr.png`;
+    link.href = orderQrDataUrl;
+    link.download = `${bookingSummary.bookingCode}-qr-don.png`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -199,12 +212,12 @@ function BookingResultPage({ result = "success" }) {
       <header className="text-center">
         <HiOutlineCheckCircle className="mx-auto text-6xl text-emerald-300" aria-hidden="true" />
         <h1 className="mt-3 text-3xl font-black">Đặt vé thành công</h1>
-        <p className="mt-2 text-sm text-slate-400">Thanh toán thành công. Mỗi ghế được phát hành thành một vé QR riêng.</p>
+        <p className="mt-2 text-sm text-slate-400">Thanh toán thành công. Sử dụng QR đơn để tra cứu và in vé.</p>
       </header>
 
       <section className="mt-8 rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] p-5 sm:p-6">
-        <div className="grid gap-5 sm:grid-cols-[92px_minmax(0,1fr)]">
-          <div className="aspect-[2/3] overflow-hidden rounded-xl bg-white/5">
+        <div className="grid gap-5 sm:grid-cols-[132px_minmax(0,1fr)] lg:grid-cols-[156px_minmax(0,1fr)]">
+          <div className="aspect-[2/3] w-32 overflow-hidden rounded-xl bg-white/5 sm:w-full">
             {bookingSummary.poster ? <img src={bookingSummary.poster} alt={bookingSummary.movieTitle} className="h-full w-full object-cover" /> : null}
           </div>
           <div className="min-w-0">
@@ -217,6 +230,24 @@ function BookingResultPage({ result = "success" }) {
               <div><dt className="text-slate-500">Thanh toán</dt><dd className="font-bold text-white">{bookingSummary.provider}</dd></div>
               <div><dt className="text-slate-500">Suất chiếu</dt><dd className="font-bold text-white">{bookingSummary.time} · {bookingSummary.date}</dd></div>
               <div><dt className="text-slate-500">Phòng</dt><dd className="font-bold text-white">{bookingSummary.room}</dd></div>
+              <div className="sm:col-span-2">
+                <dt className="text-slate-500">Ghế đã đặt</dt>
+                <dd className="mt-2 flex flex-wrap gap-2">
+                  {bookingSummary.seats.length ? bookingSummary.seats.map((seat) => (
+                    <span
+                      key={seat.label}
+                      className={`inline-flex min-h-8 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-black ${SEAT_TONE_CLASSES[seat.tone]}`}
+                      title={seat.type ? `${seat.label} - ${seat.type}` : seat.label}
+                      aria-label={seat.type ? `${seat.label} - ${seat.type}` : seat.label}
+                    >
+                      {seat.label}
+                    </span>
+                  )) : <span className="font-bold text-white">Đang cập nhật</span>}
+                </dd>
+                {bookingSummary.seatTypes.length > 0 && (
+                  <p className="mt-2 text-xs font-semibold text-slate-500">{bookingSummary.seatTypes.join(", ")}</p>
+                )}
+              </div>
             </dl>
           </div>
         </div>
@@ -260,6 +291,13 @@ function BookingResultPage({ result = "success" }) {
               <img className="mx-auto h-36 w-36 object-contain" src={orderQrDataUrl} alt={`QR đơn ${bookingSummary.bookingCode}`} />
               <p className="mt-1 text-[11px] font-black">{bookingSummary.bookingCode}</p>
             </div>
+            <button
+              type="button"
+              className="min-h-11 rounded-full bg-[var(--aura-coral)] px-5 text-sm font-black text-[var(--aura-coral-ink)] sm:col-start-2"
+              onClick={downloadOrderQr}
+            >
+              Tải QR đơn
+            </button>
           </div>
         )}
       </section>
@@ -267,7 +305,7 @@ function BookingResultPage({ result = "success" }) {
       {isLoading && (
         <section className="mt-6 rounded-[var(--aura-radius-lg)] border border-amber-300/20 bg-amber-300/10 p-6 text-center" aria-live="polite">
           <h2 className="font-black text-amber-100">Đang phát hành vé điện tử...</h2>
-          <p className="mt-2 text-sm text-amber-100/75">Hệ thống đang tạo QR riêng cho từng ghế. Vui lòng chờ trong giây lát.</p>
+          <p className="mt-2 text-sm text-amber-100/75">Hệ thống đang tạo QR đơn vé. Vui lòng chờ trong giây lát.</p>
         </section>
       )}
 
@@ -276,38 +314,6 @@ function BookingResultPage({ result = "success" }) {
           <h2 className="font-black text-amber-100">{ticketIssueMessage}</h2>
           {error && <p className="mt-2 text-sm text-amber-100/75">{error}</p>}
           <Link to="/tai-khoan?tab=tickets" className="mt-4 inline-flex min-h-11 items-center rounded-full bg-[var(--aura-coral)] px-5 text-sm font-black text-[var(--aura-coral-ink)] no-underline">Mở Vé của tôi</Link>
-        </section>
-      )}
-
-      {tickets.length > 0 && (
-        <section className="mt-8" aria-labelledby="issued-tickets-title">
-          <h2 id="issued-tickets-title" className="text-2xl font-black">Vé điện tử ({tickets.length})</h2>
-          <p className="mt-2 text-sm text-slate-400">Mỗi QR chỉ dùng cho đúng một ghế và chỉ check-in một lần.</p>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            {tickets.map((ticket) => (
-              <article key={ticket.id} className="overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)]">
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0"><p className="text-sm text-slate-400">Vé ghế</p><h3 className="text-3xl font-black">{ticket.seat?.label}</h3></div>
-                    <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-3 py-1 text-xs font-bold text-emerald-200">Chưa sử dụng</span>
-                  </div>
-                  <dl className="mt-4 grid gap-2 text-sm text-slate-300">
-                    <div><dt className="text-slate-500">Mã Ticket</dt><dd className="break-words font-bold text-white">{ticket.ticketCode}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className="text-slate-500">Loại ghế</dt><dd className="font-bold text-white">{ticket.seat?.type || "Đang cập nhật"}</dd></div>
-                    <div className="flex justify-between gap-4"><dt className="text-slate-500">Giá vé</dt><dd className="font-bold text-white">{currencyFormatter.format(Number(ticket.price || 0))}</dd></div>
-                  </dl>
-                </div>
-                <div className="bg-white p-5 text-center text-black">
-                  <img src={ticket.qrDataUrl} alt={`QR vé ${ticket.ticketCode}, ghế ${ticket.seat?.label}`} className="mx-auto h-48 w-48 object-contain" />
-                  <p className="mt-2 text-xs font-black">Xuất trình QR tại cửa phòng chiếu</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 p-4 text-sm">
-                  <button type="button" className="min-h-11 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold" onClick={() => downloadQr(ticket)}>Tải QR</button>
-                  <button type="button" className="min-h-11 rounded-xl border border-white/10 bg-white/[0.05] px-3 font-bold" onClick={() => handlePdf(ticket)}>Tải PDF</button>
-                </div>
-              </article>
-            ))}
-          </div>
         </section>
       )}
 
