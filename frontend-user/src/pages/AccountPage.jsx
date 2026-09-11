@@ -276,6 +276,7 @@ function AccountPage() {
   const [bookingOrders, setBookingOrders] = useState([]);
   const [orderQrDataUrls, setOrderQrDataUrls] = useState({});
   const preloadingOrderQrIds = useRef(new Set());
+  const isAccountPageMounted = useRef(false);
   const [loadingOrderQrId, setLoadingOrderQrId] = useState("");
   const [selectedOrderForQr, setSelectedOrderForQr] = useState(null);
   const [vouchers, setVouchers] = useState([]);
@@ -296,6 +297,13 @@ function AccountPage() {
     status: "",
   });
   const [ticketPage, setTicketPage] = useState(1);
+
+  useEffect(() => {
+    isAccountPageMounted.current = true;
+    return () => {
+      isAccountPageMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const nextTab = getTabFromParam(searchParams.get("tab"));
@@ -969,7 +977,6 @@ function AccountPage() {
   useEffect(() => {
     if (activeTab !== "tickets" || loadingTickets) return;
 
-    let isActive = true;
     const ordersNeedingQr = paginatedBookingOrders.filter((order) => (
       order.ticketingVersion === 2 &&
       !orderQrDataUrls[order.id] &&
@@ -992,7 +999,7 @@ function AccountPage() {
         }
       }),
     ).then((entries) => {
-      if (!isActive) return;
+      if (!isAccountPageMounted.current) return;
 
       const validEntries = entries.filter(Boolean);
       if (!validEntries.length) return;
@@ -1005,10 +1012,6 @@ function AccountPage() {
         return next;
       });
     });
-
-    return () => {
-      isActive = false;
-    };
   }, [activeTab, createOrderQrDataUrl, loadingTickets, orderQrDataUrls, paginatedBookingOrders]);
 
   useEffect(() => {
