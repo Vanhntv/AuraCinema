@@ -1,25 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
-import {
-  HiOutlineCreditCard,
-  HiOutlineLockClosed,
-  HiOutlineSparkles,
-  HiOutlineTag,
-  HiOutlineTicket,
-  HiOutlineUser,
-} from "react-icons/hi";
+import { HiOutlineLockClosed } from "react-icons/hi";
 import { changePassword, updateProfile } from "../api/authApi";
-import { getMyTicketDetail, getMyTicketQr } from "../services/ticketService";
 import { getBookingOrderQr, getMyBookings } from "../services/bookingService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { useAuth } from "../hooks/useAuth";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 import {
   buildBookingOrderQrFilename,
-  isBookingOrderExpanded,
   mapBookingOrderView,
-  toggleBookingOrderExpanded,
 } from "../utils/bookingOrderView";
 
 const tierTargets = {
@@ -41,14 +31,14 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 const tabs = [
-  { id: "account", label: "Tài khoản của tôi", icon: HiOutlineUser },
-  { id: "member", label: "Thông tin thẻ thành viên", icon: HiOutlineCreditCard },
-  { id: "tickets", label: "Vé của tôi", icon: HiOutlineTicket },
-  { id: "points", label: "Lịch sử điểm thưởng", icon: HiOutlineSparkles },
-  { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
+  { id: "account", label: "Tài khoản của tôi" },
+  { id: "member", label: "Thông tin thẻ thành viên" },
+  { id: "tickets", label: "Hành trình điện ảnh" },
+  { id: "points", label: "Lịch sử điểm thưởng" },
+  { id: "vouchers", label: "Ví Voucher" },
 ];
 
-const ORDERS_PER_PAGE = 10;
+const ORDERS_PER_PAGE = 5;
 
 const formatDateInput = (value) => {
   if (!value) return "";
@@ -129,17 +119,6 @@ const getTicketStatusMeta = (status) =>
     className: "bg-white/[0.06] text-slate-200 border-white/10",
   };
 
-const resolveImageUrl = (image) => {
-  if (!image) return "";
-  if (/^https?:\/\//i.test(image)) return image;
-
-  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
-  const origin = apiBase.replace(/\/api\/?$/, "");
-  return `${origin}${image.startsWith("/") ? image : `/${image}`}`;
-};
-
-const getTicketDate = (ticket) => formatDate(ticket.showtime?.startTime);
-
 const formatTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -150,8 +129,6 @@ const formatTime = (value) => {
   });
 };
 
-const getTicketTime = (ticket) => formatTime(ticket.showtime?.startTime);
-
 const getOrderSeatLabels = (order) =>
   order.tickets.map((ticket) => ticket.seat?.label).filter(Boolean).join(", ") || "-";
 
@@ -161,32 +138,37 @@ const getOrderSeatTypeLabels = (order) => {
   return order.tickets.length ? `${order.tickets.length} vé` : "Chưa có dữ liệu ghế";
 };
 
-const formatTicketSeatWithType = (ticket) => {
-  const seatLabel = String(ticket?.seat?.label || "").trim();
-  const seatType = String(ticket?.seat?.type || "").trim();
-
-  if (seatLabel && seatType) return `${seatLabel} - ${seatType}`;
-  return seatLabel || seatType || "-";
-};
-
-const bookingPaymentStatusMeta = {
-  paid: { label: "Đã thanh toán", className: "text-emerald-300 bg-emerald-400/10" },
-  pending: { label: "Chờ thanh toán", className: "text-amber-200 bg-amber-400/10" },
-  failed: { label: "Thanh toán lỗi", className: "text-red-200 bg-red-400/10" },
-  cancelled: { label: "Đã hủy", className: "text-red-200 bg-red-400/10" },
-  expired: { label: "Đã hết hạn", className: "text-amber-200 bg-amber-400/10" },
-  refund_pending: { label: "Chờ hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
-  refunded: { label: "Đã hoàn tiền", className: "text-sky-200 bg-sky-400/10" },
-};
-
-const getBookingPaymentStatusMeta = (status) =>
-  bookingPaymentStatusMeta[status] || {
-    label: "Đang cập nhật",
-    className: "text-slate-300 bg-white/[0.06]",
-  };
-
 const getOrderServiceLabels = (order) =>
   order.services.map((service) => `${service.name} ×${service.quantity}`).join(", ") || "Không có";
+
+const getOrderServiceItems = (order) =>
+  order.services
+    .map((service) => `${service.name} ×${service.quantity}`)
+    .filter(Boolean);
+
+const BOOKING_CODE_FULL_LENGTH = 17;
+const BOOKING_CODE_PREVIEW_LENGTH = 15;
+
+const getBookingCodePreview = (bookingCode) => {
+  const code = String(bookingCode || "").trim();
+  if (!code) return "-";
+  return code.length > BOOKING_CODE_FULL_LENGTH ? `${code.slice(0, BOOKING_CODE_PREVIEW_LENGTH)}...` : code;
+};
+
+const getOrderServiceSubtotal = (order) => {
+  const serviceTotal = Number(order.pricing?.serviceSubtotal || 0);
+  if (serviceTotal > 0) return serviceTotal;
+
+  return order.services.reduce(
+    (total, service) => total + Number(service.subtotal || service.unitPrice * service.quantity || 0),
+    0,
+  );
+};
+
+const getOrderTicketStatusLabels = (order) => {
+  const labels = [...new Set(order.tickets.map((ticket) => getTicketStatusMeta(ticket.status).label))];
+  return labels.length ? labels.join(", ") : "Đang cập nhật";
+};
 
 function EmptyState({ children = "Không có dữ liệu" }) {
   return (
@@ -293,8 +275,10 @@ function AccountPage() {
   const [tickets, setTickets] = useState([]);
   const [bookingOrders, setBookingOrders] = useState([]);
   const [orderQrDataUrls, setOrderQrDataUrls] = useState({});
-  const [expandedOrderIds, setExpandedOrderIds] = useState(() => new Set());
+  const preloadingOrderQrIds = useRef(new Set());
+  const isAccountPageMounted = useRef(false);
   const [loadingOrderQrId, setLoadingOrderQrId] = useState("");
+  const [selectedOrderForQr, setSelectedOrderForQr] = useState(null);
   const [vouchers, setVouchers] = useState([]);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -308,16 +292,18 @@ function AccountPage() {
   const [loadingVouchers, setLoadingVouchers] = useState(true);
   const [voucherFilter, setVoucherFilter] = useState("available");
   const [showPasswordPanel, setShowPasswordPanel] = useState(false);
-  const [selectedTicketDetail, setSelectedTicketDetail] = useState(null);
-  const [ticketQrDataUrl, setTicketQrDataUrl] = useState("");
-  const [ticketQrError, setTicketQrError] = useState("");
-  const [loadingTicketDetail, setLoadingTicketDetail] = useState(false);
-  const [loadingTicketQr, setLoadingTicketQr] = useState(false);
   const [ticketFilters, setTicketFilters] = useState({
     query: "",
     status: "",
   });
   const [ticketPage, setTicketPage] = useState(1);
+
+  useEffect(() => {
+    isAccountPageMounted.current = true;
+    return () => {
+      isAccountPageMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const nextTab = getTabFromParam(searchParams.get("tab"));
@@ -722,132 +708,20 @@ function AccountPage() {
     </section>
   );
 
-  const loadTicketQr = async (ticketId) => {
-    try {
-      setLoadingTicketQr(true);
-      setTicketQrError("");
-      setTicketQrDataUrl("");
-      const response = await getMyTicketQr(ticketId);
-      const payload = response.data?.qrPayload;
-
-      if (!payload) {
-        throw new Error("Không có dữ liệu QR cho vé này.");
-      }
-
-      const dataUrl = await QRCode.toDataURL(payload, {
-        errorCorrectionLevel: "M",
-        margin: 2,
-        width: 260,
-        color: {
-          dark: "#101010",
-          light: "#ffffff",
-        },
-      });
-
-      setTicketQrDataUrl(dataUrl);
-    } catch (error) {
-      const message = getApiErrorMessage(error, "Không thể tải mã QR.");
-      setTicketQrError(message);
-      showToast("error", message);
-    } finally {
-      setLoadingTicketQr(false);
-    }
-  };
-
-  const downloadTicketQr = (ticket, dataUrl = ticketQrDataUrl) => {
-    if (!ticket || !dataUrl) return;
-
-    const safeCode = String(ticket.ticketCode || "ve-qr").replace(/[^\w-]+/g, "-");
-    const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = `${safeCode}-qr.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  };
-
-  const downloadTicketQrDirectly = async (ticket) => {
-    setSelectedTicketDetail(ticket);
-    setTicketQrDataUrl("");
-    setTicketQrError("");
-
-    try {
-      setLoadingTicketQr(true);
-      setLoadingTicketDetail(false);
-      const response = await getMyTicketQr(ticket.id);
-      const payload = response.data?.qrPayload;
-
-      if (!payload) {
-        throw new Error("Không có dữ liệu QR cho vé này.");
-      }
-
-      const dataUrl = await QRCode.toDataURL(payload, {
-        errorCorrectionLevel: "M",
-        margin: 2,
-        width: 260,
-        color: {
-          dark: "#101010",
-          light: "#ffffff",
-        },
-      });
-
-      setTicketQrDataUrl(dataUrl);
-      downloadTicketQr(ticket, dataUrl);
-      showToast("success", "Đã tải mã QR của vé.");
-    } catch (error) {
-      const message = getApiErrorMessage(error, "Không thể tải mã QR.");
-      setTicketQrError(message);
-      showToast("error", message);
-    } finally {
-      setLoadingTicketQr(false);
-    }
-  };
-
-  const openTicketDetail = async (ticket, { qrOnly = false } = {}) => {
-    let detailedTicket = ticket;
-    setSelectedTicketDetail(ticket);
-    setTicketQrDataUrl("");
-    setTicketQrError("");
-
-    try {
-      setLoadingTicketDetail(!qrOnly);
-      const response = await getMyTicketDetail(ticket.id);
-      detailedTicket = response.data || ticket;
-      setSelectedTicketDetail(detailedTicket);
-    } catch (error) {
-      const message = getApiErrorMessage(error, "Không thể tải chi tiết vé.");
-      setTicketQrError(message);
-      showToast("error", message);
-    } finally {
-      setLoadingTicketDetail(false);
+  const createOrderQrDataUrl = useCallback(async (order) => {
+    const response = await getBookingOrderQr(order.id);
+    const payload = response.data?.qrPayload;
+    if (!payload?.startsWith("AURA_BOOKING_V2:")) {
+      throw new Error("QR đơn vé chưa sẵn sàng.");
     }
 
-    if (["VALID", "CHECKED_IN"].includes(detailedTicket.status)) {
-      await loadTicketQr(ticket.id);
-    } else {
-      setTicketQrError("QR không khả dụng với vé đã hủy hoặc hết hạn.");
-    }
-  };
-
-  const handleTicketPdf = async (ticket) => {
-    try {
-      const [detailResponse, qrResponse, pdfModule] = await Promise.all([
-        getMyTicketDetail(ticket.id),
-        getMyTicketQr(ticket.id),
-        import("../utils/ticketPdf"),
-      ]);
-      const detailedTicket = detailResponse.data || ticket;
-      const qrPayload = qrResponse.data?.qrPayload;
-      if (!qrPayload?.startsWith("AURA_TICKET:")) {
-        throw new Error("QR vé chưa sẵn sàng.");
-      }
-
-      await pdfModule.downloadTicketPdf(detailedTicket, qrPayload);
-      showToast("success", "Đã tải PDF vé.");
-    } catch (error) {
-      showToast("error", getApiErrorMessage(error, "Không thể tạo PDF vé."));
-    }
-  };
+    return QRCode.toDataURL(payload, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 260,
+      color: { dark: "#101010", light: "#ffffff" },
+    });
+  }, []);
 
   const loadOrderQr = async (order) => {
     if (!order?.id) return "";
@@ -855,17 +729,7 @@ function AccountPage() {
 
     try {
       setLoadingOrderQrId(order.id);
-      const response = await getBookingOrderQr(order.id);
-      const payload = response.data?.qrPayload;
-      if (!payload?.startsWith("AURA_BOOKING_V2:")) {
-        throw new Error("QR đơn vé chưa sẵn sàng.");
-      }
-      const dataUrl = await QRCode.toDataURL(payload, {
-        errorCorrectionLevel: "M",
-        margin: 2,
-        width: 260,
-        color: { dark: "#101010", light: "#ffffff" },
-      });
+      const dataUrl = await createOrderQrDataUrl(order);
       setOrderQrDataUrls((current) => ({ ...current, [order.id]: dataUrl }));
       return dataUrl;
     } catch (error) {
@@ -873,13 +737,6 @@ function AccountPage() {
       return "";
     } finally {
       setLoadingOrderQrId("");
-    }
-  };
-
-  const toggleOrderDetails = (order, isExpanded) => {
-    setExpandedOrderIds((current) => toggleBookingOrderExpanded(current, order.id));
-    if (!isExpanded && order.ticketingVersion === 2 && !orderQrDataUrls[order.id]) {
-      void loadOrderQr(order);
     }
   };
 
@@ -896,239 +753,196 @@ function AccountPage() {
     showToast("success", "Đã tải QR đơn vé.");
   };
 
-  const renderTicketCard = (ticket) => {
-    const status = getTicketStatusMeta(ticket.status);
-    const poster = resolveImageUrl(ticket.movie?.poster);
-    const qrAvailable = ["VALID", "CHECKED_IN"].includes(ticket.status);
+  const openOrderQrModal = async (order) => {
+    if (order.ticketingVersion !== 2) {
+      showToast("error", "QR đơn vé không khả dụng.");
+      return;
+    }
+
+    setSelectedOrderForQr(order);
+    if (!orderQrDataUrls[order.id]) {
+      await loadOrderQr(order);
+    }
+  };
+
+  const renderBookingOrderQrThumb = (order, variant = "table") => {
+    if (order.ticketingVersion !== 2) {
+      return (
+        <span className="mt-3 block text-xs font-semibold text-slate-500">
+          QR không khả dụng
+        </span>
+      );
+    }
+
+    const dataUrl = orderQrDataUrls[order.id];
+    const sizeClass = variant === "mobile" ? "h-20 w-20" : "h-16 w-16";
 
     return (
-      <article
-        className="grid overflow-hidden rounded-2xl border border-white/10 bg-[#171d27] shadow-[0_18px_50px_rgba(0,0,0,0.18)] sm:grid-cols-[120px_minmax(0,1fr)]"
-        key={ticket.id}
+      <button
+        className={`${variant === "mobile" ? "" : "mx-auto mt-3"} grid w-fit rounded-xl bg-white p-2 text-black transition hover:scale-[1.03] focus-visible:outline-[#ff9aa5] disabled:cursor-wait disabled:opacity-80`}
+        type="button"
+        disabled={loadingOrderQrId === order.id && !dataUrl}
+        onClick={() => openOrderQrModal(order)}
+        aria-label={`Mở QR đơn ${order.bookingCode}`}
       >
-        <div className="aspect-[3/4] bg-[#0f141c] sm:aspect-auto">
-          {poster ? (
-            <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} loading="lazy" decoding="async" />
-          ) : (
-            <div className="grid h-full min-h-40 place-items-center text-sm font-black text-slate-600">AuraCinema</div>
-          )}
-        </div>
-        <div className="grid gap-4 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[#ff8f99]">Mã vé</p>
-              <h3 className="mt-1 break-words text-lg font-black text-white">{ticket.ticketCode}</h3>
-            </div>
-            <span className={`rounded-full border px-3 py-1.5 text-xs font-black ${status.className}`}>
-              {status.label}
-            </span>
+        {dataUrl ? (
+          <img
+            className={`${sizeClass} object-contain`}
+            src={dataUrl}
+            alt={`QR đơn ${order.bookingCode}`}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className={`${sizeClass} grid place-items-center text-center text-[10px] font-black uppercase leading-4 text-slate-500`}>
+            Đang tải QR
           </div>
-          <div>
-            <p className="line-clamp-2 text-xl font-black text-white">{ticket.movie?.title || "Vé xem phim"}</p>
-            <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-              <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
-              <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-              <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-              <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
-              <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
-              <p><span className="text-slate-500">Check-in:</span> <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
-            </div>
-          </div>
-          <div className="flex flex-wrap justify-end gap-3 border-t border-white/10 pt-4">
-            {qrAvailable ? (
-              <>
-            <button
-              className="h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
-              type="button"
-              onClick={() => openTicketDetail(ticket, { qrOnly: true })}
-            >
-              Xem QR
-            </button>
-            <button
-              className="h-11 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 text-sm font-black text-emerald-100 hover:bg-emerald-400/20"
-              type="button"
-              onClick={() => downloadTicketQrDirectly(ticket)}
-            >
-              Tải QR
-            </button>
-            <button
-              className="h-11 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
-              type="button"
-              onClick={() => handleTicketPdf(ticket)}
-            >
-              Tải PDF
-            </button>
-              </>
-            ) : (
-              <p className="mr-auto self-center text-xs font-semibold text-slate-500">QR không khả dụng với vé {status.label.toLowerCase()}.</p>
-            )}
-            <button
-              className="h-11 rounded-full border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
-              type="button"
-              onClick={() => openTicketDetail(ticket)}
-            >
-              Xem chi tiết
-            </button>
-          </div>
-        </div>
-      </article>
+        )}
+      </button>
     );
   };
 
-  const renderBookingOrderActions = (order, isExpanded, detailsId) => (
-    <div className="grid gap-2">
-      {order.ticketingVersion === 2 && (
-        <button
-          className="min-h-10 rounded-full border border-white/15 bg-white/[0.05] px-3 py-2 text-sm font-black text-white hover:border-emerald-400/50 disabled:cursor-wait disabled:opacity-60"
-          type="button"
-          disabled={loadingOrderQrId === order.id}
-          onClick={() => downloadOrderQr(order)}
-        >
-          {loadingOrderQrId === order.id ? "Đang tải QR..." : "Tải QR đơn"}
-        </button>
-      )}
-      <button
-        className="min-h-10 whitespace-normal rounded-full border border-[#ff6070]/40 bg-[#ff6070]/10 px-3 py-2 text-sm font-black leading-5 text-[#ff9aa5] hover:bg-[#ff6070]/20"
-        type="button"
-        aria-expanded={isExpanded}
-        aria-controls={detailsId}
-        onClick={() => toggleOrderDetails(order, isExpanded)}
-      >
-        {isExpanded ? "Thu gọn đơn vé" : "Hiển thị toàn bộ đơn vé"}
-      </button>
-    </div>
-  );
+  const renderOrderServiceInfo = (order, variant = "table") => {
+    const serviceItems = getOrderServiceItems(order);
+    const hasServices = serviceItems.length > 0;
+    const serviceSubtotal = getOrderServiceSubtotal(order);
+    const voucherCode = String(order.voucher?.code || "").trim().toUpperCase();
+    const isMobile = variant === "mobile";
 
-  const renderBookingOrderDetails = (order, detailsId) => (
-    <div id={detailsId}>
-      {loadingOrderQrId === order.id && !orderQrDataUrls[order.id] && (
-        <div className="border-b border-white/10 bg-white/[0.025] px-5 py-4 text-sm font-bold text-slate-300">
-          Đang tải QR đơn vé...
-        </div>
-      )}
-      {orderQrDataUrls[order.id] && (
-        <div className="grid gap-4 border-b border-white/10 bg-white/[0.025] p-5 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center">
-          <div className="rounded-2xl bg-white p-3 text-black">
-            <img className="mx-auto h-32 w-32 object-contain" src={orderQrDataUrls[order.id]} alt={`QR đơn ${order.bookingCode}`} />
-          </div>
-          <div>
-            <h4 className="font-black text-white">QR đơn vé</h4>
-            <p className="mt-2 text-sm leading-6 text-slate-400">Xuất trình tại quầy để tra cứu và in tất cả vé hợp lệ chưa in. Check-in vẫn sử dụng QR riêng của từng vé.</p>
-          </div>
-        </div>
-      )}
-      <div className="grid gap-5 border-b border-white/10 bg-black/10 px-5 py-5 text-slate-200 sm:grid-cols-[minmax(0,1.45fr)_minmax(150px,0.7fr)_minmax(190px,0.85fr)] sm:items-start">
-        <div className="min-w-0">
-          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Dịch vụ</span>
-          <strong className="mt-2 block break-words text-base font-black leading-6 text-white sm:text-lg">
-            {getOrderServiceLabels(order)}
+    return (
+      <div className={`grid ${isMobile ? "gap-1.5" : "gap-2"} text-sm`}>
+        {hasServices ? (
+          <ul className="grid gap-1">
+            {serviceItems.map((serviceLabel) => (
+              <li className="break-words font-bold text-white" key={serviceLabel}>
+                {serviceLabel}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="break-words text-slate-500">Không có đồ ăn</span>
+        )}
+        <span className="text-slate-500">
+          Giá đồ ăn: <strong className="font-bold text-slate-300">{currencyFormatter.format(serviceSubtotal)}</strong>
+        </span>
+        <span className="text-slate-500">
+          Mã giảm giá:{" "}
+          <strong className={voucherCode ? "font-black text-emerald-300" : "font-bold text-slate-400"}>
+            {voucherCode || "Không có"}
           </strong>
-        </div>
-        <div className="min-w-0 sm:text-right">
-          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Giảm giá</span>
-          <strong className="mt-2 block break-words text-lg font-black tabular-nums text-emerald-300 sm:text-xl">
-            {currencyFormatter.format(order.pricing.discount)}
-          </strong>
-        </div>
-        <div className="min-w-0 sm:text-right">
-          <span className="block text-xs font-black uppercase tracking-[0.08em] text-slate-500">Tổng thanh toán</span>
-          <strong className="mt-2 block break-words text-2xl font-black leading-tight tabular-nums text-[#ff9aa5] sm:text-[28px]">
-            {currencyFormatter.format(order.pricing.total)}
-          </strong>
-        </div>
+        </span>
       </div>
-      <div className="grid gap-5 p-5 xl:grid-cols-2">
-        {order.tickets.map(renderTicketCard)}
+    );
+  };
+
+  const renderOrderPaymentInfo = (order) => {
+    const discount = Number(order.pricing?.discount || 0);
+    const total = Number(order.pricing?.total || 0);
+
+    return (
+      <div className="grid items-start gap-1.5 text-left">
+        {discount > 0 && (
+          <p className="text-sm font-bold text-emerald-300">
+            Giảm: {currencyFormatter.format(discount)}
+          </p>
+        )}
+        <p className="text-sm text-slate-500">
+          Tổng tiền: <strong className="text-lg font-black text-[#ff9aa5]">{currencyFormatter.format(total)}</strong>
+        </p>
       </div>
-    </div>
+    );
+  };
+
+  const renderBookingCodeLabel = (order, className = "") => (
+    <span
+      className={`block max-w-full truncate text-left font-black text-white ${className}`}
+      title={order.bookingCode}
+    >
+      {getBookingCodePreview(order.bookingCode)}
+    </span>
   );
 
   const renderBookingOrderMobileCard = (order) => {
-    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
-    const detailsId = `booking-order-mobile-details-${order.id}`;
-    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
-
     return (
       <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#111722]" key={order.id}>
-        <div className="grid gap-5 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
+        <div className="grid gap-4 p-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
+            <div className="min-w-0 self-start">
               <p className="text-xs font-black uppercase tracking-[0.1em] text-[#ff8f99]">Mã hóa đơn</p>
-              <h3 className="mt-1 break-words text-xl font-black text-white">{order.bookingCode}</h3>
+              <h3 className="mt-1">
+                {renderBookingCodeLabel(order, "text-lg")}
+              </h3>
+              <p className="mt-3 text-xs font-bold text-slate-500">{getOrderTicketStatusLabels(order)}</p>
             </div>
-            <span className={`rounded-full px-3 py-1.5 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
+            <div className="shrink-0">
+              {renderBookingOrderQrThumb(order, "mobile")}
+            </div>
           </div>
-          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-4 gap-y-4 text-base">
-            <dt className="text-slate-500">Phim</dt>
-            <dd className="min-w-0 break-words font-bold text-white">
-              {order.movie.title || "Đang cập nhật"}
-              <span className="mt-1 block text-sm font-medium text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
-            </dd>
-            <dt className="text-slate-500">Suất chiếu</dt>
-            <dd className="min-w-0 break-words font-bold text-white">
-              {formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}
-              <span className="mt-1 block text-sm font-medium text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
-            </dd>
-            <dt className="text-slate-500">Ghế đã đặt</dt>
-            <dd className="min-w-0 break-words font-bold text-white">
-              {getOrderSeatLabels(order)}
-              <span className="mt-1 block text-sm font-medium text-slate-500">{getOrderSeatTypeLabels(order)}</span>
-            </dd>
-            <dt className="text-slate-500">Ngày đặt</dt>
-            <dd className="min-w-0 break-words text-slate-200">
-              {formatDateTime(order.createdAt)}
-              <span className="mt-1 block text-sm font-bold text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</span>
-            </dd>
-            <dt className="text-slate-500">Điểm</dt>
-            <dd className="font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")} <span className="text-sm font-medium text-slate-500">điểm thưởng</span></dd>
+          <dl className="grid gap-3 text-sm">
+            <div>
+              <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Phim</dt>
+              <dd className="mt-1 min-w-0 break-words text-base font-black text-white">
+                {order.movie.title || "Đang cập nhật"}
+              </dd>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Suất chiếu</dt>
+                <dd className="mt-1 font-bold text-white">{formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}</dd>
+                <dd className="mt-1 text-slate-500">{order.room.name || "Phòng đang cập nhật"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Ghế</dt>
+                <dd className="mt-1 break-words font-bold text-white">{getOrderSeatLabels(order)}</dd>
+                <dd className="mt-1 text-slate-500">{getOrderSeatTypeLabels(order)}</dd>
+              </div>
+            </div>
+            <div className="grid gap-3 border-t border-white/10 pt-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Ngày đặt</dt>
+                <dd className="mt-1 text-slate-200">{formatDateTime(order.createdAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Thanh toán</dt>
+                <dd className="mt-1">{renderOrderPaymentInfo(order)}</dd>
+              </div>
+            </div>
+            <div>
+              <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Dịch vụ</dt>
+              <dd className="mt-1">{renderOrderServiceInfo(order, "mobile")}</dd>
+            </div>
           </dl>
-          {renderBookingOrderActions(order, isExpanded, detailsId)}
         </div>
-        {isExpanded && renderBookingOrderDetails(order, detailsId)}
       </article>
     );
   };
 
   const renderBookingOrderTableRows = (order) => {
-    const isExpanded = isBookingOrderExpanded(expandedOrderIds, order.id);
-    const detailsId = `booking-order-table-details-${order.id}`;
-    const paymentStatus = getBookingPaymentStatusMeta(order.paymentStatus);
-
     return (
-      <tbody className="divide-y divide-white/10" key={order.id}>
-        <tr className="align-top text-base leading-6 text-slate-300 hover:bg-white/[0.025]">
-          <td className="break-words px-4 py-5 [overflow-wrap:anywhere]">
-            <strong className="block font-black text-white">{order.bookingCode}</strong>
-            <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-black ${paymentStatus.className}`}>{paymentStatus.label}</span>
-          </td>
-          <td className="break-words px-4 py-5">
-            <strong className="block font-bold text-white">{order.movie.title || "Đang cập nhật"}</strong>
-            <span className="mt-2 block text-sm text-slate-500">{order.movie.ageClassification || "P"} · {order.tickets.length} vé</span>
-          </td>
-          <td className="break-words px-4 py-5">
-            <strong className="block text-white">{formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}</strong>
-            <span className="mt-2 block text-sm text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
-          </td>
-          <td className="break-words px-4 py-5">
-            <strong className="block font-bold text-white">{getOrderSeatLabels(order)}</strong>
-            <span className="mt-2 block text-sm text-slate-500">{getOrderSeatTypeLabels(order)}</span>
-          </td>
-          <td className="break-words px-4 py-5">
-            <span className="block">{formatDateTime(order.createdAt)}</span>
-            <strong className="mt-2 block text-sm text-[#ff9aa5]">Tổng {currencyFormatter.format(order.pricing.total)}</strong>
-          </td>
-          <td className="px-4 py-5 text-right">
-            <strong className="block text-lg font-black text-emerald-300">+{order.rewardPointsEarned.toLocaleString("vi-VN")}</strong>
-            <span className="mt-2 block text-xs text-slate-500">điểm thưởng</span>
-          </td>
-          <td className="px-4 py-5">{renderBookingOrderActions(order, isExpanded, detailsId)}</td>
-        </tr>
-        {isExpanded && (
-          <tr>
-            <td className="bg-[#111722] p-0" colSpan={7}>{renderBookingOrderDetails(order, detailsId)}</td>
-          </tr>
-        )}
-      </tbody>
+      <tr className="align-top text-base leading-6 text-slate-300 hover:bg-white/[0.025]" key={order.id}>
+        <td className="overflow-hidden px-4 py-4">
+          {renderBookingCodeLabel(order)}
+          {renderBookingOrderQrThumb(order)}
+        </td>
+        <td className="break-words px-4 py-4">
+          <strong className="block font-bold text-white">{order.movie.title || "Đang cập nhật"}</strong>
+          <span className="mt-2 block font-bold text-white">{formatDate(order.showtime.startTime)} · {formatTime(order.showtime.startTime)}</span>
+          <span className="mt-1 block text-sm text-slate-500">{order.room.name || "Phòng đang cập nhật"}</span>
+        </td>
+        <td className="break-words px-4 py-4">
+          <strong className="block font-bold text-white">{getOrderSeatLabels(order)}</strong>
+          <span className="mt-2 block text-sm text-slate-500">{getOrderSeatTypeLabels(order)}</span>
+        </td>
+        <td className="break-words px-4 py-4">
+          <span className="block">{formatDateTime(order.createdAt)}</span>
+        </td>
+        <td className="break-words px-4 py-4">
+          {renderOrderServiceInfo(order)}
+        </td>
+        <td className="break-words px-4 py-4">
+          {renderOrderPaymentInfo(order)}
+        </td>
+      </tr>
     );
   };
 
@@ -1139,6 +953,8 @@ function AccountPage() {
       order.bookingCode,
       order.movie.title,
       order.room.name,
+      getOrderServiceLabels(order),
+      order.voucher?.code,
       ...order.tickets.flatMap((ticket) => [
         ticket.ticketCode,
         ticket.seat?.label,
@@ -1159,30 +975,57 @@ function AccountPage() {
   );
 
   useEffect(() => {
+    if (activeTab !== "tickets" || loadingTickets) return;
+
+    const ordersNeedingQr = paginatedBookingOrders.filter((order) => (
+      order.ticketingVersion === 2 &&
+      !orderQrDataUrls[order.id] &&
+      !preloadingOrderQrIds.current.has(order.id)
+    ));
+
+    if (!ordersNeedingQr.length) return;
+
+    ordersNeedingQr.forEach((order) => preloadingOrderQrIds.current.add(order.id));
+
+    Promise.all(
+      ordersNeedingQr.map(async (order) => {
+        try {
+          const dataUrl = await createOrderQrDataUrl(order);
+          return [order.id, dataUrl];
+        } catch {
+          return null;
+        } finally {
+          preloadingOrderQrIds.current.delete(order.id);
+        }
+      }),
+    ).then((entries) => {
+      if (!isAccountPageMounted.current) return;
+
+      const validEntries = entries.filter(Boolean);
+      if (!validEntries.length) return;
+
+      setOrderQrDataUrls((current) => {
+        const next = { ...current };
+        validEntries.forEach(([orderId, dataUrl]) => {
+          next[orderId] = dataUrl;
+        });
+        return next;
+      });
+    });
+  }, [activeTab, createOrderQrDataUrl, loadingTickets, orderQrDataUrls, paginatedBookingOrders]);
+
+  useEffect(() => {
     setTicketPage(1);
   }, [ticketFilters.query, ticketFilters.status]);
 
   const renderTicketsTab = () => (
-    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8 max-sm:p-5">
+    <>
       {ticketsError && (
         <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
           {ticketsError}
         </div>
       )}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-white">Vé của tôi</h2>
-          <p className="mt-1 text-sm text-slate-400">Mỗi lần đặt vé là một đơn; bên trong đơn, từng ghế vẫn có QR riêng để check-in.</p>
-        </div>
-        <button
-          className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-5 text-sm font-black text-white hover:border-[#ff6070]"
-          type="button"
-          onClick={() => window.history.back()}
-        >
-          Quay lại
-        </button>
-      </div>
-      <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 md:grid-cols-[minmax(0,1fr)_190px_auto]">
+      <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 md:grid-cols-[minmax(0,1fr)_190px]">
         <input
           className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
           type="search"
@@ -1198,25 +1041,16 @@ function AccountPage() {
           <option value="">Tất cả trạng thái</option>
           <option value="Chưa sử dụng">Chưa sử dụng</option>
           <option value="Đã sử dụng">Đã sử dụng</option>
-          <option value="Đã hủy">Đã hủy</option>
-          <option value="Đã hết hạn">Đã hết hạn</option>
         </select>
-        <button
-          className="h-11 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
-          type="button"
-          onClick={() => setTicketFilters({ query: "", status: "" })}
-        >
-          Xóa lọc
-        </button>
       </div>
       <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-black text-white">Lịch sử đặt vé</h3>
-            <p className="mt-1 text-xs text-slate-500">Theo dõi hóa đơn, suất chiếu, ghế và điểm nhận được.</p>
+            <p className="mt-1 text-xs text-slate-500">Nhấm vào mã QR để xem mã đơn và tải QR đơn</p>
           </div>
           <span className="rounded-full bg-white/[0.06] px-3 py-1 text-xs font-black text-slate-300">
-            {bookingOrders.length} đơn · {tickets.length} vé
+            {bookingOrders.length} đơn
           </span>
         </div>
         {loadingTickets ? (
@@ -1231,26 +1065,26 @@ function AccountPage() {
                 <div className="hidden overflow-hidden rounded-2xl border border-white/10 lg:block">
                   <table className="w-full table-fixed border-collapse text-left">
                     <colgroup>
-                      <col className="w-[18%]" />
-                      <col className="w-[18%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[12%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[14%]" />
                       <col className="w-[13%]" />
-                      <col className="w-[7%]" />
-                      <col className="w-[16%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[13%]" />
                     </colgroup>
                     <thead className="bg-white/[0.045] text-sm uppercase tracking-[0.04em] text-slate-400">
                       <tr>
-                        <th className="break-words px-4 py-4 font-black">Mã hóa đơn</th>
-                        <th className="break-words px-4 py-4 font-black">Phim</th>
-                        <th className="break-words px-4 py-4 font-black">Suất chiếu</th>
+                        <th className="break-words px-4 py-4 font-black">Mã / QR</th>
+                        <th className="break-words px-4 py-4 font-black">Phim & suất</th>
                         <th className="break-words px-4 py-4 font-black">Ghế đã đặt</th>
                         <th className="break-words px-4 py-4 font-black">Ngày đặt</th>
-                        <th className="break-words px-4 py-4 text-right font-black">Điểm</th>
-                        <th className="break-words px-4 py-4 font-black">Thao tác</th>
+                        <th className="break-words px-4 py-4 font-black">Dịch vụ</th>
+                        <th className="break-words px-4 py-4 font-black">Thanh toán</th>
                       </tr>
                     </thead>
-                    {paginatedBookingOrders.map(renderBookingOrderTableRows)}
+                    <tbody className="divide-y divide-white/10">
+                      {paginatedBookingOrders.map(renderBookingOrderTableRows)}
+                    </tbody>
                   </table>
                 </div>
               </>
@@ -1298,90 +1132,62 @@ function AccountPage() {
           <EmptyState>Bạn chưa có đơn vé điện tử nào.</EmptyState>
         )}
       </div>
-    </section>
+    </>
   );
 
-  const renderTicketDetailModal = () => {
-    const ticket = selectedTicketDetail;
-    if (!ticket) return null;
+  const renderOrderQrModal = () => {
+    if (!selectedOrderForQr) return null;
 
-    const status = getTicketStatusMeta(ticket.status);
-    const poster = resolveImageUrl(ticket.movie?.poster);
+    const dataUrl = orderQrDataUrls[selectedOrderForQr.id];
 
     return (
-      <div className="fixed inset-0 z-[80] grid place-items-center bg-black/85 px-4 py-8" role="dialog" aria-modal="true" aria-label={`Chi tiết vé ${ticket.ticketCode}`} onClick={() => setSelectedTicketDetail(null)}>
-        <div className="max-h-[90vh] w-[min(720px,100%)] overflow-y-auto rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] shadow-[var(--aura-shadow-floating)]" onClick={(event) => event.stopPropagation()}>
-          <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff5364]">AuraCinema</p>
-              <h2 className="mt-1 text-xl font-black text-white">Vé điện tử</h2>
+      <div
+        className="fixed inset-0 z-[80] grid place-items-center bg-black/85 px-4 py-8"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`QR đơn ${selectedOrderForQr.bookingCode}`}
+        onClick={() => setSelectedOrderForQr(null)}
+      >
+        <div
+          className="w-[min(420px,100%)] rounded-[24px] border border-white/10 bg-[#141923] p-6 text-center shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4 text-left">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#ff8f99]">QR đơn vé</p>
+              <h2 className="mt-1 break-words text-xl font-black text-white">{selectedOrderForQr.bookingCode}</h2>
+              <p className="mt-1 text-sm text-slate-400">{selectedOrderForQr.movie.title || "Đang cập nhật"}</p>
             </div>
-            <button className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-xl font-black text-white hover:bg-[#ff5364] hover:text-[var(--aura-coral-ink)]" type="button" onClick={() => setSelectedTicketDetail(null)} aria-label="Đóng chi tiết">
-              ×
+            <button
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-lg font-black text-white hover:border-[#ff6070]"
+              type="button"
+              onClick={() => setSelectedOrderForQr(null)}
+              aria-label="Đóng QR đơn"
+            >
+              x
             </button>
           </div>
 
-          <div className="p-5 text-white">
-            {loadingTicketDetail ? (
-              <EmptyState>Đang tải chi tiết vé...</EmptyState>
+          <div className="mx-auto mt-6 grid h-72 w-72 max-w-full place-items-center rounded-2xl bg-white p-4 text-black">
+            {dataUrl ? (
+              <img
+                className="h-full w-full object-contain"
+                src={dataUrl}
+                alt={`QR đơn ${selectedOrderForQr.bookingCode}`}
+              />
             ) : (
-              <div className="overflow-hidden rounded-xl border border-white/10 bg-[#171717]">
-                <div className="grid gap-5 p-5 sm:grid-cols-[120px_minmax(0,1fr)]">
-                  <div className="aspect-[3/4] overflow-hidden rounded-xl bg-white/[0.04]">
-                    {poster ? <img className="h-full w-full object-cover" src={poster} alt={ticket.movie?.title || "Poster phim"} loading="lazy" decoding="async" /> : null}
-                  </div>
-                  <div>
-                    <span className={`inline-flex rounded-full border px-3 py-1.5 text-xs font-black ${status.className}`}>
-                      {status.label}
-                    </span>
-                    <p className="mt-4 text-xs font-black uppercase tracking-[0.16em] text-[#ff5364]">Vé xem phim</p>
-                    <h3 className="mt-1 text-2xl font-black text-white">{ticket.movie?.title || "Vé xem phim"}</h3>
-                    <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                      <p><span className="text-slate-500">Ngày:</span> <strong className="text-white">{getTicketDate(ticket)}</strong></p>
-                      <p><span className="text-slate-500">Giờ:</span> <strong className="text-white">{getTicketTime(ticket)}</strong></p>
-                      <p><span className="text-slate-500">Phòng:</span> <strong className="text-white">{ticket.room?.name || "-"}</strong></p>
-                      <p><span className="text-slate-500">Ghế:</span> <strong className="text-white">{formatTicketSeatWithType(ticket)}</strong></p>
-                      <p><span className="text-slate-500">Giá vé:</span> <strong className="text-[#ff9aa5]">{currencyFormatter.format(Number(ticket.price || 0))}</strong></p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t border-white/10 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Mã vé</p>
-                  <p className="mt-1 break-words text-lg font-black text-white">{ticket.ticketCode}</p>
-                </div>
-
-                <div className="border-t border-white/10 bg-white p-5 text-center">
-                  {loadingTicketQr ? (
-                    <div className="grid min-h-48 place-items-center text-sm font-bold text-slate-500">Đang tạo mã QR...</div>
-                  ) : ticketQrError ? (
-                    <div className="mx-auto max-w-sm rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
-                      {ticketQrError}
-                    </div>
-                  ) : ticketQrDataUrl ? (
-                    <>
-                      <img className="mx-auto h-48 w-48 object-contain" src={ticketQrDataUrl} alt={`QR vé ${ticket.ticketCode}`} />
-                      <button
-                        className="mt-4 rounded-full bg-[var(--aura-coral)] px-5 py-2 text-sm font-black text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)]"
-                        type="button"
-                        onClick={() => downloadTicketQr(ticket)}
-                      >
-                        Tải mã QR
-                      </button>
-                      <div className="mt-3 flex flex-wrap justify-center gap-2">
-                        <button className="min-h-11 rounded-full border border-slate-300 px-4 text-sm font-black text-slate-900" type="button" onClick={() => handleTicketPdf(ticket)}>Tải PDF</button>
-                      </div>
-                    </>
-                  ) : null}
-                  <p className="mt-3 text-xs font-black text-black">Vui lòng xuất trình mã QR tại cửa phòng chiếu</p>
-                </div>
-
-                <div className="grid gap-2 border-t border-white/10 p-5 text-sm text-slate-400 sm:grid-cols-2">
-                  <p>Check-in: <strong className="text-white">{formatDateTime(ticket.checkedInAt)}</strong></p>
-                </div>
-              </div>
+              <div className="text-sm font-black uppercase text-slate-500">Đang tải QR</div>
             )}
           </div>
+
+          <button
+            className="mt-5 min-h-11 rounded-full bg-[var(--aura-coral)] px-6 text-sm font-black text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-wait disabled:opacity-60"
+            type="button"
+            disabled={!dataUrl || loadingOrderQrId === selectedOrderForQr.id}
+            onClick={() => downloadOrderQr(selectedOrderForQr)}
+          >
+            Tải QR đơn
+          </button>
         </div>
       </div>
     );
@@ -1512,12 +1318,11 @@ function AccountPage() {
         <nav className="max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-2">
           <div className="flex w-fit max-w-full gap-2 overflow-x-auto">
             {tabs.map((tab) => {
-              const Icon = tab.icon;
               const selected = activeTab === tab.id;
 
               return (
                 <button
-                  className={`flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  className={`flex min-h-12 min-w-fit items-center justify-center whitespace-nowrap rounded-2xl px-6 py-3 text-sm font-black transition ${
                     selected
                       ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]"
                       : "text-slate-200 hover:bg-white/[0.04] hover:text-white"
@@ -1526,9 +1331,6 @@ function AccountPage() {
                   onClick={() => handleTabClick(tab.id)}
                   type="button"
                 >
-                  <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
-                    <Icon />
-                  </span>
                   {tab.label}
                 </button>
               );
@@ -1538,7 +1340,7 @@ function AccountPage() {
       </div>
 
       <div className="mt-5">{renderActiveTab()}</div>
-      {renderTicketDetailModal()}
+      {renderOrderQrModal()}
     </main>
   );
 }
