@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
-import {
-  HiOutlineCreditCard,
-  HiOutlineLockClosed,
-  HiOutlineSparkles,
-  HiOutlineTag,
-  HiOutlineTicket,
-  HiOutlineUser,
-} from "react-icons/hi";
+import { HiOutlineLockClosed } from "react-icons/hi";
 import { changePassword, updateProfile } from "../api/authApi";
 import { getMyTicketDetail, getMyTicketQr } from "../services/ticketService";
 import { getBookingOrderQr, getMyBookings } from "../services/bookingService";
@@ -41,11 +34,11 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
 });
 
 const tabs = [
-  { id: "account", label: "Tài khoản của tôi", icon: HiOutlineUser },
-  { id: "member", label: "Thông tin thẻ thành viên", icon: HiOutlineCreditCard },
-  { id: "tickets", label: "Vé của tôi", icon: HiOutlineTicket },
-  { id: "points", label: "Lịch sử điểm thưởng", icon: HiOutlineSparkles },
-  { id: "vouchers", label: "Ví Voucher", icon: HiOutlineTag },
+  { id: "account", label: "Tài khoản của tôi" },
+  { id: "member", label: "Thông tin thẻ thành viên" },
+  { id: "tickets", label: "Hành trình điện ảnh" },
+  { id: "points", label: "Lịch sử điểm thưởng" },
+  { id: "vouchers", label: "Ví Voucher" },
 ];
 
 const ORDERS_PER_PAGE = 10;
@@ -1163,25 +1156,12 @@ function AccountPage() {
   }, [ticketFilters.query, ticketFilters.status]);
 
   const renderTicketsTab = () => (
-    <section className="rounded-[28px] border border-white/10 bg-[#141923]/95 p-8 max-sm:p-5">
+    <>
       {ticketsError && (
         <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
           {ticketsError}
         </div>
       )}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-black text-white">Vé của tôi</h2>
-          <p className="mt-1 text-sm text-slate-400">Mỗi lần đặt vé là một đơn; bên trong đơn, từng ghế vẫn có QR riêng để check-in.</p>
-        </div>
-        <button
-          className="h-10 rounded-full border border-white/10 bg-white/[0.06] px-5 text-sm font-black text-white hover:border-[#ff6070]"
-          type="button"
-          onClick={() => window.history.back()}
-        >
-          Quay lại
-        </button>
-      </div>
       <div className="mb-5 grid gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 md:grid-cols-[minmax(0,1fr)_190px_auto]">
         <input
           className="h-11 rounded-xl border border-white/10 bg-[#101722] px-4 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-[#ff6070]"
@@ -1198,8 +1178,6 @@ function AccountPage() {
           <option value="">Tất cả trạng thái</option>
           <option value="Chưa sử dụng">Chưa sử dụng</option>
           <option value="Đã sử dụng">Đã sử dụng</option>
-          <option value="Đã hủy">Đã hủy</option>
-          <option value="Đã hết hạn">Đã hết hạn</option>
         </select>
         <button
           className="h-11 rounded-xl border border-white/10 bg-white/[0.06] px-4 text-sm font-black text-white hover:border-[#ff6070]"
@@ -1298,7 +1276,7 @@ function AccountPage() {
           <EmptyState>Bạn chưa có đơn vé điện tử nào.</EmptyState>
         )}
       </div>
-    </section>
+    </>
   );
 
   const renderTicketDetailModal = () => {
@@ -1512,12 +1490,11 @@ function AccountPage() {
         <nav className="max-w-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] p-2">
           <div className="flex w-fit max-w-full gap-2 overflow-x-auto">
             {tabs.map((tab) => {
-              const Icon = tab.icon;
               const selected = activeTab === tab.id;
 
               return (
                 <button
-                  className={`flex min-w-fit items-center gap-3 rounded-2xl px-4 py-3 text-sm font-black transition ${
+                  className={`flex min-h-12 min-w-fit items-center justify-center whitespace-nowrap rounded-2xl px-6 py-3 text-sm font-black transition ${
                     selected
                       ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]"
                       : "text-slate-200 hover:bg-white/[0.04] hover:text-white"
@@ -1526,9 +1503,6 @@ function AccountPage() {
                   onClick={() => handleTabClick(tab.id)}
                   type="button"
                 >
-                  <span className="grid h-8 w-8 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
-                    <Icon />
-                  </span>
                   {tab.label}
                 </button>
               );
