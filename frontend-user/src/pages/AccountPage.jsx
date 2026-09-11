@@ -146,6 +146,9 @@ const getOrderServiceItems = (order) =>
     .map((service) => `${service.name} ×${service.quantity}`)
     .filter(Boolean);
 
+const TABLE_SERVICE_PREVIEW_LIMIT = 2;
+const MOBILE_SERVICE_PREVIEW_LIMIT = 3;
+
 const BOOKING_CODE_FULL_LENGTH = 17;
 const BOOKING_CODE_PREVIEW_LENGTH = 15;
 
@@ -279,6 +282,7 @@ function AccountPage() {
   const isAccountPageMounted = useRef(false);
   const [loadingOrderQrId, setLoadingOrderQrId] = useState("");
   const [selectedOrderForQr, setSelectedOrderForQr] = useState(null);
+  const [selectedOrderForServices, setSelectedOrderForServices] = useState(null);
   const [vouchers, setVouchers] = useState([]);
   const [profileMessage, setProfileMessage] = useState("");
   const [profileError, setProfileError] = useState("");
@@ -808,16 +812,30 @@ function AccountPage() {
     const serviceSubtotal = getOrderServiceSubtotal(order);
     const voucherCode = String(order.voucher?.code || "").trim().toUpperCase();
     const isMobile = variant === "mobile";
+    const visibleLimit = isMobile ? MOBILE_SERVICE_PREVIEW_LIMIT : TABLE_SERVICE_PREVIEW_LIMIT;
+    const visibleServiceItems = serviceItems.slice(0, visibleLimit);
+    const hiddenServiceCount = Math.max(serviceItems.length - visibleServiceItems.length, 0);
 
     return (
       <div className={`grid ${isMobile ? "gap-1.5" : "gap-2"} text-sm`}>
         {hasServices ? (
-          <ul className="grid gap-1">
-            {serviceItems.map((serviceLabel) => (
-              <li className="break-words font-bold text-white" key={serviceLabel}>
+          <ul className="grid min-w-0 gap-1">
+            {visibleServiceItems.map((serviceLabel) => (
+              <li className="min-w-0 truncate font-bold text-white" key={serviceLabel}>
                 {serviceLabel}
               </li>
             ))}
+            {hiddenServiceCount > 0 && (
+              <li>
+                <button
+                  className="w-fit rounded-full border border-white/10 bg-white/[0.06] px-2.5 py-1 text-left text-xs font-black text-slate-300 transition hover:border-[#ff6070]/70 hover:text-white focus-visible:outline-[#ff9aa5]"
+                  type="button"
+                  onClick={() => setSelectedOrderForServices(order)}
+                >
+                  +{hiddenServiceCount} dịch vụ khác
+                </button>
+              </li>
+            )}
           </ul>
         ) : (
           <span className="break-words text-slate-500">Không có đồ ăn</span>
@@ -835,6 +853,83 @@ function AccountPage() {
     );
   };
 
+  const renderOrderServicesModal = () => {
+    if (!selectedOrderForServices) return null;
+
+    const services = selectedOrderForServices.services || [];
+    const serviceSubtotal = getOrderServiceSubtotal(selectedOrderForServices);
+    const voucherCode = String(selectedOrderForServices.voucher?.code || "").trim().toUpperCase();
+
+    return (
+      <div
+        className="fixed inset-0 z-[80] grid place-items-center bg-black/85 px-4 py-8"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Dịch vụ trong đơn ${selectedOrderForServices.bookingCode}`}
+        onClick={() => setSelectedOrderForServices(null)}
+      >
+        <div
+          className="w-[min(680px,100%)] rounded-[24px] border border-white/10 bg-[#141923] p-6 shadow-[0_28px_80px_rgba(0,0,0,0.45)]"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.12em] text-[#ff8f99]">Dịch vụ đã đặt</p>
+              <h2 className="mt-1 break-words text-xl font-black text-white">{selectedOrderForServices.bookingCode}</h2>
+              <p className="mt-1 text-sm text-slate-400">{selectedOrderForServices.movie.title || "Đang cập nhật"}</p>
+            </div>
+            <button
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-lg font-black text-white hover:border-[#ff6070]"
+              type="button"
+              onClick={() => setSelectedOrderForServices(null)}
+              aria-label="Đóng danh sách dịch vụ"
+            >
+              x
+            </button>
+          </div>
+
+          <div className="mt-5 max-h-[48vh] overflow-y-auto rounded-2xl border border-white/10 bg-black/15">
+            {services.length ? (
+              <ul className="divide-y divide-white/10">
+                {services.map((service, index) => {
+                  const quantity = Number(service.quantity || 0);
+                  const subtotal = Number(service.subtotal || service.unitPrice * quantity || 0);
+
+                  return (
+                    <li className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start" key={`${service.id || service.name}-${index}`}>
+                      <div className="min-w-0">
+                        <strong className="block break-words text-base font-black text-white">{service.name || "Dịch vụ"}</strong>
+                        <span className="mt-1 block text-slate-500">Số lượng: {quantity || 1}</span>
+                      </div>
+                      <strong className="whitespace-nowrap text-left text-base text-slate-100 sm:text-right">
+                        {currencyFormatter.format(subtotal)}
+                      </strong>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="p-5 text-sm font-bold text-slate-400">Không có đồ ăn</div>
+            )}
+          </div>
+
+          <div className="mt-5 grid gap-2 rounded-2xl bg-white/[0.04] p-4 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-slate-400">Giá đồ ăn</span>
+              <strong className="text-base text-white">{currencyFormatter.format(serviceSubtotal)}</strong>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-slate-400">Mã giảm giá</span>
+              <strong className={voucherCode ? "text-emerald-300" : "text-slate-300"}>
+                {voucherCode || "Không có"}
+              </strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderOrderPaymentInfo = (order) => {
     const discount = Number(order.pricing?.discount || 0);
     const total = Number(order.pricing?.total || 0);
@@ -847,7 +942,7 @@ function AccountPage() {
           </p>
         )}
         <p className="text-sm text-slate-500">
-          Tổng tiền: <strong className="text-lg font-black text-[#ff9aa5]">{currencyFormatter.format(total)}</strong>
+          Thành tiền: <strong className="text-lg font-black text-[#ff9aa5]">{currencyFormatter.format(total)}</strong>
         </p>
       </div>
     );
@@ -903,7 +998,7 @@ function AccountPage() {
                 <dd className="mt-1 text-slate-200">{formatDateTime(order.createdAt)}</dd>
               </div>
               <div>
-                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Thanh toán</dt>
+                <dt className="text-xs font-black uppercase tracking-[0.08em] text-slate-500">Tổng tiền</dt>
                 <dd className="mt-1">{renderOrderPaymentInfo(order)}</dd>
               </div>
             </div>
@@ -1079,7 +1174,7 @@ function AccountPage() {
                         <th className="break-words px-4 py-4 font-black">Ghế đã đặt</th>
                         <th className="break-words px-4 py-4 font-black">Ngày đặt</th>
                         <th className="break-words px-4 py-4 font-black">Dịch vụ</th>
-                        <th className="break-words px-4 py-4 font-black">Thanh toán</th>
+                        <th className="break-words px-4 py-4 font-black">Tổng tiền</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/10">
@@ -1341,6 +1436,7 @@ function AccountPage() {
 
       <div className="mt-5">{renderActiveTab()}</div>
       {renderOrderQrModal()}
+      {renderOrderServicesModal()}
     </main>
   );
 }
