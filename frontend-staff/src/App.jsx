@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const menu = [
+  ["scanner", "Quét vé", "⌗"],
   ["counter", "Bán vé tại quầy", "▣"],
   ["rooms", "Quản lý phòng và ghế", "▤"],
   ["shift", "Báo cáo ca làm việc", "▥"],
   ["history", "Lịch sử giao dịch", "◷"],
 ];
 const titles = {
+  scanner: ["Quét vé", "Quét và check-in vé", "Dùng camera, ảnh QR hoặc mã vé để kiểm tra và đón khách vào rạp."],
   counter: ["Bán vé tại quầy", "Bán vé trực tiếp", "Chọn suất chiếu, ghế còn trống và hoàn tất thanh toán tiền mặt."],
   rooms: ["Quản lý phòng và ghế", "Sơ đồ phòng chiếu", "Kiểm tra tình trạng phòng và cập nhật trạng thái ghế."],
   shift: ["Báo cáo ca làm việc", "Tổng kết ca làm việc", "Xem doanh thu, số vé bán và các giao dịch trong ca của bạn."],
@@ -30,13 +32,18 @@ const consumeStaffTokenFromHash = () => {
 };
 
 async function api(path, options = {}) {
+  const { returnBody = false, ...requestOptions } = options;
   const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...headers(), ...options.headers },
+    ...requestOptions,
+    headers: { "Content-Type": "application/json", ...headers(), ...requestOptions.headers },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.success) throw new Error(body.message || "Không thể kết nối máy chủ.");
-  return body.data;
+  if (!response.ok || !body.success) {
+    const error = new Error(body.message || "Không thể kết nối máy chủ.");
+    error.data = body.data || null;
+    throw error;
+  }
+  return returnBody ? body : body.data;
 }
 
 export default function App() {
@@ -61,11 +68,131 @@ export default function App() {
         <header className="header"><div className="header-left"><button className="header-toggle desktop-toggle" onClick={() => setCollapsed(!collapsed)}>☰</button><button className="header-toggle mobile-toggle" onClick={() => setMobile(true)}>☰</button><div className="breadcrumb"><span>Nhân viên</span><b>/</b><strong>{crumb}</strong></div></div><div className="header-right"><label className="header-search"><span>⌕</span><input placeholder="Tìm kiếm..." /></label><button className="header-icon">♢<i /></button><div className="header-user"><div>N</div><span><strong>Nhân viên</strong><small>Quầy vé</small></span></div></div></header>
         <main className="staff-content">
           <section className="page-heading"><span>{crumb}</span><h1>{title}</h1><p>{description}</p></section>
-          {active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
+          {active === "scanner" ? <TicketScanner /> : active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
         </main>
       </div>
     </div>
   );
+}
+
+const STAFF_SCANNER_ID = "staff-ticket-qr-reader";
+
+function TicketScanner() {
+  const scannerRef = useRef(null);
+  const processingRef = useRef(false);
+  const fileInputRef = useRef(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc nhập mã vé.");
+  const [result, setResult] = useState(null);
+  const [currentQrToken, setCurrentQrToken] = useState("");
+  const [qrText, setQrText] = useState("");
+  const [ticketCode, setTicketCode] = useState("");
+  const ticket = result?.data || null;
+
+  const stopCamera = async () => {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    try { if (scanner.isScanning) await scanner.stop(); await scanner.clear(); } catch { /* Camera may already be closed. */ }
+    scannerRef.current = null;
+    setCameraActive(false);
+  };
+
+  useEffect(() => () => {
+    const scanner = scannerRef.current;
+    if (scanner?.isScanning) scanner.stop().then(() => scanner.clear()).catch(() => {});
+    else scanner?.clear().catch(() => {});
+    scannerRef.current = null;
+  }, []);
+
+  const verifyQr = async (value) => {
+    const token = String(value || "").trim();
+    if (!token || processingRef.current) return;
+    processingRef.current = true; setProcessing(true); setResult(null); setCurrentQrToken(token); setMessage("Đang xác minh vé...");
+    await stopCamera();
+    try {
+      const response = await api("/staff/pos/tickets/verify", { method: "POST", body: JSON.stringify({ qrToken: token }), returnBody: true });
+      setResult(response); setMessage(response.message);
+    } catch (err) {
+      setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message);
+    } finally { processingRef.current = false; setProcessing(false); }
+  };
+
+  const startCamera = async () => {
+    if (processing || cameraActive) return;
+    setResult(null); setMessage("Đang yêu cầu quyền truy cập camera...");
+    try {
+      await stopCamera();
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras.length) throw new Error("Không tìm thấy camera trên thiết bị.");
+      const preferred = cameras.find((camera) => /back|rear|environment|sau/i.test(camera.label || "")) || cameras[0];
+      const scanner = new Html5Qrcode(STAFF_SCANNER_ID, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+      scannerRef.current = scanner;
+      await scanner.start(preferred.id, { fps: 12, qrbox: (width, height) => { const size = Math.max(120, Math.min(Math.floor(Math.min(width, height) * .75), 320)); return { width: size, height: size }; } }, (decodedText) => verifyQr(decodedText), () => {});
+      setCameraActive(true); setMessage("Đưa mã QR vé vào giữa khung hình.");
+    } catch (err) { await stopCamera(); setMessage(err.message || "Không thể mở camera. Hãy kiểm tra quyền camera của trình duyệt."); }
+  };
+
+  const scanFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || processingRef.current) return;
+    await stopCamera(); setMessage("Đang đọc ảnh QR...");
+    const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+    const scanner = new Html5Qrcode("staff-ticket-file-reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+    try { const decodedText = await scanner.scanFile(file, true); await scanner.clear(); await verifyQr(decodedText); }
+    catch (err) { await scanner.clear().catch(() => {}); setResult(null); setMessage(err.message ? "Không đọc được mã QR trong ảnh đã chọn." : "Không thể đọc ảnh QR."); }
+  };
+
+  const lookupTicket = async (event) => {
+    event.preventDefault();
+    const code = ticketCode.trim().toUpperCase();
+    if (!code || processingRef.current) return;
+    processingRef.current = true; setProcessing(true); setResult(null); setMessage("Đang tra cứu mã vé...");
+    try {
+      const response = await api("/staff/pos/tickets/lookup", { method: "POST", body: JSON.stringify({ ticketCode: code }), returnBody: true });
+      setResult(response); setCurrentQrToken(response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
+    } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setCurrentQrToken(""); setMessage(err.message); }
+    finally { processingRef.current = false; setProcessing(false); }
+  };
+
+  const checkIn = async () => {
+    if (!currentQrToken || checkingIn) return;
+    setCheckingIn(true);
+    try {
+      const response = await api("/staff/pos/tickets/check-in", { method: "POST", body: JSON.stringify({ qrToken: currentQrToken }), returnBody: true });
+      setResult(response); setMessage(response.message);
+    } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message); }
+    finally { setCheckingIn(false); }
+  };
+
+  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setQrText(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+
+  return <div className="staff-scanner"><section className="scanner-panel"><div className="scanner-heading"><div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div><span>⌗</span></div><div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} /><div id="staff-ticket-file-reader" className="scanner-file-reader" /><div className="scanner-controls"><button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button><button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button><input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden /></div><form className="scanner-token-form" onSubmit={(event) => { event.preventDefault(); verifyQr(qrText); }}><label htmlFor="staff-qr-token">Hoặc nhập nội dung mã QR</label><div><input id="staff-qr-token" value={qrText} onChange={(event) => setQrText(event.target.value)} placeholder="AURA_TICKET:..." /><button disabled={!qrText.trim() || processing}>Kiểm tra</button></div></form><form className="scanner-token-form" onSubmit={lookupTicket}><label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label><div><input id="staff-ticket-code" value={ticketCode} onChange={(event) => setTicketCode(event.target.value.toUpperCase())} placeholder="Nhập mã vé" /><button disabled={!ticketCode.trim() || processing}>Tra cứu</button></div></form><p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang xử lý..." : message}</p></section><section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}><div className="scanner-heading"><div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div><span>🎟</span></div>{ticket ? <><div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div><div className="scan-ticket-grid"><Info label="Phim" value={ticket.movie?.title} /><Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} /><Info label="Phòng" value={ticket.room?.name} /><Info label="Ghế" value={ticket.seat?.label || ticket.seatLabel} /><Info label="Loại ghế" value={ticket.seat?.type} /><Info label="Trạng thái" value={ticket.status} /></div><button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button><button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button></> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}</section></div>;
+}
+
+function Info({ label, value }) { return <div><span>{label}</span><strong>{value || "—"}</strong></div>; }
+
+function ShiftReport() {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const today = getVietnamDateValue();
+
+  useEffect(() => {
+    let live = true;
+    api(`/staff/pos/shift-report?date=${encodeURIComponent(today)}`)
+      .then((data) => { if (live) { setReport(data); setError(""); } })
+      .catch((err) => live && setError(err.message))
+      .finally(() => live && setLoading(false));
+    return () => { live = false; };
+  }, [today]);
+
+  const cashTotal = Number(report?.cash_total || 0);
+  const ticketCount = Number(report?.pos_ticket_count || 0);
+  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền mặt thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong className="empty-value">—</strong><small>Chưa cập nhật dữ liệu đối soát vé online.</small></article></div><div className="shift-handover"><h2>Hướng dẫn bàn giao ca</h2><ol><li>Kiểm tra lại số tiền trong két sắt.</li><li>Đảm bảo <strong>Tiền trong két = Tiền đầu ca + Tiền mặt thu tại quầy ({money.format(cashTotal)})</strong>.</li><li>In báo cáo hoặc chụp màn hình này gửi cho Quản lý trước khi ra về.</li></ol></div></section>;
 }
 
 function RoomSeatManagement() {
@@ -75,7 +202,7 @@ function RoomSeatManagement() {
   const [showtimeSeats, setShowtimeSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [seatLoading, setSeatLoading] = useState(false);
-  const [updatingId, setUpdatingId] = useState("");
+  const [updatingIds, setUpdatingIds] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -119,21 +246,32 @@ function RoomSeatManagement() {
 
   const updateStatus = async (showtimeSeat) => {
     const physicalSeat = showtimeSeat.seat_id;
+    const couplePair = getCoupleSeatPair(showtimeSeat, showtimeSeats, describeShowtimeSeat);
+    if (getSeatTypeTone(physicalSeat.seat_type_id) === "couple" && !couplePair) {
+      setError("Ghế đôi này chưa có đủ cặp liền kề để cập nhật.");
+      return;
+    }
+    const seatsToUpdate = couplePair || [showtimeSeat];
     const nextStatus = physicalSeat.operational_status === "maintenance" || showtimeSeat.status === "maintenance" ? "active" : "maintenance";
-    setUpdatingId(physicalSeat._id); setError(""); setNotice("");
+    setUpdatingIds(seatsToUpdate.map((item) => String(item.seat_id._id))); setError(""); setNotice("");
     try {
-      const result = await api(`/staff/pos/rooms/${room._id}/seats/${physicalSeat._id}/status`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) });
-      const refreshedSeats = await api(`/showtime-seats?showtime_id=${showtime.id}`);
+      const results = await Promise.all(seatsToUpdate.map((item) => api(`/staff/pos/rooms/${room._id}/seats/${item.seat_id._id}/status`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) })));
+      const [roomDetail, refreshedSeats] = await Promise.all([
+        api(`/staff/pos/rooms/${room._id}/seats`),
+        api(`/showtime-seats?showtime_id=${showtime.id}`),
+      ]);
       setShowtimeSeats(refreshedSeats);
-      setRoom((current) => ({ ...current, seats: current.seats.map((item) => item._id === physicalSeat._id ? result.seat : item) }));
+      setRoom(roomDetail);
       setRooms((current) => current.map((item) => {
         if (item._id !== room._id) return item;
-        const delta = nextStatus === "maintenance" ? 1 : -1;
-        return { ...item, seat_summary: { ...item.seat_summary, maintenance: item.seat_summary.maintenance + delta, active: item.seat_summary.active - delta } };
+        const maintenance = roomDetail.seats.filter((seat) => seat.operational_status === "maintenance").length;
+        return { ...item, seat_summary: { total: roomDetail.seats.length, maintenance, active: roomDetail.seats.length - maintenance } };
       }));
-      setNotice(`${result.seat.seat_code}: ${nextStatus === "maintenance" ? "đang bảo trì" : "đã sẵn sàng"}. Đã đồng bộ ${result.synced_showtime_seats} ghế theo suất chiếu.`);
+      const seatCodes = results.map((result) => result.seat.seat_code).join(" & ");
+      const syncedCount = results.reduce((sum, result) => sum + result.synced_showtime_seats, 0);
+      setNotice(`${seatCodes}: ${nextStatus === "maintenance" ? "đang bảo trì" : "đã sẵn sàng"}. Đã đồng bộ ${syncedCount} ghế theo suất chiếu.`);
     } catch (err) { setError(err.message); }
-    finally { setUpdatingId(""); }
+    finally { setUpdatingIds([]); }
   };
 
   const summary = useMemo(() => {
@@ -149,7 +287,7 @@ function RoomSeatManagement() {
         {loading ? <p className="empty-note">Đang tải phòng...</p> : rooms.map((item) => { const upcomingShowtimes = (item.today_showtimes || []).filter((itemShowtime) => itemShowtime.status === "scheduled" && new Date(itemShowtime.start_time).getTime() > currentTime); return <div className={`room-choice ${room?._id === item._id ? "selected" : ""}`} key={item._id}><div className="room-choice-title"><strong>{item.name}</strong><em>{item.seat_summary?.maintenance || 0} bảo trì</em></div><div className="room-showtimes">{upcomingShowtimes.length ? upcomingShowtimes.map((itemShowtime) => <button className={showtime?.id === itemShowtime.id ? "active" : ""} key={itemShowtime.id} onClick={() => chooseShowtime(item, itemShowtime)}><b>{showtimeTime(itemShowtime.start_time)}</b><span>{itemShowtime.movie.title}</span></button>) : <small>Không còn suất chiếu sắp tới trong ngày</small>}</div></div>; })}
       </aside>
       <section className="room-seat-panel">
-        {seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : !room || !selectedShowtimeIsUpcoming ? <div className="room-empty"><span>▤</span><h2>Chọn một suất chiếu sắp tới</h2><p>Các suất đã bắt đầu chiếu sẽ tự động được ẩn.</p></div> : <><div className="room-detail-heading"><div><span>{showtime.movie.title} · {showtimeTime(showtime.start_time)}</span><h2>{room.name}</h2></div><div className="room-stats"><b>{summary.total}<small>Tổng ghế</small></b><b className="maintenance-count">{summary.maintenance}<small>Bảo trì</small></b></div></div><div className="maintenance-help">Màu ghế thể hiện loại <strong>Thường / VIP / Đôi</strong>. Viền vàng là ghế bảo trì; ghế xám là ghế đã bán hoặc đang giữ.</div><MaintenanceSeatMap seats={showtimeSeats} updatingId={updatingId} updateStatus={updateStatus} /></>}
+        {seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : !room || !selectedShowtimeIsUpcoming ? <div className="room-empty"><span>▤</span><h2>Chọn một suất chiếu sắp tới</h2><p>Các suất đã bắt đầu chiếu sẽ tự động được ẩn.</p></div> : <><div className="room-detail-heading"><div><span>{showtime.movie.title} · {showtimeTime(showtime.start_time)}</span><h2>{room.name}</h2></div><div className="room-stats"><b>{summary.total}<small>Tổng ghế</small></b><b className="maintenance-count">{summary.maintenance}<small>Bảo trì</small></b></div></div><div className="maintenance-help">Màu ghế thể hiện loại <strong>Thường / VIP / Đôi</strong>. Bấm một ghế đôi sẽ cập nhật cả cặp. Viền vàng là ghế bảo trì; ghế xám là ghế đã bán hoặc đang giữ.</div><MaintenanceSeatMap seats={showtimeSeats} updatingIds={updatingIds} updateStatus={updateStatus} /></>}
         {notice && <div className="room-feedback success">{notice}</div>}
         {error && <div className="room-feedback error">{error}</div>}
       </section>
@@ -157,34 +295,68 @@ function RoomSeatManagement() {
   );
 }
 
-function MaintenanceSeatMap({ seats, updatingId, updateStatus }) {
+function MaintenanceSeatMap({ seats, updatingIds, updateStatus }) {
   const rows = [...new Set(seats.map((item) => item.seat_id?.seat_row))].sort();
-  return <div className="maintenance-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="maintenance" />Bảo trì</span><span><i className="taken" />Đã bán / đang giữ</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((item) => item.seat_id?.seat_row === row).sort((a, b) => a.seat_id.seat_number - b.seat_id.seat_number).map((item, index, rowSeats) => { const seat = item.seat_id; const tone = getSeatTypeTone(seat.seat_type_id); const nextTone = getSeatTypeTone(rowSeats[index + 1]?.seat_id?.seat_type_id); let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && getSeatTypeTone(rowSeats[cursor]?.seat_id?.seat_type_id) === "couple"; cursor -= 1) previousCouples += 1; const pairClass = tone === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : nextTone === "couple" ? "couple-right" : "") : ""; const maintenance = item.status === "maintenance" || seat.operational_status === "maintenance"; const unavailable = !["available", "maintenance"].includes(item.status); return <button key={item._id} disabled={updatingId === seat._id} onClick={() => updateStatus(item)} className={`seat maintenance-seat ${tone} ${pairClass} ${maintenance ? "is-maintenance" : ""} ${unavailable ? "is-taken" : ""}`} title={`${seat.seat_code} · ${seat.seat_type_id?.name || "Ghế thường"} · ${maintenance ? "Bảo trì" : item.status}`}><span>{seat.seat_number}</span>{updatingId === seat._id && <i />}</button>; })}</div><b>{row}</b></div>)}</div>;
+  return <div className="maintenance-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="maintenance" />Bảo trì</span><span><i className="taken" />Đã bán / đang giữ</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((item) => item.seat_id?.seat_row === row).sort((a, b) => a.seat_id.seat_number - b.seat_id.seat_number).map((item, index, rowSeats) => { const seat = item.seat_id; const tone = getSeatTypeTone(seat.seat_type_id); const nextTone = getSeatTypeTone(rowSeats[index + 1]?.seat_id?.seat_type_id); let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && getSeatTypeTone(rowSeats[cursor]?.seat_id?.seat_type_id) === "couple"; cursor -= 1) previousCouples += 1; const pairClass = tone === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : nextTone === "couple" ? "couple-right" : "") : ""; const maintenance = item.status === "maintenance" || seat.operational_status === "maintenance"; const unavailable = !["available", "maintenance"].includes(item.status); const updating = updatingIds.includes(String(seat._id)); return <button key={item._id} disabled={updating} onClick={() => updateStatus(item)} className={`seat maintenance-seat ${tone} ${pairClass} ${maintenance ? "is-maintenance" : ""} ${unavailable ? "is-taken" : ""}`} title={`${seat.seat_code} · ${seat.seat_type_id?.name || "Ghế thường"} · ${maintenance ? "Bảo trì" : item.status}`}><span>{seat.seat_number}</span>{updating && <i />}</button>; })}</div><b>{row}</b></div>)}</div>;
 }
 
 function CounterSale() {
   const [showtimes, setShowtimes] = useState([]), [current, setCurrent] = useState(null), [seats, setSeats] = useState([]), [selected, setSelected] = useState([]), [loading, setLoading] = useState(true), [seatLoading, setSeatLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [sale, setSale] = useState(null);
+  const [combos, setCombos] = useState([]), [comboQuantities, setComboQuantities] = useState({}), [comboLoading, setComboLoading] = useState(true), [comboError, setComboError] = useState("");
   const [clock, setClock] = useState(() => Date.now());
   const [selectedDate, setSelectedDate] = useState(() => getVietnamDateValue());
+  const [selectedMovieId, setSelectedMovieId] = useState("");
   const dateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
   const effectiveDate = dateOptions.some((item) => item.value === selectedDate) ? selectedDate : dateOptions[0].value;
-  const visibleShowtimes = showtimes.filter((item) => item.status === "scheduled" && new Date(item.start_time).getTime() > clock);
+  const visibleShowtimes = useMemo(() => showtimes.filter((item) => item.status === "scheduled" && new Date(item.start_time).getTime() > clock), [showtimes, clock]);
+  const movies = useMemo(() => {
+    const groupedMovies = new Map();
+    visibleShowtimes.forEach((showtime) => {
+      const movieId = String(showtime.movie.id);
+      if (!groupedMovies.has(movieId)) groupedMovies.set(movieId, { ...showtime.movie, showtimes: [] });
+      groupedMovies.get(movieId).showtimes.push(showtime);
+    });
+    return [...groupedMovies.values()];
+  }, [visibleShowtimes]);
+  const selectedMovie = movies.find((movie) => String(movie.id) === selectedMovieId) || null;
   const activeCurrent = current && new Date(current.start_time).getTime() > clock ? current : null;
-  const chosen = seats.filter((seat) => selected.includes(seat.id)); const total = chosen.reduce((sum, seat) => sum + seat.price, 0);
+  const chosen = seats.filter((seat) => selected.includes(seat.id));
+  const selectedCombos = combos.filter((item) => Number(comboQuantities[item._id] || 0) > 0).map((item) => ({ ...item, quantity: Number(comboQuantities[item._id]) }));
+  const seatTotal = calculateSelectedSeatTotal(chosen, seats);
+  const comboTotal = selectedCombos.reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0);
+  const total = seatTotal + comboTotal;
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(effectiveDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [effectiveDate, clock]);
-  const changeDate = (date) => { setSelectedDate(date); setCurrent(null); setSeats([]); setSelected([]); setSale(null); setError(""); setLoading(true); };
-  const choose = async (showtime) => { setCurrent(showtime); setSelected([]); setSeats([]); setSale(null); setError(""); setSeatLoading(true); try { const data = await api(`/showtime-seats?showtime_id=${showtime.id}`); setSeats(data.map(normalizeSeat)); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
-  const toggle = (seat) => seat.status === "available" && setSelected((list) => list.includes(seat.id) ? list.filter((id) => id !== seat.id) : [...list, seat.id]);
-  const pay = async () => { if (!current || !selected.length) return; setBusy(true); setError(""); try { const data = await api("/staff/pos/sales", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: selected, payment_method: "cash" }) }); setSale(data); setSeats((list) => list.map((seat) => selected.includes(seat.id) ? { ...seat, status: "booked" } : seat)); setSelected([]); } catch (err) { setError(err.message); choose(current); } finally { setBusy(false); } };
+  useEffect(() => { let live = true; api("/combos/public?limit=100").then((data) => { const list = Array.isArray(data) ? data : data?.data || []; if (live) { setCombos(list.filter((item) => item.status)); setComboError(""); } }).catch((err) => { if (live) { setCombos([]); setComboError(err.message); } }).finally(() => live && setComboLoading(false)); return () => { live = false; }; }, []);
+  const resetOrder = () => { setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
+  const changeDate = (date) => { setSelectedDate(date); setSelectedMovieId(""); resetOrder(); setError(""); setLoading(true); };
+  const chooseMovie = (movie) => { setSelectedMovieId(String(movie.id)); resetOrder(); setError(""); };
+  const choose = async (showtime) => { setCurrent(showtime); setSelected([]); setSeats([]); setComboQuantities({}); setSale(null); setError(""); setSeatLoading(true); try { const data = await api(`/showtime-seats?showtime_id=${showtime.id}`); setSeats(data.map(normalizeSeat)); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
+  const toggle = (seat) => {
+    const couplePair = getCoupleSeatPair(seat, seats, (item) => item);
+    if (seat.type === "couple" && !couplePair) { setError("Ghế đôi này chưa có đủ cặp liền kề để bán."); return; }
+    const seatsToToggle = couplePair || [seat];
+    const selectedIds = new Set(selected);
+    if (seatsToToggle.some((item) => selectedIds.has(item.id))) {
+      setSelected(selected.filter((id) => !seatsToToggle.some((item) => item.id === id)));
+      setError("");
+      return;
+    }
+    if (seatsToToggle.some((item) => item.status !== "available")) { setError("Cặp ghế đôi này đã có ghế không còn trống."); return; }
+    setSelected([...selected, ...seatsToToggle.map((item) => item.id)]);
+    setError("");
+  };
+  const updateComboQuantity = (combo, nextQuantity) => { const quantity = Math.min(Math.max(Number(nextQuantity) || 0, 0), Number(combo.stock || 0)); setComboQuantities((current) => { const next = { ...current }; if (quantity) next[combo._id] = quantity; else delete next[combo._id]; return next; }); };
+  const pay = async () => { if (!current || !selected.length) return; setBusy(true); setError(""); try { const data = await api("/staff/pos/sales", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: selected, combos: selectedCombos.map((item) => ({ combo_id: item._id, quantity: item.quantity })), payment_method: "cash" }) }); setSale(data); setSeats((list) => list.map((seat) => selected.includes(seat.id) ? { ...seat, status: "booked" } : seat)); setCombos((list) => list.map((combo) => ({ ...combo, stock: Math.max(Number(combo.stock || 0) - Number(comboQuantities[combo._id] || 0), 0) }))); setSelected([]); setComboQuantities({}); } catch (err) { setError(err.message); choose(current); } finally { setBusy(false); } };
   const print = async () => { try { await api(`/staff/pos/sales/${sale.booking_id}/print`, { method: "POST" }); window.print(); } catch (err) { setError(err.message); } };
-  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn phim và suất chiếu" text={loading ? "Đang tải suất chiếu..." : `${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <div className="showtime-picker">{visibleShowtimes.length ? visibleShowtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id}><span className="poster poster-one">{showtime.movie.title.slice(0, 2).toUpperCase()}</span><span><strong>{showtime.movie.title}</strong><small>{dateTime(showtime.start_time)}</small><small>{showtime.room.cinema} · {showtime.room.name}</small></span><em>{showtime.available_seats} ghế trống</em></button>) : <p className="empty-note">Không còn suất chiếu sắp tới trong ngày này.</p>}</div>}{activeCurrent && <><Step number="2" title="Chọn ghế" text="Chỉ ghế màu tím còn trống mới có thể bán." />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <SeatMap seats={seats} selected={selected} toggle={toggle} />}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn một suất chiếu sắp tới để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span><button onClick={print}>In vé cứng</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
+  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" text="Chọn ghế còn trống để bán vé." />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <><SeatMap seats={seats} selected={selected} toggle={toggle} /><Step number="5" title="Chọn combo bắp nước" text="Có thể bỏ qua nếu khách hàng chỉ mua vé." /><ComboPicker combos={combos} quantities={comboQuantities} loading={comboLoading} error={comboError} updateQuantity={updateComboQuantity} /></>}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div>{selectedCombos.length > 0 && <div className="order-combos"><span>Combo bắp nước</span>{selectedCombos.map((item) => <div key={item._id}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.price || 0) * item.quantity)}</strong></div>)}</div>}<div className="order-breakdown"><span>Tiền vé <strong>{money.format(sale?.pricing?.ticket_subtotal ?? seatTotal)}</strong></span><span>Bắp nước <strong>{money.format(sale?.pricing?.service_subtotal ?? comboTotal)}</strong></span></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(sale?.total_price ?? total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span>{sale.combos?.length > 0 && <span>Combo: {sale.combos.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</span>}<button onClick={print}>In vé cứng</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
 }
 
 function Step({ number, title, text }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>; }
 function dateTime(value) { return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }); }
 function showtimeTime(value) { return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }); }
 function getVietnamDateValue(value = new Date()) { return new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }); }
+function formatReportDate(value) { const [year, month, day] = String(value || "").split("-"); return year && month && day ? `${day}/${month}/${year}` : "—"; }
 function getRollingDateOptions(clock) {
   const today = getVietnamDateValue(clock);
   const base = new Date(`${today}T00:00:00+07:00`);
@@ -201,5 +373,40 @@ function getRollingDateOptions(clock) {
   });
 }
 function getSeatTypeTone(seatType) { const name = String(seatType?.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase(); if (name.includes("vip")) return "vip"; if (name.includes("doi") || name.includes("couple")) return "couple"; return "normal"; }
-function normalizeSeat(item) { const seat = item.seat_id || item.seat || {}; const label = String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).toUpperCase(); return { id: item._id || item.id, label, row: seat.seat_row || label.charAt(0) || "?", number: Number(seat.seat_number || label.slice(1) || 0), price: Number(item.price || 0), status: item.status }; }
-function SeatMap({ seats, selected, toggle }) { const rows = [...new Set(seats.map((seat) => seat.row))].sort(); return <div className="seat-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend"><span><i className="available" />Trống</span><span><i className="selected" />Đang chọn</span><span><i className="taken" />Đã bán / đang giữ</span><span><i className="maintenance" />Bảo trì</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((seat) => seat.row === row).sort((a, b) => a.number - b.number).map((seat) => <button key={seat.id} disabled={seat.status !== "available"} onClick={() => toggle(seat)} className={`seat ${seat.status} ${selected.includes(seat.id) ? "selected" : ""}`} title={`${seat.label} · ${seat.status === "maintenance" ? "Đang bảo trì" : money.format(seat.price)}`}>{seat.number || seat.label}</button>)}</div><b>{row}</b></div>)}</div>; }
+function describeShowtimeSeat(item) { const seat = item.seat_id || {}; return { id: String(item._id || item.id), row: seat.seat_row, number: Number(seat.seat_number), type: getSeatTypeTone(seat.seat_type_id) }; }
+function getCoupleSeatPair(targetSeat, allSeats, describeSeat) {
+  const target = describeSeat(targetSeat);
+  if (target.type !== "couple") return [targetSeat];
+  const rowSeats = allSeats.filter((item) => describeSeat(item).row === target.row).sort((first, second) => describeSeat(first).number - describeSeat(second).number);
+  const seatIndex = rowSeats.findIndex((item) => describeSeat(item).id === target.id);
+  if (seatIndex < 0) return null;
+  let previousCouples = 0;
+  for (let index = seatIndex - 1; index >= 0 && describeSeat(rowSeats[index]).type === "couple"; index -= 1) previousCouples += 1;
+  const pairIndex = previousCouples % 2 === 1 ? seatIndex - 1 : seatIndex + 1;
+  const pairSeat = rowSeats[pairIndex];
+  if (!pairSeat || describeSeat(pairSeat).type !== "couple" || Math.abs(describeSeat(pairSeat).number - target.number) !== 1) return null;
+  return [targetSeat, pairSeat].sort((first, second) => describeSeat(first).number - describeSeat(second).number);
+}
+function calculateSelectedSeatTotal(selectedSeats, allSeats) {
+  const selectedIds = new Set(selectedSeats.map((seat) => seat.id));
+  const countedIds = new Set();
+  return selectedSeats.reduce((total, seat) => {
+    if (countedIds.has(seat.id)) return total;
+    const pair = getCoupleSeatPair(seat, allSeats, (item) => item);
+    if (seat.type === "couple" && pair?.every((item) => selectedIds.has(item.id))) {
+      pair.forEach((item) => countedIds.add(item.id));
+      return total + pair[0].price;
+    }
+    countedIds.add(seat.id);
+    return total + seat.price;
+  }, 0);
+}
+function normalizeSeat(item) { const seat = item.seat_id || item.seat || {}; const seatType = seat.seat_type_id || seat.seat_type || {}; const label = String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).toUpperCase(); return { id: item._id || item.id, label, row: seat.seat_row || label.charAt(0) || "?", number: Number(seat.seat_number || label.slice(1) || 0), price: Number(item.price || 0), status: item.status, type: getSeatTypeTone(seatType), typeName: seatType.name || "Ghế thường" }; }
+function SeatMap({ seats, selected, toggle }) { const rows = [...new Set(seats.map((seat) => seat.row))].sort(); return <div className="seat-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend sale-seat-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="selected" />Đang chọn</span><span><i className="taken" />Đã bán / đang giữ</span><span><i className="maintenance" />Bảo trì</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((seat) => seat.row === row).sort((a, b) => a.number - b.number).map((seat, index, rowSeats) => { let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && rowSeats[cursor].type === "couple"; cursor -= 1) previousCouples += 1; const pairClass = seat.type === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : rowSeats[index + 1]?.type === "couple" ? "couple-right" : "") : ""; return <button key={seat.id} disabled={seat.status !== "available"} onClick={() => toggle(seat)} className={`seat sale-seat ${seat.type} ${pairClass} ${seat.status} ${selected.includes(seat.id) ? "selected" : ""}`} title={`${seat.label} · ${seat.typeName} · ${seat.status === "maintenance" ? "Đang bảo trì" : money.format(seat.price)}`}>{seat.number || seat.label}</button>; })}</div><b>{row}</b></div>)}</div>; }
+function ComboPicker({ combos, quantities, loading, error, updateQuantity }) {
+  if (loading) return <p className="empty-note combo-message">Đang tải combo bắp nước...</p>;
+  if (error) return <p className="combo-message combo-error">{error}</p>;
+  if (!combos.length) return <p className="empty-note combo-message">Hiện chưa có combo bắp nước đang bán.</p>;
+  return <div className="combo-picker">{combos.map((combo) => { const quantity = Number(quantities[combo._id] || 0); const stock = Number(combo.stock || 0); return <article className={`combo-card ${stock <= 0 ? "sold-out" : ""}`} key={combo._id}><div className="combo-image">{combo.image ? <img src={resolveImageUrl(combo.image)} alt={combo.name} loading="lazy" /> : <span>BN</span>}</div><div className="combo-info"><div><strong>{combo.name}</strong><small>{money.format(Number(combo.price || 0))}</small></div>{combo.description && <p>{combo.description}</p>}<div className="combo-actions"><em>{stock > 0 ? `Còn ${stock}` : "Hết hàng"}</em><span><button type="button" disabled={quantity <= 0} onClick={() => updateQuantity(combo, quantity - 1)} aria-label={`Giảm ${combo.name}`}>−</button><b>{quantity}</b><button type="button" disabled={stock <= 0 || quantity >= stock} onClick={() => updateQuantity(combo, quantity + 1)} aria-label={`Tăng ${combo.name}`}>+</button></span></div></div></article>; })}</div>;
+}
+function resolveImageUrl(image) { if (!image || /^https?:\/\//i.test(image)) return image || ""; const origin = API.replace(/\/api\/?$/, ""); return `${origin}${image.startsWith("/") ? image : `/${image}`}`; }

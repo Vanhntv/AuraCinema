@@ -1,11 +1,23 @@
 import express from "express";
-import { createCounterSale, getCounterShowtimes, printCounterSale } from "../controllers/staffPosControllers.js";
+import { createCounterSale, getCounterShowtimes, getShiftReport, printCounterSale } from "../controllers/staffPosControllers.js";
 import { getStaffRooms, getStaffRoomSeats, updateStaffSeatStatus } from "../controllers/staffRoomsControllers.js";
+import { checkInAdminTicketQr, lookupAdminTicketCode, verifyAdminTicketQr } from "../controllers/adminTicketControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
+import { createRateLimitMiddleware } from "../middleware/rateLimitMiddleware.js";
 
 const router = express.Router();
+const ticketScanRateLimit = createRateLimitMiddleware({
+  windowMs: process.env.TICKET_QR_RATE_LIMIT_WINDOW_MS,
+  maxRequests: process.env.TICKET_QR_RATE_LIMIT_MAX,
+  keyPrefix: "staff-ticket-qr",
+  message: "Bạn quét vé quá nhanh. Vui lòng thử lại sau.",
+});
 router.use(authMiddleware, authorizeRoles("staff", "admin"));
 router.get("/showtimes", getCounterShowtimes);
+router.get("/shift-report", getShiftReport);
+router.post("/tickets/lookup", ticketScanRateLimit, lookupAdminTicketCode);
+router.post("/tickets/verify", ticketScanRateLimit, verifyAdminTicketQr);
+router.post("/tickets/check-in", ticketScanRateLimit, checkInAdminTicketQr);
 router.get("/rooms", getStaffRooms);
 router.get("/rooms/:roomId/seats", getStaffRoomSeats);
 router.patch("/rooms/:roomId/seats/:seatId/status", updateStaffSeatStatus);
