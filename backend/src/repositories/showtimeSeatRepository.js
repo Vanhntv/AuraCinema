@@ -23,7 +23,7 @@ const defaultPopulate = [
   {
     path: "seat_id",
     select:
-      "room_id seat_type_id seat_row seat_number status created_at updated_at",
+      "room_id seat_type_id seat_row seat_number seat_code status operational_status created_at updated_at",
     populate: [
       {
         path: "room_id",

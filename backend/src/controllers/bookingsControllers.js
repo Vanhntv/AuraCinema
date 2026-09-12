@@ -19,6 +19,7 @@ import {
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { creditRewardPointsForBooking } from "../services/rewardPointService.js";
 import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 import { createPaymentExpiry } from "../services/seatHoldPolicy.js";
 import {
   assertBookingPayable,
@@ -491,6 +492,10 @@ export const createBooking = async (req, res) => {
 
       if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
         throw Object.assign(new Error("Ghe hong khong the dat ve"), { statusCode: 409 });
+      }
+
+      if (seats.some((seat) => isSeatInMaintenance(seat.seat_id))) {
+        throw Object.assign(new Error("Ghế đang bảo trì không thể đặt vé"), { statusCode: 409 });
       }
 
       const reservedCombos = await reserveComboStock({ combos, session });

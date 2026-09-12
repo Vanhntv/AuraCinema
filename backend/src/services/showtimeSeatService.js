@@ -4,6 +4,7 @@ import SeatType from "../models/SeatType.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 import {
   bulkUpsertShowtimeSeats,
   createManyShowtimeSeats,
@@ -47,7 +48,11 @@ const buildShowtimeSeatFilter = (query = {}) => {
   return { filter, q: q?.trim() ?? "" };
 };
 
-const isSeatSellable = (seat) => !isBrokenSeatType(seat?.seat_id?.seat_type_id);
+const isSeatSellable = (seat) =>
+  !isBrokenSeatType(seat?.seat_id?.seat_type_id) &&
+  !isSeatInMaintenance(seat?.seat_id);
+
+const isSupportedSeat = (seat) => !isBrokenSeatType(seat?.seat_id?.seat_type_id);
 
 const resolveDefaultPrice = async ({ showtime, seat, price }) => {
   if (!isMissing(price)) {
@@ -134,7 +139,19 @@ export const listShowtimeSeats = async (query = {}) => {
     sort: { created_at: -1 },
   });
 
-  showtimeSeats = showtimeSeats.filter((item) => isSeatSellable(item));
+  showtimeSeats = showtimeSeats.filter((item) => isSupportedSeat(item));
+
+  showtimeSeats.forEach((item) => {
+    if (
+      isSeatInMaintenance(item.seat_id) &&
+      ["available", "held", "maintenance"].includes(item.status)
+    ) {
+      item.status = "maintenance";
+      item.held_by = null;
+      item.hold_id = null;
+      item.hold_expires_at = null;
+    }
+  });
 
   if (q) {
     const keyword = q.toLowerCase();
@@ -341,8 +358,8 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
     deleted_at: null,
   })
     .populate("seat_type_id", "name description price_multiplier")
-    .select("_id room_id seat_type_id");
-  const sellableSeats = seats.filter(isSeatSellable);
+    .select("_id room_id seat_type_id status operational_status");
+  const sellableSeats = seats.filter(isSupportedSeat);
 
   await ShowtimeSeat.updateMany(
     {
@@ -380,7 +397,7 @@ export const generateShowtimeSeatsForShowtimeService = async (showtimeId) => {
             $setOnInsert: {
               showtime_id: showtime._id,
               seat_id: seat._id,
-              status: "available",
+              status: isSeatInMaintenance(seat) ? "maintenance" : "available",
             },
             $set: {
               price,

@@ -8,11 +8,24 @@ import Ticket from "../models/Ticket.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { issueBookingOrderQr } from "../services/bookingOrderService.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 
 const transactionUnsupported = (error) => /transaction numbers are only allowed|replica set member or mongos|only servers in a sharded cluster/i.test(String(error?.message || ""));
 const idOf = (value) => value?._id || value || null;
 const seatLabel = (seat = {}) => String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).trim().toUpperCase();
 const counterCode = () => `POS${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`.toUpperCase();
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const getVietnamDateRange = (date) => {
+  const match = DATE_PATTERN.exec(String(date || ""));
+  if (!match) return null;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return null;
+  const start = new Date(Date.UTC(year, month - 1, day, -7));
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+};
+const getVietnamDay = (date = new Date()) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 const runWithTransaction = async (work) => {
   const session = await mongoose.startSession();
   try {
@@ -28,10 +41,13 @@ const runWithTransaction = async (work) => {
 export const getCounterShowtimes = async (req, res) => {
   try {
     const now = new Date();
+    const selectedDate = String(req.query?.date || getVietnamDay(now));
+    const dateRange = getVietnamDateRange(selectedDate);
+    if (!dateRange) return res.status(400).json({ success: false, message: "Ngày chiếu không hợp lệ." });
     const showtimes = await Showtime.find({
       deleted_at: null,
-      status: { $in: ["scheduled", "now_showing"] },
-      end_time: { $gt: now },
+      status: "scheduled",
+      start_time: { $gte: new Date(Math.max(dateRange.start.getTime(), now.getTime() + 1)), $lt: dateRange.end },
     })
       .populate("movie_id", "title poster age_limit")
       .populate({ path: "room_id", select: "name status cinema_id", populate: { path: "cinema_id", select: "name address" } })
@@ -45,7 +61,8 @@ export const getCounterShowtimes = async (req, res) => {
     return res.json({ success: true, data: showtimes.filter((item) => item.movie_id && item.room_id?.status === "active").map((item) => ({
       id: item._id, movie: { id: item.movie_id._id, title: item.movie_id.title, poster: item.movie_id.poster || "" },
       room: { id: item.room_id._id, name: item.room_id.name, cinema: item.room_id.cinema_id?.name || "" },
-      start_time: item.start_time, end_time: item.end_time, available_seats: countByShowtime.get(String(item._id)) || 0,
+      start_time: item.start_time, end_time: item.end_time, status: item.status,
+      available_seats: countByShowtime.get(String(item._id)) || 0,
     })) });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
 };
@@ -66,9 +83,9 @@ export const createCounterSale = async (req, res) => {
       if (!showtime || !showtime.movie_id || !showtime.room_id) throw Object.assign(new Error("Suất chiếu không còn khả dụng."), { statusCode: 404 });
 
       const seats = await ShowtimeSeat.find({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null })
-        .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id", populate: { path: "seat_type_id", select: "name" } })
+        .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id status operational_status", populate: { path: "seat_type_id", select: "name" } })
         .session(session);
-      if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id))) throw Object.assign(new Error("Có ghế không hợp lệ trong đơn."), { statusCode: 409 });
+      if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id) || isSeatInMaintenance(item.seat_id))) throw Object.assign(new Error("Có ghế không hợp lệ hoặc đang bảo trì trong đơn."), { statusCode: 409 });
 
       const bookingId = new mongoose.Types.ObjectId();
       const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "available" }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
