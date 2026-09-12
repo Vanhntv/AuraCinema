@@ -12,7 +12,15 @@ import Toast from "../components/common/Toast";
 import VoucherDetailModal from "../components/vouchers/VoucherDetailModal";
 import VoucherModal from "../components/vouchers/VoucherModal";
 import VoucherTable from "../components/vouchers/VoucherTable";
-import { createVoucher, deleteVoucher, getVoucherById, getVouchers, getVoucherStats, toggleVoucherStatus, updateVoucher } from "../services/voucherService";
+import {
+  createVoucher,
+  deleteVoucher,
+  getVoucherById,
+  getVouchers,
+  getVoucherStats,
+  toggleVoucherStatus,
+  updateVoucher,
+} from "../services/voucherService";
 
 const PAGE_SIZE = 10;
 
@@ -100,12 +108,24 @@ const VouchersPage = () => {
         setTotalPages(response.pagination?.totalPages || 1);
         setTotalItems(response.pagination?.totalItems || 0);
       } catch (error) {
-        addToast("error", error.response?.data?.message || "Không thể tải danh sách mã giảm giá");
+        addToast(
+          "error",
+          error.response?.data?.message ||
+            "Không thể tải danh sách mã giảm giá",
+        );
       } finally {
         setLoading(false);
       }
     },
-    [addToast, discountTypeFilter, scopeFilter, searchQuery, sortBy, sortOrder, statusFilter],
+    [
+      addToast,
+      discountTypeFilter,
+      scopeFilter,
+      searchQuery,
+      sortBy,
+      sortOrder,
+      statusFilter,
+    ],
   );
 
   const fetchStats = useCallback(async () => {
@@ -114,7 +134,10 @@ const VouchersPage = () => {
       const response = await getVoucherStats();
       setStats(response.data || emptyStats);
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể tải thống kê mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể tải thống kê mã giảm giá",
+      );
     } finally {
       setStatsLoading(false);
     }
@@ -151,7 +174,10 @@ const VouchersPage = () => {
       const detailResponse = await getVoucherById(voucher._id);
       setDetailVoucher(detailResponse.data);
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể tải chi tiết mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể tải chi tiết mã giảm giá",
+      );
       setDetailVoucher(null);
     } finally {
       setDetailLoading(false);
@@ -164,7 +190,11 @@ const VouchersPage = () => {
       const response = await getVoucherById(voucher._id);
       setEditVoucher(response.data);
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể tải mã giảm giá để chỉnh sửa");
+      addToast(
+        "error",
+        error.response?.data?.message ||
+          "Không thể tải mã giảm giá để chỉnh sửa",
+      );
     } finally {
       setDetailLoading(false);
     }
@@ -174,12 +204,18 @@ const VouchersPage = () => {
     try {
       setSubmitting(true);
       const response = await createVoucher(payload);
-      addToast("success", response.message || `Đã tạo mã giảm giá "${payload.code}"`);
+      addToast(
+        "success",
+        response.message || `Đã tạo mã giảm giá "${payload.code}"`,
+      );
       setIsCreateModalOpen(false);
       fetchVouchers(1);
       fetchStats();
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể tạo mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể tạo mã giảm giá",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -191,12 +227,18 @@ const VouchersPage = () => {
     try {
       setSubmitting(true);
       const response = await updateVoucher(editVoucher._id, payload);
-      addToast("success", response.message || `Đã cập nhật mã giảm giá "${editVoucher.code}"`);
+      addToast(
+        "success",
+        response.message || `Đã cập nhật mã giảm giá "${editVoucher.code}"`,
+      );
       setEditVoucher(null);
       fetchVouchers(currentPage);
       fetchStats();
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể cập nhật mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể cập nhật mã giảm giá",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -210,13 +252,18 @@ const VouchersPage = () => {
       const response = await toggleVoucherStatus(statusTarget._id);
       addToast(
         "success",
-        response.message || `Đã ${statusTarget.status ? "tạm dừng" : "kích hoạt"} mã "${statusTarget.code}"`
+        response.message ||
+          `Đã ${statusTarget.status ? "tạm dừng" : "kích hoạt"} mã "${statusTarget.code}"`,
       );
       setStatusTarget(null);
       fetchVouchers(currentPage);
       fetchStats();
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message ||
+          "Không thể cập nhật trạng thái mã giảm giá",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -228,12 +275,18 @@ const VouchersPage = () => {
     try {
       setSubmitting(true);
       const response = await deleteVoucher(deleteTarget._id);
-      addToast("success", response.message || `Đã xóa mã "${deleteTarget.code}"`);
+      addToast(
+        "success",
+        response.message || `Đã xóa mã "${deleteTarget.code}"`,
+      );
       setDeleteTarget(null);
       fetchVouchers(currentPage);
       fetchStats();
     } catch (error) {
-      addToast("error", error.response?.data?.message || "Không thể xóa mã giảm giá");
+      addToast(
+        "error",
+        error.response?.data?.message || "Không thể xóa mã giảm giá",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -244,17 +297,25 @@ const VouchersPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Quản lý Mã giảm giá</h1>
-          <p>Theo dõi danh sách chương trình ưu đãi, trạng thái và lượt sử dụng.</p>
+          <p>
+            Theo dõi danh sách chương trình ưu đãi, trạng thái và lượt sử dụng.
+          </p>
         </div>
         <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setIsCreateModalOpen(true)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => setIsCreateModalOpen(true)}
+          >
             <HiOutlinePlus />
             Thêm mã
           </button>
-          <button className="btn btn-secondary" onClick={() => {
-            fetchVouchers(currentPage);
-            fetchStats();
-          }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              fetchVouchers(currentPage);
+              fetchStats();
+            }}
+          >
             <HiOutlineRefresh />
             Làm mới
           </button>
@@ -276,7 +337,9 @@ const VouchersPage = () => {
             <HiOutlineTicket />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : stats.active_voucher_count}</div>
+            <div className="stat-card-value">
+              {statsLoading ? "..." : stats.active_voucher_count}
+            </div>
             <div className="stat-card-label">Đang hoạt động</div>
           </div>
         </div>
@@ -285,7 +348,11 @@ const VouchersPage = () => {
             <HiOutlineTrendingUp />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : Number(stats.total_usage || 0).toLocaleString("vi-VN")}</div>
+            <div className="stat-card-value">
+              {statsLoading
+                ? "..."
+                : Number(stats.total_usage || 0).toLocaleString("vi-VN")}
+            </div>
             <div className="stat-card-label">Lượt sử dụng</div>
           </div>
         </div>
@@ -294,7 +361,11 @@ const VouchersPage = () => {
             <HiOutlineTag />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : formatCurrency(stats.total_discount_amount)}</div>
+            <div className="stat-card-value">
+              {statsLoading
+                ? "..."
+                : formatCurrency(stats.total_discount_amount)}
+            </div>
             <div className="stat-card-label">Tổng tiền đã giảm</div>
           </div>
         </div>
@@ -303,7 +374,11 @@ const VouchersPage = () => {
             <HiOutlineTrendingUp />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : formatCurrency(stats.revenue_from_voucher_orders)}</div>
+            <div className="stat-card-value">
+              {statsLoading
+                ? "..."
+                : formatCurrency(stats.revenue_from_voucher_orders)}
+            </div>
             <div className="stat-card-label">Doanh thu từ mã</div>
           </div>
         </div>
@@ -312,25 +387,33 @@ const VouchersPage = () => {
             <HiOutlineTicket />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : stats.most_used_voucher?.code || "-"}</div>
+            <div className="stat-card-value">
+              {statsLoading ? "..." : stats.most_used_voucher?.code || "-"}
+            </div>
             <div className="stat-card-label">Dùng nhiều nhất</div>
           </div>
         </div>
+
         <div className="stat-card">
           <div className="stat-card-icon orange">
             <HiOutlineRefresh />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : Number(stats.low_remaining?.length || 0)}</div>
+            <div className="stat-card-value">
+              {statsLoading ? "..." : Number(stats.low_remaining?.length || 0)}
+            </div>
             <div className="stat-card-label">Sắp hết lượt</div>
           </div>
         </div>
+
         <div className="stat-card">
           <div className="stat-card-icon blue">
             <HiOutlineTrendingUp />
           </div>
           <div>
-            <div className="stat-card-value">{statsLoading ? "..." : formatPercent(stats.usage_rate)}</div>
+            <div className="stat-card-value">
+              {statsLoading ? "..." : formatPercent(stats.usage_rate)}
+            </div>
             <div className="stat-card-label">Tỷ lệ sử dụng</div>
           </div>
         </div>
@@ -384,7 +467,9 @@ const VouchersPage = () => {
         <div className="table-toolbar">
           <div className="table-toolbar-left">
             <span className="table-toolbar-title">Doanh thu theo từng mã</span>
-            <span className="table-toolbar-count">{Number(stats.revenue_by_voucher?.length || 0)} mã có sử dụng</span>
+            <span className="table-toolbar-count">
+              {Number(stats.revenue_by_voucher?.length || 0)} mã có sử dụng
+            </span>
           </div>
         </div>
         <div className="table-wrapper vouchers-table-wrapper">
@@ -403,17 +488,25 @@ const VouchersPage = () => {
                 <tr>
                   <td colSpan="5">
                     <div className="table-empty">
-                      <div className="table-empty-text">Chưa có doanh thu từ mã giảm giá</div>
+                      <div className="table-empty-text">
+                        Chưa có doanh thu từ mã giảm giá
+                      </div>
                     </div>
                   </td>
                 </tr>
               ) : (
                 stats.revenue_by_voucher.map((item) => (
                   <tr key={item.voucher_id || item.code}>
-                    <td><span className="voucher-code">{item.code}</span></td>
+                    <td>
+                      <span className="voucher-code">{item.code}</span>
+                    </td>
                     <td>{item.name || item.code}</td>
-                    <td>{Number(item.usage_count || 0).toLocaleString("vi-VN")}</td>
-                    <td className="voucher-discount-value">-{formatCurrency(item.total_discount_amount)}</td>
+                    <td>
+                      {Number(item.usage_count || 0).toLocaleString("vi-VN")}
+                    </td>
+                    <td className="voucher-discount-value">
+                      -{formatCurrency(item.total_discount_amount)}
+                    </td>
                     <td>{formatCurrency(item.total_revenue)}</td>
                   </tr>
                 ))
@@ -441,9 +534,16 @@ const VouchersPage = () => {
           </div>
         </div>
 
-        <div className="table-toolbar" style={{ borderTop: "1px solid var(--color-border)" }}>
+        <div
+          className="table-toolbar"
+          style={{ borderTop: "1px solid var(--color-border)" }}
+        >
           <div className="table-toolbar-left voucher-filter-row">
-            <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "status")}>
+            <select
+              className="user-filter-select"
+              value={statusFilter}
+              onChange={handleFilterChange(setStatusFilter, "status")}
+            >
               <option value="">Tất cả trạng thái</option>
               <option value="active">Đang hoạt động</option>
               <option value="paused">Tạm dừng</option>
@@ -452,12 +552,23 @@ const VouchersPage = () => {
               <option value="out_of_usage">Đã hết lượt</option>
               <option value="cancelled">Đã hủy</option>
             </select>
-            <select className="user-filter-select" value={discountTypeFilter} onChange={handleFilterChange(setDiscountTypeFilter, "discount_type")}>
+            <select
+              className="user-filter-select"
+              value={discountTypeFilter}
+              onChange={handleFilterChange(
+                setDiscountTypeFilter,
+                "discount_type",
+              )}
+            >
               <option value="">Tất cả loại giảm</option>
               <option value="percent">Phần trăm</option>
               <option value="fixed">Số tiền cố định</option>
             </select>
-            <select className="user-filter-select" value={scopeFilter} onChange={handleFilterChange(setScopeFilter, "apply_scope")}>
+            <select
+              className="user-filter-select"
+              value={scopeFilter}
+              onChange={handleFilterChange(setScopeFilter, "apply_scope")}
+            >
               <option value="">Tất cả phạm vi</option>
               <option value="order">Toàn đơn</option>
               <option value="ticket">Vé xem phim</option>
@@ -465,7 +576,11 @@ const VouchersPage = () => {
               <option value="movie">Phim</option>
               <option value="member">Thành viên</option>
             </select>
-            <select className="user-filter-select voucher-sort-select" value={`${sortBy}:${sortOrder}`} onChange={handleSortChange}>
+            <select
+              className="user-filter-select voucher-sort-select"
+              value={`${sortBy}:${sortOrder}`}
+              onChange={handleSortChange}
+            >
               <option value="created_at:desc">Ngày tạo mới nhất</option>
               <option value="created_at:asc">Ngày tạo cũ nhất</option>
               <option value="end_date:asc">Sắp hết hạn</option>
@@ -490,13 +605,21 @@ const VouchersPage = () => {
               onDelete={setDeleteTarget}
             />
             <div className="pagination">
-              <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage - 1)} disabled={currentPage === 1}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => fetchVouchers(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
                 Trang trước
               </button>
               <span className="pagination-info">
                 Trang {currentPage} / {totalPages}
               </span>
-              <button className="btn btn-secondary" onClick={() => fetchVouchers(currentPage + 1)} disabled={currentPage === totalPages}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => fetchVouchers(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
                 Trang sau
               </button>
             </div>
@@ -529,7 +652,11 @@ const VouchersPage = () => {
 
       <ConfirmDialog
         isOpen={Boolean(statusTarget)}
-        title={statusTarget?.status ? "Tạm dừng mã giảm giá" : "Kích hoạt mã giảm giá"}
+        title={
+          statusTarget?.status
+            ? "Tạm dừng mã giảm giá"
+            : "Kích hoạt mã giảm giá"
+        }
         message={
           statusTarget?.status
             ? `Bạn có chắc chắn muốn tạm dừng mã "${statusTarget?.code}"? Khách hàng sẽ không thể dùng mã này cho đơn mới, các đơn đã áp dụng mã không bị ảnh hưởng.`
@@ -554,7 +681,9 @@ const VouchersPage = () => {
             : `Mã "${deleteTarget?.code}" chưa phát sinh giao dịch. Bạn có chắc chắn muốn xóa mã này khỏi hệ thống?`
         }
         confirmLabel={
-          Number(deleteTarget?.usage_count || 0) > 0 ? "Chuyển Đã hủy" : "Xóa mã"
+          Number(deleteTarget?.usage_count || 0) > 0
+            ? "Chuyển Đã hủy"
+            : "Xóa mã"
         }
         confirmClassName="btn-danger"
         onConfirm={handleConfirmDelete}
