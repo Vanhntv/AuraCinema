@@ -2483,6 +2483,138 @@
   color: #fde68a;
 }
 
+.showtime-date-field {
+  position: relative;
+  display: grid;
+  gap: 10px;
+}
+
+.showtime-date-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.showtime-date-trigger svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.showtime-date-picker {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.22);
+}
+
+.showtime-date-picker-header,
+.showtime-date-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.showtime-date-picker-header strong {
+  color: var(--color-text-primary);
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+.showtime-date-nav {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.showtime-date-nav:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-light);
+}
+
+.showtime-date-weekdays,
+.showtime-date-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.showtime-date-weekdays span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.showtime-date-day {
+  display: grid;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.showtime-date-day.outside-month {
+  color: var(--color-text-muted);
+  opacity: 0.55;
+}
+
+.showtime-date-day.in-range {
+  border-color: rgba(96, 165, 250, 0.18);
+  background: rgba(59, 130, 246, 0.14);
+  color: #bfdbfe;
+}
+
+.showtime-date-day.selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.showtime-date-day:disabled {
+  cursor: not-allowed;
+  opacity: 0.28;
+}
+
+.showtime-date-picker-footer {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.showtime-date-picker-footer button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-accent-light);
+  font: inherit;
+  cursor: pointer;
+}
+
+.showtime-date-picker-footer button:hover {
+  color: var(--color-text-primary);
+}
+
 .showtime-time-row {
   display: flex;
   align-items: center;
@@ -2539,6 +2671,37 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.showtime-auto-slot-groups {
+  display: grid;
+  gap: 12px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.showtime-auto-slot-group {
+  display: grid;
+  gap: 8px;
+}
+
+.showtime-auto-slot-date {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.showtime-auto-slot-date small {
+  color: var(--color-text-muted);
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .showtime-auto-empty {
@@ -7322,6 +7485,7 @@
 
 .admin-layout .showtime-form-panel,
 .admin-layout .showtime-pricing-panel,
+.admin-layout .showtime-date-picker,
 .admin-layout .showtime-auto-slots,
 .admin-layout .showtime-preview {
   border-color: #e4e7ec;
@@ -7339,11 +7503,24 @@
 
 .admin-layout .showtime-pricing-mode,
 .admin-layout .showtime-pricing-mode.custom,
+.admin-layout .showtime-date-nav,
 .admin-layout .showtime-auto-slot,
 .admin-layout .showtime-auto-slot.selected {
   border: 1px solid #cbd5e1;
   background: #ffffff;
   color: #1e293b;
+}
+
+.admin-layout .showtime-date-day.in-range {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.admin-layout .showtime-date-day.selected {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
 }
 
 .admin-layout .showtime-auto-slot-remove {
