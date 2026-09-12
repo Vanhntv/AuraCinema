@@ -1,4 +1,5 @@
 import express from "express";
+import loyaltyRoute from "./router/loyaltyRouters.js";
 import cors from "cors";
 import path from "path";
 import "dotenv/config";
@@ -90,6 +91,7 @@ app.use("/api/showtimes", showtimesRoute);
 app.use("/api/showtime-seats", showtimeSeatsRoute);
 app.use("/showtime-seats", showtimeSeatsRoute);
 app.use("/api/vouchers", vouchersRoute);
+app.use("/api/loyalty", loyaltyRoute);
 app.use("/api/bookings", bookingsRoute);
 app.use("/api/admin/bookings", adminBookingsRoute);
 app.use("/api/users", usersRoute);

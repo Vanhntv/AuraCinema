@@ -17,6 +17,10 @@ const rewardPointLogSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    event_key: { type: String },
+    user_voucher_id: { type: mongoose.Schema.Types.ObjectId, ref: "UserVoucher", default: null },
+    reconstructed: { type: Boolean, default: false },
+    occurred_at: { type: Date, default: Date.now },
     type: {
       type: String,
       enum: ["add", "subtract", "earn", "redeem"],
@@ -29,8 +33,7 @@ const rewardPointLogSchema = new mongoose.Schema(
     },
     balance_after: {
       type: Number,
-      required: true,
-      min: 0,
+      default: null,
     },
     reason: {
       type: String,
@@ -48,6 +51,7 @@ const rewardPointLogSchema = new mongoose.Schema(
 );
 
 rewardPointLogSchema.index({ user_id: 1, created_at: -1 });
+rewardPointLogSchema.index({ event_key: 1 }, { unique: true, sparse: true });
 rewardPointLogSchema.index(
   { booking_id: 1, type: 1 },
   { unique: true, partialFilterExpression: { booking_id: { $exists: true }, type: "earn" } },

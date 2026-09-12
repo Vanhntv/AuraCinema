@@ -1,5 +1,5 @@
 import AuditLog from "../models/AuditLog.js";
-import UserVoucher from "../models/UserVoucher.js";
+import { getWallet } from "../services/loyaltyService.js";
 import {
   createVoucherService,
   consumeVoucherQuantityService,
@@ -100,44 +100,7 @@ const sendError = (res, error) => {
 
 export const getMyVoucherWallet = async (req, res) => {
   try {
-    const now = new Date();
-    const userVouchers = await UserVoucher.find({ user_id: req.user?.id })
-      .populate({ path: "voucher_id", match: { deleted_at: null } })
-      .sort({ created_at: -1 });
-
-    const wallet = userVouchers
-      .filter((item) => item.voucher_id)
-      .map((item) => {
-        const voucher = item.voucher_id;
-        const expiresAt = item.expires_at || voucher.end_date;
-        const isExpired = expiresAt && new Date(expiresAt) < now;
-        const status = item.status === "used" ? "used" : isExpired ? "expired" : item.status;
-
-        return {
-          id: item._id,
-          status,
-          used_at: item.used_at,
-          expires_at: expiresAt,
-          received_at: item.created_at,
-          voucher: {
-            id: voucher._id,
-            code: voucher.code,
-            name: voucher.name,
-            description: voucher.description,
-            image_url: voucher.image_url,
-            discount_type: voucher.discount_type,
-            discount_value: voucher.discount_value,
-            max_discount_amount: voucher.max_discount_amount,
-            min_order: voucher.min_order,
-            apply_scope: voucher.apply_scope,
-            terms_and_conditions: voucher.terms_and_conditions,
-            start_date: voucher.start_date,
-            end_date: voucher.end_date,
-          },
-        };
-      });
-
-    res.status(200).json({ success: true, data: wallet });
+    return res.json({ success: true, data: await getWallet(req.user.id) });
   } catch (error) {
     sendError(res, error);
   }

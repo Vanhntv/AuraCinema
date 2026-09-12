@@ -144,7 +144,7 @@ const runWithOptionalTransaction = async (work) => {
         );
       }
 
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để xử lý thanh toán an toàn."), { statusCode: 503 });
     }
 
     throw error;

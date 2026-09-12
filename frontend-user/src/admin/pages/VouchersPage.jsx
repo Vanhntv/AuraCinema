@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import LoyaltyAdmin from "../components/vouchers/LoyaltyAdmin";
 import {
   HiOutlinePlus,
   HiOutlineRefresh,
@@ -248,6 +249,7 @@ const VouchersPage = () => {
 
   return (
     <>
+      <LoyaltyAdmin />
       <div className="page-header">
         <div className="page-header-info">
           <h1>Quản lý Mã giảm giá</h1>

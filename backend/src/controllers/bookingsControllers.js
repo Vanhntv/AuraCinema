@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { requireTransaction } from "../services/transactionService.js";
 import { randomInt } from "crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
@@ -130,7 +131,7 @@ const runWithOptionalTransaction = async (work) => {
         );
       }
 
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để xử lý đặt vé an toàn."), { statusCode: 503 });
     }
 
     throw error;
@@ -147,6 +148,7 @@ export const markBookingAsPaid = async ({
   transactionId = "",
   session = null,
 }) => {
+  requireTransaction(session);
   if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
     throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
   }
@@ -422,6 +424,7 @@ export const createBooking = async (req, res) => {
     const { showtime_id, showtime_seat_ids } = req.body;
     const holdToken = String(req.body.hold_token || "").trim();
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
+    const userVoucherId = req.body.user_voucher_id;
     const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
@@ -517,9 +520,10 @@ export const createBooking = async (req, res) => {
       let voucherSnapshot = undefined;
       let verifiedVoucherResult = null;
 
-      if (voucherCode) {
+      if (voucherCode || userVoucherId) {
         const voucherResult = await verifyVoucherService({
           code: voucherCode,
+          user_voucher_id: userVoucherId,
           order_amount: subtotalPrice,
           ticket_amount: seatTotalPrice,
           concession_amount: comboTotalPrice,

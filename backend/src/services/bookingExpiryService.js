@@ -28,7 +28,7 @@ const runWithOptionalTransaction = async (work) => {
     return result;
   } catch (error) {
     if (isTransactionUnsupportedError(error) && process.env.NODE_ENV !== "production") {
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để giải phóng đơn và voucher an toàn."), { statusCode: 503 });
     }
     throw error;
   } finally {

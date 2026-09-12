@@ -68,7 +68,9 @@ test("missing reward point logs are backfilled without changing point balance", 
     assert.equal(insertedDocs.length, 1);
     assert.equal(insertedDocs[0].booking_id, "booking-missing-log");
     assert.equal(insertedDocs[0].points, 43);
-    assert.equal(insertedDocs[0].balance_after, 57);
+    assert.equal(insertedDocs[0].balance_after, null);
+    assert.equal(insertedDocs[0].reconstructed, true);
+    assert.equal(insertedDocs[0].occurred_at, null);
     assert.equal(insertedDocs[0].reason, "Tích điểm từ đơn AURA_MISSING");
   } finally {
     Booking.find = originalBookingFind;

@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { withTransaction } from "../services/transactionService.js";
+import { markBookingAsPaid } from "./bookingsControllers.js";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
@@ -12,7 +14,6 @@ import {
   refundVoucherUsageForBooking,
 } from "../services/voucherService.js";
 import {
-  creditRewardPointsForBooking,
   reverseRewardPointsForBooking,
 } from "../services/rewardPointService.js";
 import { expirePendingBooking } from "../services/bookingExpiryService.js";
@@ -113,7 +114,7 @@ const populateBooking = (query) =>
     .populate({ path: "combos.combo_id", select: "name image type" })
     .populate({ path: "voucher.voucher_id", select: "code name apply_scope" });
 
-const restoreComboStock = async ({ combos = [] }) => {
+const restoreComboStock = async ({ combos = [], session = null }) => {
   const restorableCombos = combos
     .map((item) => ({
       combo_id: item.combo_id,
@@ -123,17 +124,16 @@ const restoreComboStock = async ({ combos = [] }) => {
 
   if (!restorableCombos.length) return;
 
-  await Promise.all(
-    restorableCombos.map((item) =>
-      Combo.updateOne(
+  for (const item of restorableCombos) {
+      await Combo.updateOne(
         { _id: item.combo_id },
         { $inc: { stock: item.quantity } },
-      ),
-    ),
-  );
+        { session },
+      );
+  }
 };
 
-const releaseBookingSeats = async (booking) => {
+const releaseBookingSeats = async (booking, session = null) => {
   await ShowtimeSeat.updateMany(
     {
       _id: { $in: booking.showtime_seat_ids },
@@ -148,30 +148,8 @@ const releaseBookingSeats = async (booking) => {
         hold_expires_at: null,
       },
     },
+    { session },
   );
-};
-
-const markBookingSeatsAsBooked = async (booking) => {
-  await ShowtimeSeat.updateMany(
-    {
-      _id: { $in: booking.showtime_seat_ids },
-      status: "reserved",
-      reserved_by_booking_id: booking._id,
-    },
-    { $set: { status: "booked", held_by: null, hold_expires_at: null } },
-  );
-
-  const bookedCount = await ShowtimeSeat.countDocuments({
-    _id: { $in: booking.showtime_seat_ids },
-    status: "booked",
-    reserved_by_booking_id: booking._id,
-  });
-
-  if (bookedCount !== booking.showtime_seat_ids.length) {
-    const error = new Error("Ghế trong đơn không còn ở trạng thái chờ thanh toán");
-    error.statusCode = 409;
-    throw error;
-  }
 };
 
 export const getAdminBookings = async (req, res) => {
@@ -258,72 +236,69 @@ export const updateAdminBookingPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID đơn vé không hợp lệ" });
     }
 
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
-    }
-
-    if (paymentStatus === "paid") {
-      const expiryResult = await expirePendingBooking({ booking });
-      if (expiryResult.expired || booking.payment_status === "expired") {
-        return res.status(410).json({
-          success: false,
-          message: "Đơn vé đã hết thời gian thanh toán; không thể xác nhận thủ công",
-        });
+    const bookingId = await withTransaction(async (session) => {
+      const booking = await Booking.findById(req.params.id).session(session);
+      if (!booking) {
+        throw Object.assign(new Error("Không tìm thấy đơn vé"), { statusCode: 404 });
       }
-    }
 
-    const wasCancelled = booking.status === "cancelled";
-    const previousPaymentStatus = booking.payment_status;
-
-    if (previousPaymentStatus === "paid" && !["paid", "cancelled", "refunded"].includes(paymentStatus)) {
-      return res.status(409).json({
-        success: false,
-        message: "Không thể đưa đơn đã thanh toán về trạng thái chưa thanh toán",
-      });
-    }
-
-    if (booking.status === "cancelled" && !["cancelled", "refunded"].includes(paymentStatus)) {
-      return res.status(409).json({ success: false, message: "Không thể đổi đơn đã hủy về trạng thái đang bán" });
-    }
-
-    if (paymentStatus === "paid" && previousPaymentStatus !== "paid") {
-      await markBookingSeatsAsBooked(booking);
-    }
-
-    const updates = normalizePaymentStatusForBooking(booking, paymentStatus);
-    updates.payment_provider = String(req.body.payment_provider || booking.payment_provider || "manual").trim();
-    updates.payment_transaction_id = String(
-      req.body.payment_transaction_id || req.body.transaction_id || booking.payment_transaction_id || "",
-    ).trim();
-
-    Object.assign(booking, updates);
-    if (paymentStatus === "paid" && previousPaymentStatus !== "paid") {
-      await creditRewardPointsForBooking({ booking });
-    }
-    if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
-      await reverseRewardPointsForBooking({ booking });
-    }
-    await booking.save();
-
-    if (booking.status === "confirmed" && booking.payment_status === "paid") {
-      await createTicketsForPaidBooking(booking._id);
-    }
-
-    if (["cancelled", "refunded"].includes(paymentStatus) && !wasCancelled) {
-      await releaseBookingSeats(booking);
-      await restoreComboStock({ combos: booking.combos });
-      await cancelValidTicketsForBooking(booking._id);
-      if (paymentStatus === "refunded" || previousPaymentStatus !== "paid") {
-        await refundVoucherUsageForBooking({
-          bookingId: booking._id,
-          refundUsage: true,
-          finalStatus: paymentStatus === "refunded" ? "refunded" : "cancelled",
-        });
+      if (paymentStatus === "paid") {
+        const expiryResult = await expirePendingBooking({ booking, session });
+        if (expiryResult.expired || booking.payment_status === "expired") {
+          throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
+        }
       }
-    }
 
-    const populatedBooking = await populateBooking(Booking.findById(booking._id));
+      const wasCancelled = booking.status === "cancelled";
+      const previousPaymentStatus = booking.payment_status;
+      if (paymentStatus === "refunded" && !["paid", "refunded"].includes(previousPaymentStatus)) {
+        throw Object.assign(new Error("Chỉ hoàn tiền cho đơn đã thanh toán"), { statusCode: 409 });
+      }
+
+      if (previousPaymentStatus === "paid" && !["paid", "cancelled", "refunded"].includes(paymentStatus)) {
+        throw Object.assign(new Error("Không thể đưa đơn đã thanh toán về trạng thái chưa thanh toán"), { statusCode: 409 });
+      }
+
+      if (booking.status === "cancelled" && !["cancelled", "refunded"].includes(paymentStatus)) {
+        throw Object.assign(new Error("Không thể đổi đơn đã hủy về trạng thái đang bán"), { statusCode: 409 });
+      }
+
+      if (paymentStatus === "paid" && previousPaymentStatus !== "paid") {
+        await markBookingAsPaid({ booking, session, provider: "manual", transactionId: String(req.body.transaction_id || req.body.payment_transaction_id || "") });
+      }
+
+      const updates = normalizePaymentStatusForBooking(booking, paymentStatus);
+      updates.payment_provider = String(req.body.payment_provider || booking.payment_provider || "manual").trim();
+      updates.payment_transaction_id = String(
+        req.body.payment_transaction_id || req.body.transaction_id || booking.payment_transaction_id || "",
+      ).trim();
+
+      Object.assign(booking, updates);
+      if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
+        await reverseRewardPointsForBooking({ booking, session });
+      }
+      await booking.save({ session });
+
+      if (booking.status === "confirmed" && booking.payment_status === "paid" && previousPaymentStatus === "paid") {
+        await createTicketsForPaidBooking(booking._id, { session });
+      }
+
+      if (["cancelled", "refunded"].includes(paymentStatus) && !wasCancelled) {
+        await releaseBookingSeats(booking, session);
+        await restoreComboStock({ combos: booking.combos, session });
+        await cancelValidTicketsForBooking(booking._id, { session });
+      }
+        if ((paymentStatus === "refunded" && previousPaymentStatus !== "refunded") || (paymentStatus === "cancelled" && previousPaymentStatus !== "paid" && !wasCancelled)) {
+          await refundVoucherUsageForBooking({
+            bookingId: booking._id,
+            refundUsage: true,
+            finalStatus: paymentStatus === "refunded" ? "refunded" : "cancelled",
+            session,
+          });
+        }
+      return booking._id;
+    });
+    const populatedBooking = await populateBooking(Booking.findById(bookingId));
     return res.json({ success: true, message: "Đã cập nhật thanh toán", data: populatedBooking });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
@@ -336,39 +311,47 @@ export const cancelAdminBooking = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID đơn vé không hợp lệ" });
     }
 
-    const booking = await Booking.findById(req.params.id);
-    if (!booking) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
-    }
-
-    if (booking.status === "cancelled") {
-      return res.status(409).json({ success: false, message: "Đơn vé đã được hủy trước đó" });
-    }
-
     const refundPayment = req.body?.refund_payment === true;
-    const wasPaid = booking.payment_status === "paid";
-    booking.status = "cancelled";
-    booking.cancelled_by = "cinema";
-    booking.cancellation_reason = String(req.body?.reason || "").trim();
-    booking.cancelled_at = new Date();
-    booking.payment_status = refundPayment ? "refunded" : (wasPaid ? "paid" : "cancelled");
-    if (refundPayment) {
-      await reverseRewardPointsForBooking({ booking });
-    }
-    await booking.save();
+    const bookingId = await withTransaction(async (session) => {
+      const booking = await Booking.findById(req.params.id).session(session);
+      if (!booking) {
+        throw Object.assign(new Error("Không tìm thấy đơn vé"), { statusCode: 404 });
+      }
 
-    await releaseBookingSeats(booking);
-    await restoreComboStock({ combos: booking.combos });
-    await cancelValidTicketsForBooking(booking._id);
-    if (!wasPaid || refundPayment) {
-      await refundVoucherUsageForBooking({
-        bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: refundPayment ? "refunded" : "cancelled",
-      });
-    }
+      const wasCancelled = booking.status === "cancelled";
+      if (wasCancelled && (!refundPayment || booking.payment_status === "refunded")) {
+        return booking._id;
+      }
 
-    const populatedBooking = await populateBooking(Booking.findById(booking._id));
+      const wasPaid = booking.payment_status === "paid";
+      if (refundPayment && !wasPaid) throw Object.assign(new Error("Chỉ hoàn tiền cho đơn đã thanh toán"), { statusCode: 409 });
+      booking.status = "cancelled";
+      booking.cancelled_by = "cinema";
+      booking.cancellation_reason = String(req.body?.reason || "").trim();
+      booking.cancelled_at = new Date();
+      booking.payment_status = refundPayment ? "refunded" : (wasPaid ? "paid" : "cancelled");
+      if (refundPayment) {
+        await reverseRewardPointsForBooking({ booking, session });
+      }
+      await booking.save({ session });
+
+      if (!wasCancelled) {
+        await releaseBookingSeats(booking, session);
+        await restoreComboStock({ combos: booking.combos, session });
+        await cancelValidTicketsForBooking(booking._id, { session });
+      }
+      if (!wasPaid || refundPayment) {
+        await refundVoucherUsageForBooking({
+          bookingId: booking._id,
+          refundUsage: true,
+          finalStatus: refundPayment ? "refunded" : "cancelled",
+          session,
+        });
+      }
+
+      return booking._id;
+    });
+    const populatedBooking = await populateBooking(Booking.findById(bookingId));
     return res.json({
       success: true,
       message: refundPayment ? "Đã hủy đơn và ghi nhận hoàn tiền" : "Đã hủy đơn vé",

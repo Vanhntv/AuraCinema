@@ -1,4 +1,8 @@
 import mongoose from "mongoose";
+import UserVoucher from "../models/UserVoucher.js";
+import { walletState, validId } from "./loyaltyService.js";
+import { tierForSpend } from "./loyaltyPolicy.js";
+import { requireTransaction } from "./transactionService.js";
 import Voucher from "../models/Voucher.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import VoucherUsageCounter from "../models/VoucherUsageCounter.js";
@@ -149,7 +153,7 @@ const checkVoucherScope = (voucher, context, user) => {
 
   if (voucher.apply_scope === "member") {
     const tiers = (voucher.applicable_member_tiers || []).map((tier) => String(tier).toLowerCase());
-    const memberTier = String(user?.member_tier || "").toLowerCase();
+    const memberTier = tierForSpend(Number(user?.total_spent || 0));
     if (tiers.length > 0 && !tiers.includes(memberTier)) {
       return VOUCHER_MESSAGES.WRONG_MEMBER_TIER;
     }
@@ -278,7 +282,13 @@ export const refundVoucherUsageForBooking = async ({
 
   if (!usage) return null;
 
-  if (refundUsage && ["reserved", "used"].includes(usage.status)) {
+  if (usage.user_voucher_id && refundUsage) {
+    requireTransaction(session);
+    await UserVoucher.updateOne({ _id: usage.user_voucher_id, booking_id: bookingId }, {
+      $set: { status: "available", booking_id: null, used_at: null },
+    }, { session });
+  }
+  if (!usage.user_voucher_id && refundUsage && ["reserved", "used"].includes(usage.status)) {
     await Voucher.updateOne(
       {
         _id: usage.voucher_id,
@@ -406,7 +416,14 @@ export const reserveVoucherForBooking = async ({
   const voucherId = voucher?.id || voucher?._id;
   if (!bookingId || !voucherId) return null;
 
-  await reserveVoucherUsageForPayment({
+  const ownedId = voucherResult.user_voucher_id;
+  if (ownedId) {
+    requireTransaction(session);
+    const claimed = await UserVoucher.updateOne({ _id: ownedId, user_id: userId, status: "available", expires_at: { $gt: new Date() } }, {
+      $set: { status: "reserved", booking_id: bookingId },
+    }, { session });
+    if (!claimed.modifiedCount) throw Object.assign(new Error("Voucher đã được giữ cho đơn khác."), { statusCode: 409 });
+  } else await reserveVoucherUsageForPayment({
     voucherId,
     userId,
     usageLimitPerUser: voucher.usage_limit_per_user,
@@ -416,6 +433,7 @@ export const reserveVoucherForBooking = async ({
 
   const discountAmount = Number(voucherResult.discount_amount || 0);
   const [usage] = await VoucherUsage.create([{
+    user_voucher_id: ownedId || null,
     voucher_id: voucherId,
     booking_id: bookingId,
     user_id: userId,
@@ -448,6 +466,13 @@ export const consumeReservedVoucherForBooking = async ({
   }).session(session);
   if (!usage) return null;
 
+  if (usage.user_voucher_id) {
+    requireTransaction(session);
+    const claimed = await UserVoucher.updateOne({ _id: usage.user_voucher_id, booking_id: bookingId, status: "reserved" }, {
+      $set: { status: "used", used_at: now },
+    }, { session });
+    if (!claimed.modifiedCount) throw Object.assign(new Error("Voucher không còn được giữ cho đơn này."), { statusCode: 409 });
+  }
   usage.status = "used";
   usage.payment_status = "paid";
   usage.used_at = now;
@@ -835,6 +860,7 @@ export const listVouchers = async (query = {}) => {
 };
 
 const buildPublicVoucherFilter = (now = new Date()) => ({
+  personal_only: { $ne: true },
   deleted_at: null,
   status: true,
   quantity: { $gt: 0 },
@@ -884,6 +910,13 @@ export const listEligibleVouchers = async (payload = {}) => {
     }),
   );
 
+  if (context.userId) {
+    const owned = await UserVoucher.find({ user_id: context.userId, status: "available" }).session(session);
+    for (const item of owned) {
+      const result = await verifyVoucherService({ ...payload, user_voucher_id: item._id });
+      if (result.valid) eligibleVouchers.push(result);
+    }
+  }
   return eligibleVouchers
     .filter(Boolean)
     .sort((first, second) => {
@@ -1127,7 +1160,7 @@ export const updateVoucherService = async (id, payload, user = null) => {
     throw error;
   }
 
-  const existingUsageCount = Number(existingVoucher.usage_count || 0);
+  const existingUsageCount = Number(existingVoucher.usage_count || 0) + Number(existingVoucher.allocated_count || 0);
   if (existingUsageCount > 0) {
     const blockedFields = Object.keys(payload).filter(
       (field) => !USED_VOUCHER_EDITABLE_FIELDS.has(field)
@@ -1164,7 +1197,7 @@ export const updateVoucherService = async (id, payload, user = null) => {
 
   if (Object.prototype.hasOwnProperty.call(normalizedPayload, "usage_limit")) {
     const nextUsageLimit = Number(normalizedPayload.usage_limit);
-    const nextUsageCount = Number(nextVoucherState.usage_count || 0);
+    const nextUsageCount = Number(nextVoucherState.usage_count || 0) + Number(existingVoucher.allocated_count || 0);
 
     if (nextUsageLimit < nextUsageCount) {
       const error = new Error("usage_limit khong duoc nho hon so luot da su dung");
@@ -1218,11 +1251,13 @@ export const updateVoucherService = async (id, payload, user = null) => {
   }
 
   const updatedVoucher = await Voucher.findOneAndUpdate(
-    { _id: id, deleted_at: null },
+    { _id: id, deleted_at: null, quantity: existingVoucher.quantity, usage_count: existingVoucher.usage_count,
+      allocated_count: existingVoucher.allocated_count ? existingVoucher.allocated_count : { $in: [0, null] } },
     normalizedPayload,
     { new: true, runValidators: true }
   );
 
+  if (!updatedVoucher) throw Object.assign(new Error("Số lượng voucher vừa thay đổi. Vui lòng tải lại."), { statusCode: 409 });
   return updatedVoucher;
 };
 
@@ -1240,7 +1275,7 @@ export const deleteVoucherService = async (id) => {
     throw error;
   }
 
-  if (Number(voucher.usage_count || 0) > 0) {
+  if (Number(voucher.usage_count || 0) > 0 || await UserVoucher.exists({ voucher_id: id })) {
     voucher.deleted_at = new Date();
     voucher.status = false;
     await voucher.save();
@@ -1363,13 +1398,25 @@ export const verifyVoucherService = async (payload = {}) => {
   const context = normalizeVoucherContext(payload);
   const session = payload.session ?? null;
 
-  if (isMissing(code)) {
+  if (isMissing(code) && !payload.user_voucher_id) {
     const error = new Error("code la bat buoc");
     error.statusCode = 400;
     throw error;
   }
 
-  const voucher = await Voucher.findOne({ code, deleted_at: null }).session(session);
+  let owned = null;
+  if (payload.user_voucher_id || /^AW[0-9A-F]{20}$/.test(code)) {
+    if (payload.user_voucher_id) validId(payload.user_voucher_id);
+    owned = await UserVoucher.findOne({
+      ...(payload.user_voucher_id ? { _id: payload.user_voucher_id } : { code }),
+      user_id: context.userId || null,
+    }).session(session);
+    if (!owned) return { valid: false, message: "Voucher không thuộc tài khoản của bạn." };
+  }
+  const template = await Voucher.findOne(owned ? { _id: owned.voucher_id } : { code, deleted_at: null }).session(session);
+  if (!owned && template?.personal_only) return { valid: false, message: "Vui lòng sử dụng voucher được cấp trong ví cá nhân." };
+  if (owned && walletState(owned, template) !== "available") return { valid: false, message: "Voucher không khả dụng, đã hết hạn hoặc đang được giữ." };
+  const voucher = owned ? { ...(owned.snapshot || template.toObject()), _id: owned.voucher_id, code: owned.code, quantity: 1, status: true, end_date: owned.expires_at } : template;
 
   if (!voucher) {
     return {
@@ -1419,7 +1466,7 @@ export const verifyVoucherService = async (payload = {}) => {
     };
   }
 
-  if (context.userId) {
+  if (context.userId && !owned) {
     const usedByCustomer = await countVoucherUsageByUser({
       voucherId: voucher._id,
       userId: context.userId,
@@ -1443,5 +1490,5 @@ export const verifyVoucherService = async (payload = {}) => {
     };
   }
 
-  return buildVoucherVerificationResponse(voucher, context);
+  return { ...buildVoucherVerificationResponse(voucher, context), ...(owned ? { user_voucher_id: owned._id } : {}) };
 };
