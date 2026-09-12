@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
+import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
@@ -33,6 +34,37 @@ const calculateSeatTotal = (seats = []) => {
     return total + Number(seat.price || 0);
   }, 0);
 };
+const normalizeComboItems = (items = []) => {
+  if (!Array.isArray(items)) throw Object.assign(new Error("Danh sách combo không hợp lệ."), { statusCode: 400 });
+  const quantities = new Map();
+  for (const item of items) {
+    const comboId = String(item?.combo_id || "").trim();
+    const quantity = Number(item?.quantity);
+    if (!mongoose.Types.ObjectId.isValid(comboId) || !Number.isInteger(quantity) || quantity <= 0) throw Object.assign(new Error("Combo hoặc số lượng không hợp lệ."), { statusCode: 400 });
+    quantities.set(comboId, (quantities.get(comboId) || 0) + quantity);
+  }
+  return [...quantities].map(([combo_id, quantity]) => ({ combo_id, quantity }));
+};
+const reserveComboStock = async ({ requestedCombos, session }) => {
+  if (!requestedCombos.length) return [];
+  const comboDocs = await Combo.find({ _id: { $in: requestedCombos.map((item) => item.combo_id) }, deleted_at: null, status: true }).session(session);
+  if (comboDocs.length !== requestedCombos.length) throw Object.assign(new Error("Có combo không còn được bán."), { statusCode: 404 });
+  const comboById = new Map(comboDocs.map((combo) => [String(combo._id), combo]));
+  const reserved = [];
+  try {
+    for (const item of requestedCombos) {
+      const combo = comboById.get(String(item.combo_id));
+      const result = await Combo.updateOne({ _id: item.combo_id, deleted_at: null, status: true, stock: { $gte: item.quantity } }, { $inc: { stock: -item.quantity } }, { session });
+      if (result.modifiedCount !== 1) throw Object.assign(new Error(`Combo ${combo.name} không đủ số lượng.`), { statusCode: 409 });
+      reserved.push({ combo_id: combo._id, name: combo.name, price: Number(combo.price || 0), quantity: item.quantity, subtotal: Number(combo.price || 0) * item.quantity });
+    }
+    return reserved;
+  } catch (error) {
+    await Promise.all(reserved.map((item) => Combo.updateOne({ _id: item.combo_id }, { $inc: { stock: item.quantity } }, { session })));
+    throw error;
+  }
+};
+const restoreComboStock = (combos, session) => Promise.all(combos.map((item) => Combo.updateOne({ _id: item.combo_id }, { $inc: { stock: item.quantity } }, { session })));
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const getVietnamDateRange = (date) => {
   const match = DATE_PATTERN.exec(String(date || ""));
@@ -94,6 +126,7 @@ export const createCounterSale = async (req, res) => {
   }
 
   try {
+    const requestedCombos = normalizeComboItems(req.body?.combos || []);
     const sale = await runWithTransaction(async (session) => {
       const showtime = await Showtime.findOne({ _id: showtimeId, deleted_at: null, status: { $in: ["scheduled", "now_showing"] }, end_time: { $gt: new Date() } })
         .populate("movie_id", "title poster age_limit")
@@ -114,9 +147,13 @@ export const createCounterSale = async (req, res) => {
         throw Object.assign(new Error("Một hoặc nhiều ghế vừa được khách khác giữ hoặc đặt. Vui lòng chọn lại."), { statusCode: 409 });
       }
 
+      let reservedCombos = [];
       try {
+        reservedCombos = await reserveComboStock({ requestedCombos, session });
         const items = seats.map((item) => ({ showtime_seat_id: item._id, seat_id: idOf(item.seat_id), seat_code: String(item.seat_id?.seat_code || ""), seat_label: seatLabel(item.seat_id), seat_type: String(item.seat_id?.seat_type_id?.name || ""), price: Number(item.price || 0) }));
-        const total = calculateSeatTotal(seats);
+        const ticketTotal = calculateSeatTotal(seats);
+        const comboTotal = reservedCombos.reduce((sum, item) => sum + item.subtotal, 0);
+        const total = ticketTotal + comboTotal;
         const now = new Date();
         const [booking] = await Booking.create([{
           _id: bookingId, booking_code: counterCode(), ticketing_version: 2, order_qr: issueBookingOrderQr(now),
@@ -125,13 +162,14 @@ export const createCounterSale = async (req, res) => {
           customer_email: String(req.body?.customer_email || `walkin-${bookingId}@auracinema.local`).trim().toLowerCase(), customer_phone: String(req.body?.customer_phone || "").trim() || null,
           movie_snapshot: { movie_id: showtime.movie_id._id, title: showtime.movie_id.title, poster: showtime.movie_id.poster || "", age_classification: Number(showtime.movie_id.age_limit || 0) ? `T${showtime.movie_id.age_limit}` : "P" },
           showtime_snapshot: { showtime_id: showtime._id, start_time: showtime.start_time, end_time: showtime.end_time, cinema_id: idOf(showtime.room_id.cinema_id), cinema_name: showtime.room_id.cinema_id?.name || "", cinema_address: showtime.room_id.cinema_id?.address || "", room_id: showtime.room_id._id, room_name: showtime.room_id.name },
-          seat_items: items, subtotal_price: total, total_price: total, pricing: { ticket_subtotal: total, service_subtotal: 0, subtotal: total, discount: 0, total },
+          seat_items: items, combos: reservedCombos, subtotal_price: total, total_price: total, pricing: { ticket_subtotal: ticketTotal, service_subtotal: comboTotal, subtotal: total, discount: 0, total },
           status: "confirmed", payment_status: "paid", payment_provider: "cash", payment_transaction_id: `CASH-${bookingId.toString().slice(-8).toUpperCase()}`, paid_at: now,
         }], { session });
         await Payment.create([{ booking_id: booking._id, payment_code: `CASH-${booking.booking_code}`, provider: "cash", amount: total, status: "paid", transaction_ref: booking.payment_transaction_id, transaction_id: booking.payment_transaction_id, paid_at: now }], { session });
         const issued = await createTicketsForPaidBooking(booking._id, { session, includeQrPayloads: true });
         return { booking, tickets: issued.tickets, qrPayloads: issued.qrPayloads };
       } catch (error) {
+        await restoreComboStock(reservedCombos, session);
         await Ticket.deleteMany({ bookingId }, { session });
         await Payment.deleteMany({ booking_id: bookingId }, { session });
         await Booking.deleteOne({ _id: bookingId }, { session });
@@ -139,7 +177,7 @@ export const createCounterSale = async (req, res) => {
         throw error;
       }
     });
-    return res.status(201).json({ success: true, message: "Thanh toán tiền mặt thành công.", data: { booking_id: sale.booking._id, booking_code: sale.booking.booking_code, total_price: sale.booking.total_price, sales_channel: sale.booking.sales_channel, sold_by: sale.booking.sold_by, tickets: sale.tickets.map((ticket) => ({ id: ticket._id, code: ticket.ticketCode, seat: ticket.seatLabel, price: ticket.price })), ticket_qr_payloads: sale.qrPayloads } });
+    return res.status(201).json({ success: true, message: "Thanh toán tiền mặt thành công.", data: { booking_id: sale.booking._id, booking_code: sale.booking.booking_code, total_price: sale.booking.total_price, pricing: sale.booking.pricing, sales_channel: sale.booking.sales_channel, sold_by: sale.booking.sold_by, combos: sale.booking.combos, tickets: sale.tickets.map((ticket) => ({ id: ticket._id, code: ticket.ticketCode, seat: ticket.seatLabel, price: ticket.price })), ticket_qr_payloads: sale.qrPayloads } });
   } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
 };
 
