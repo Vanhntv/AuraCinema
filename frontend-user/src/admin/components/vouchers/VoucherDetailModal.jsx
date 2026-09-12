@@ -88,7 +88,7 @@ const VoucherDetailModal = ({ voucher, loading, onClose }) => {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
+      <div className="modal modal-large voucher-modal voucher-detail-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">Chi tiết mã giảm giá</h2>
           <button type="button" className="modal-close" onClick={onClose}>

@@ -191,7 +191,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-large" onClick={(event) => event.stopPropagation()}>
+      <div className="modal modal-large voucher-modal voucher-editor-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{isEditMode ? "Chỉnh sửa mã giảm giá" : "Thêm mã giảm giá"}</h2>
           <button type="button" className="modal-close" onClick={onClose}>
