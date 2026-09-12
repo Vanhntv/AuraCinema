@@ -1,14 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const menu = [
+  ["scanner", "Quét vé", "⌗"],
   ["counter", "Bán vé tại quầy", "▣"],
   ["rooms", "Quản lý phòng và ghế", "▤"],
   ["shift", "Báo cáo ca làm việc", "▥"],
   ["history", "Lịch sử giao dịch", "◷"],
 ];
 const titles = {
+  scanner: ["Quét vé", "Quét và check-in vé", "Dùng camera, ảnh QR hoặc mã vé để kiểm tra và đón khách vào rạp."],
   counter: ["Bán vé tại quầy", "Bán vé trực tiếp", "Chọn suất chiếu, ghế còn trống và hoàn tất thanh toán tiền mặt."],
   rooms: ["Quản lý phòng và ghế", "Sơ đồ phòng chiếu", "Kiểm tra tình trạng phòng và cập nhật trạng thái ghế."],
   shift: ["Báo cáo ca làm việc", "Tổng kết ca làm việc", "Xem doanh thu, số vé bán và các giao dịch trong ca của bạn."],
@@ -30,13 +32,18 @@ const consumeStaffTokenFromHash = () => {
 };
 
 async function api(path, options = {}) {
+  const { returnBody = false, ...requestOptions } = options;
   const response = await fetch(`${API}${path}`, {
-    ...options,
-    headers: { "Content-Type": "application/json", ...headers(), ...options.headers },
+    ...requestOptions,
+    headers: { "Content-Type": "application/json", ...headers(), ...requestOptions.headers },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.success) throw new Error(body.message || "Không thể kết nối máy chủ.");
-  return body.data;
+  if (!response.ok || !body.success) {
+    const error = new Error(body.message || "Không thể kết nối máy chủ.");
+    error.data = body.data || null;
+    throw error;
+  }
+  return returnBody ? body : body.data;
 }
 
 export default function App() {
@@ -61,12 +68,112 @@ export default function App() {
         <header className="header"><div className="header-left"><button className="header-toggle desktop-toggle" onClick={() => setCollapsed(!collapsed)}>☰</button><button className="header-toggle mobile-toggle" onClick={() => setMobile(true)}>☰</button><div className="breadcrumb"><span>Nhân viên</span><b>/</b><strong>{crumb}</strong></div></div><div className="header-right"><label className="header-search"><span>⌕</span><input placeholder="Tìm kiếm..." /></label><button className="header-icon">♢<i /></button><div className="header-user"><div>N</div><span><strong>Nhân viên</strong><small>Quầy vé</small></span></div></div></header>
         <main className="staff-content">
           <section className="page-heading"><span>{crumb}</span><h1>{title}</h1><p>{description}</p></section>
-          {active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
+          {active === "scanner" ? <TicketScanner /> : active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
         </main>
       </div>
     </div>
   );
 }
+
+const STAFF_SCANNER_ID = "staff-ticket-qr-reader";
+
+function TicketScanner() {
+  const scannerRef = useRef(null);
+  const processingRef = useRef(false);
+  const fileInputRef = useRef(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc nhập mã vé.");
+  const [result, setResult] = useState(null);
+  const [currentQrToken, setCurrentQrToken] = useState("");
+  const [qrText, setQrText] = useState("");
+  const [ticketCode, setTicketCode] = useState("");
+  const ticket = result?.data || null;
+
+  const stopCamera = async () => {
+    const scanner = scannerRef.current;
+    if (!scanner) return;
+    try { if (scanner.isScanning) await scanner.stop(); await scanner.clear(); } catch { /* Camera may already be closed. */ }
+    scannerRef.current = null;
+    setCameraActive(false);
+  };
+
+  useEffect(() => () => {
+    const scanner = scannerRef.current;
+    if (scanner?.isScanning) scanner.stop().then(() => scanner.clear()).catch(() => {});
+    else scanner?.clear().catch(() => {});
+    scannerRef.current = null;
+  }, []);
+
+  const verifyQr = async (value) => {
+    const token = String(value || "").trim();
+    if (!token || processingRef.current) return;
+    processingRef.current = true; setProcessing(true); setResult(null); setCurrentQrToken(token); setMessage("Đang xác minh vé...");
+    await stopCamera();
+    try {
+      const response = await api("/staff/pos/tickets/verify", { method: "POST", body: JSON.stringify({ qrToken: token }), returnBody: true });
+      setResult(response); setMessage(response.message);
+    } catch (err) {
+      setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message);
+    } finally { processingRef.current = false; setProcessing(false); }
+  };
+
+  const startCamera = async () => {
+    if (processing || cameraActive) return;
+    setResult(null); setMessage("Đang yêu cầu quyền truy cập camera...");
+    try {
+      await stopCamera();
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras.length) throw new Error("Không tìm thấy camera trên thiết bị.");
+      const preferred = cameras.find((camera) => /back|rear|environment|sau/i.test(camera.label || "")) || cameras[0];
+      const scanner = new Html5Qrcode(STAFF_SCANNER_ID, { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+      scannerRef.current = scanner;
+      await scanner.start(preferred.id, { fps: 12, qrbox: (width, height) => { const size = Math.max(120, Math.min(Math.floor(Math.min(width, height) * .75), 320)); return { width: size, height: size }; } }, (decodedText) => verifyQr(decodedText), () => {});
+      setCameraActive(true); setMessage("Đưa mã QR vé vào giữa khung hình.");
+    } catch (err) { await stopCamera(); setMessage(err.message || "Không thể mở camera. Hãy kiểm tra quyền camera của trình duyệt."); }
+  };
+
+  const scanFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || processingRef.current) return;
+    await stopCamera(); setMessage("Đang đọc ảnh QR...");
+    const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+    const scanner = new Html5Qrcode("staff-ticket-file-reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE], verbose: false });
+    try { const decodedText = await scanner.scanFile(file, true); await scanner.clear(); await verifyQr(decodedText); }
+    catch (err) { await scanner.clear().catch(() => {}); setResult(null); setMessage(err.message ? "Không đọc được mã QR trong ảnh đã chọn." : "Không thể đọc ảnh QR."); }
+  };
+
+  const lookupTicket = async (event) => {
+    event.preventDefault();
+    const code = ticketCode.trim().toUpperCase();
+    if (!code || processingRef.current) return;
+    processingRef.current = true; setProcessing(true); setResult(null); setMessage("Đang tra cứu mã vé...");
+    try {
+      const response = await api("/staff/pos/tickets/lookup", { method: "POST", body: JSON.stringify({ ticketCode: code }), returnBody: true });
+      setResult(response); setCurrentQrToken(response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
+    } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setCurrentQrToken(""); setMessage(err.message); }
+    finally { processingRef.current = false; setProcessing(false); }
+  };
+
+  const checkIn = async () => {
+    if (!currentQrToken || checkingIn) return;
+    setCheckingIn(true);
+    try {
+      const response = await api("/staff/pos/tickets/check-in", { method: "POST", body: JSON.stringify({ qrToken: currentQrToken }), returnBody: true });
+      setResult(response); setMessage(response.message);
+    } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message); }
+    finally { setCheckingIn(false); }
+  };
+
+  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setQrText(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+
+  return <div className="staff-scanner"><section className="scanner-panel"><div className="scanner-heading"><div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div><span>⌗</span></div><div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} /><div id="staff-ticket-file-reader" className="scanner-file-reader" /><div className="scanner-controls"><button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button><button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button><input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden /></div><form className="scanner-token-form" onSubmit={(event) => { event.preventDefault(); verifyQr(qrText); }}><label htmlFor="staff-qr-token">Hoặc nhập nội dung mã QR</label><div><input id="staff-qr-token" value={qrText} onChange={(event) => setQrText(event.target.value)} placeholder="AURA_TICKET:..." /><button disabled={!qrText.trim() || processing}>Kiểm tra</button></div></form><form className="scanner-token-form" onSubmit={lookupTicket}><label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label><div><input id="staff-ticket-code" value={ticketCode} onChange={(event) => setTicketCode(event.target.value.toUpperCase())} placeholder="Nhập mã vé" /><button disabled={!ticketCode.trim() || processing}>Tra cứu</button></div></form><p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang xử lý..." : message}</p></section><section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}><div className="scanner-heading"><div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div><span>🎟</span></div>{ticket ? <><div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div><div className="scan-ticket-grid"><Info label="Phim" value={ticket.movie?.title} /><Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} /><Info label="Phòng" value={ticket.room?.name} /><Info label="Ghế" value={ticket.seat?.label || ticket.seatLabel} /><Info label="Loại ghế" value={ticket.seat?.type} /><Info label="Trạng thái" value={ticket.status} /></div><button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button><button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button></> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}</section></div>;
+}
+
+function Info({ label, value }) { return <div><span>{label}</span><strong>{value || "—"}</strong></div>; }
 
 function ShiftReport() {
   const [report, setReport] = useState(null);
