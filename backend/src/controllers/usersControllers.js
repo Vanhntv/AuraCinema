@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, scrypt as scryptCallback } from "crypto";
 import mongoose from "mongoose";
+import { withTransaction } from "../services/transactionService.js";
 import { promisify } from "util";
 import AuditLog from "../models/AuditLog.js";
 import Booking from "../models/Booking.js";
@@ -56,15 +57,15 @@ const pickAuditFields = (user) => ({
   status: statusToLegacyBoolean(resolveAccountStatus(user)),
 });
 
-const writeAuditLog = async ({ req, targetUserId, action, before = null, after = null, reason = null }) => {
-  await AuditLog.create({
+const writeAuditLog = async ({ req, targetUserId, action, before = null, after = null, reason = null, session = null }) => {
+  await AuditLog.create([{
     admin_id: req.user.id,
     target_user_id: targetUserId,
     action,
     before,
     after,
     reason: String(reason || "").trim() || null,
-  });
+  }], { session });
 };
 
 const buildUserQuery = ({ q, role, status, account_status, member_tier }) => {
@@ -400,37 +401,36 @@ export const adjustRewardPoints = async (req, res) => {
       return res.status(400).json({ success: false, message: "Vui lòng nhập lý do điều chỉnh điểm" });
     }
 
-    const user = await User.findOne({ _id: req.params.id, deleted_at: null });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
-    }
-
+    const { user, rewardLog } = await withTransaction(async session => {
+    const user = await User.findOne({ _id: req.params.id, deleted_at: null }).session(session);
+    if (!user) throw Object.assign(new Error("Không tìm thấy người dùng"), { statusCode: 404 });
     const before = pickAuditFields(user);
     const currentPoints = Number(user.reward_points || 0);
     const nextPoints = type === "add" ? currentPoints + points : currentPoints - points;
-    if (nextPoints < 0) {
-      return res.status(400).json({ success: false, message: "Điểm thưởng không được nhỏ hơn 0" });
-    }
+    if (type === "subtract" && nextPoints < 0) throw Object.assign(new Error("Không đủ điểm để trừ"), { statusCode: 400 });
 
     user.reward_points = nextPoints;
-    await user.save();
+    await user.save({ session });
 
-    const rewardLog = await RewardPointLog.create({
+    const [rewardLog] = await RewardPointLog.create([{
       user_id: user._id,
       admin_id: req.user.id,
       type,
       points,
       balance_after: nextPoints,
       reason,
-    });
+    }], { session });
 
     await writeAuditLog({
       req,
       targetUserId: req.params.id,
       action: "ADJUST_REWARD_POINTS",
+      session,
       before,
       after: pickAuditFields(user),
       reason,
+    });
+    return { user, rewardLog };
     });
 
     return res.json({

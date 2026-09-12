@@ -44,6 +44,8 @@ const voucherSchema = new mongoose.Schema(
       default: null,
       min: 0,
     },
+    personal_only: { type: Boolean, default: false },
+    allocated_count: { type: Number, default: 0, min: 0 },
     quantity: {
       type: Number,
       required: true,

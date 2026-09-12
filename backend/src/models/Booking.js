@@ -89,7 +89,8 @@ const bookingSchema = new mongoose.Schema(
     cancelled_at: { type: Date, default: null },
     payment_status: {
       type: String,
-      enum: ["pending", "paid", "failed", "cancelled", "expired", "refund_pending", "refunded"],
+      // Old terminal states remain readable; no API can create or select them.
+      enum: ["pending", "paid", "failed", "cancelled", "expired", "review_required", "refund_pending", "refunded"],
       default: "pending",
     },
     payment_expires_at: { type: Date, default: null },

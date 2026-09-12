@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { requireTransaction } from "../services/transactionService.js";
 import { randomInt } from "crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
@@ -10,7 +11,7 @@ import Ticket from "../models/Ticket.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import {
   consumeReservedVoucherForBooking,
-  refundVoucherUsageForBooking,
+  releaseReservedVoucherForBooking,
   reserveVoucherForBooking,
   reserveVoucherUsageForPayment,
   verifyVoucherService,
@@ -130,7 +131,7 @@ const runWithOptionalTransaction = async (work) => {
         );
       }
 
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để xử lý đặt vé an toàn."), { statusCode: 503 });
     }
 
     throw error;
@@ -147,6 +148,7 @@ export const markBookingAsPaid = async ({
   transactionId = "",
   session = null,
 }) => {
+  requireTransaction(session);
   if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
     throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
   }
@@ -164,9 +166,14 @@ export const markBookingAsPaid = async ({
     throw Object.assign(new Error("Đơn vé không ở trạng thái chờ thanh toán"), { statusCode: 409 });
   }
 
-  const showtime = await Showtime.findOne({ _id: booking.showtime_id, deleted_at: null }).session(session);
+  // Serialize payment with showtime cancellation on the same document.
+  const showtime = await Showtime.findOneAndUpdate(
+    { _id: booking.showtime_id, deleted_at: null, status: { $ne: "cancelled" } },
+    { $inc: { __v: 1 } },
+    { session, returnDocument: "after" },
+  );
   if (!showtime) {
-    throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
+    throw Object.assign(new Error("Suất chiếu không còn khả dụng"), { statusCode: 409 });
   }
 
   const seatIds = booking.showtime_seat_ids.map((seatId) => seatId);
@@ -422,6 +429,7 @@ export const createBooking = async (req, res) => {
     const { showtime_id, showtime_seat_ids } = req.body;
     const holdToken = String(req.body.hold_token || "").trim();
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
+    const userVoucherId = req.body.user_voucher_id;
     const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
@@ -517,9 +525,10 @@ export const createBooking = async (req, res) => {
       let voucherSnapshot = undefined;
       let verifiedVoucherResult = null;
 
-      if (voucherCode) {
+      if (voucherCode || userVoucherId) {
         const voucherResult = await verifyVoucherService({
           code: voucherCode,
+          user_voucher_id: userVoucherId,
           order_amount: subtotalPrice,
           ticket_amount: seatTotalPrice,
           concession_amount: comboTotalPrice,
@@ -785,10 +794,8 @@ export const cancelBooking = async (req, res) => {
       booking.payment_status = "cancelled";
       await booking.save({ session });
 
-      await refundVoucherUsageForBooking({
+      await releaseReservedVoucherForBooking({
         bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: "cancelled",
         session,
       });
 

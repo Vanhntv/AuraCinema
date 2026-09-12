@@ -1297,6 +1297,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           quantity: item.quantity,
         })),
         voucher_code: verifiedVoucherCode || undefined,
+        user_voucher_id: appliedVoucher?.user_voucher_id || undefined,
         hold_token: holdToken,
       });
       const nextBookingSummary = mergeBookingVoucherPricing({
@@ -1868,7 +1869,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                       <div className="mt-2 grid max-h-48 gap-2 overflow-y-auto pr-1">
                         {eligibleVouchers.map((item) => (
                           <button
-                            key={item.voucher.id}
+                            key={item.user_voucher_id || item.voucher.id}
                             type="button"
                             className="group flex min-w-0 items-center justify-between gap-3 rounded-xl bg-white/[0.05] px-3 py-3 text-left transition hover:bg-white/[0.09] disabled:cursor-wait disabled:opacity-60"
                             onClick={() => void applyVoucher(item.voucher.code)}

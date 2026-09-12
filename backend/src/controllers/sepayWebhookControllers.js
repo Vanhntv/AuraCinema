@@ -93,7 +93,7 @@ const runWithOptionalTransaction = async (work) => {
         );
       }
 
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để xử lý thanh toán an toàn."), { statusCode: 503 });
     }
 
     throw error;
@@ -204,7 +204,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
         transactionKey,
         bookingId: expiredBooking._id,
         status: "review_required",
-        errorMessage: "Thanh toán đến sau khi đơn đã hết hạn; cần hoàn tiền/đối soát",
+        errorMessage: "Thanh toán đến sau khi đơn đã hết hạn; cần đối soát",
         session,
       });
       return;

@@ -185,7 +185,7 @@ function PaymentPage() {
     [summary?.finalTotal, summary?.total_price],
   );
   const bookingIsPaid = paymentStatus === "paid";
-  const serverBookingIsExpired = ["expired", "refund_pending"].includes(paymentStatus);
+  const serverBookingIsExpired = ["expired", "review_required", "refund_pending"].includes(paymentStatus);
   const bookingIsExpired = isBookingExpired(
     paymentStatus,
     summary?.paymentExpiresAt,
