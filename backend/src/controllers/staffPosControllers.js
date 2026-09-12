@@ -6,6 +6,7 @@ import Payment from "../models/Payment.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import Ticket from "../models/Ticket.js";
+import User from "../models/User.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { issueBookingOrderQr } from "../services/bookingOrderService.js";
 import { validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
@@ -116,6 +117,40 @@ export const getCounterShowtimes = async (req, res) => {
       available_seats: countByShowtime.get(String(item._id)) || 0,
     })) });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
+};
+
+export const getShiftReport = async (req, res) => {
+  try {
+    const selectedDate = String(req.query?.date || getVietnamDay()).trim();
+    const dateRange = getVietnamDateRange(selectedDate);
+    if (!dateRange) return res.status(400).json({ success: false, message: "Ngày báo cáo không hợp lệ." });
+
+    const [staff, bookings] = await Promise.all([
+      User.findOne({ _id: req.user.id, deleted_at: null }).select("full_name").lean(),
+      Booking.find({
+        sales_channel: "counter",
+        sold_by: req.user.id,
+        status: "confirmed",
+        payment_status: "paid",
+        paid_at: { $gte: dateRange.start, $lt: dateRange.end },
+      }).select("total_price showtime_seat_ids").lean(),
+    ]);
+
+    const cashTotal = bookings.reduce((sum, booking) => sum + Number(booking.total_price || 0), 0);
+    const posTicketCount = bookings.reduce((sum, booking) => sum + (booking.showtime_seat_ids?.length || 0), 0);
+    return res.json({
+      success: true,
+      data: {
+        staff_name: staff?.full_name || "Nhân viên",
+        date: selectedDate,
+        cash_total: cashTotal,
+        pos_ticket_count: posTicketCount,
+        online_scanned_count: null,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 export const createCounterSale = async (req, res) => {

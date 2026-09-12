@@ -61,11 +61,31 @@ export default function App() {
         <header className="header"><div className="header-left"><button className="header-toggle desktop-toggle" onClick={() => setCollapsed(!collapsed)}>☰</button><button className="header-toggle mobile-toggle" onClick={() => setMobile(true)}>☰</button><div className="breadcrumb"><span>Nhân viên</span><b>/</b><strong>{crumb}</strong></div></div><div className="header-right"><label className="header-search"><span>⌕</span><input placeholder="Tìm kiếm..." /></label><button className="header-icon">♢<i /></button><div className="header-user"><div>N</div><span><strong>Nhân viên</strong><small>Quầy vé</small></span></div></div></header>
         <main className="staff-content">
           <section className="page-heading"><span>{crumb}</span><h1>{title}</h1><p>{description}</p></section>
-          {active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
+          {active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
         </main>
       </div>
     </div>
   );
+}
+
+function ShiftReport() {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const today = getVietnamDateValue();
+
+  useEffect(() => {
+    let live = true;
+    api(`/staff/pos/shift-report?date=${encodeURIComponent(today)}`)
+      .then((data) => { if (live) { setReport(data); setError(""); } })
+      .catch((err) => live && setError(err.message))
+      .finally(() => live && setLoading(false));
+    return () => { live = false; };
+  }, [today]);
+
+  const cashTotal = Number(report?.cash_total || 0);
+  const ticketCount = Number(report?.pos_ticket_count || 0);
+  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền mặt thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong className="empty-value">—</strong><small>Chưa cập nhật dữ liệu đối soát vé online.</small></article></div><div className="shift-handover"><h2>Hướng dẫn bàn giao ca</h2><ol><li>Kiểm tra lại số tiền trong két sắt.</li><li>Đảm bảo <strong>Tiền trong két = Tiền đầu ca + Tiền mặt thu tại quầy ({money.format(cashTotal)})</strong>.</li><li>In báo cáo hoặc chụp màn hình này gửi cho Quản lý trước khi ra về.</li></ol></div></section>;
 }
 
 function RoomSeatManagement() {
@@ -229,6 +249,7 @@ function Step({ number, title, text }) { return <div className="pos-step"><span>
 function dateTime(value) { return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }); }
 function showtimeTime(value) { return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }); }
 function getVietnamDateValue(value = new Date()) { return new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }); }
+function formatReportDate(value) { const [year, month, day] = String(value || "").split("-"); return year && month && day ? `${day}/${month}/${year}` : "—"; }
 function getRollingDateOptions(clock) {
   const today = getVietnamDateValue(clock);
   const base = new Date(`${today}T00:00:00+07:00`);
