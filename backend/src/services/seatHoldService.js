@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import SeatHold from "../models/SeatHold.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 import {
   MAX_SEATS_PER_HOLD,
   createSeatHoldExpiry,
@@ -123,6 +124,7 @@ const loadRequestedSeats = async ({ showtimeId, seatIds, session }) => {
   if (typeof query.populate === "function") {
     query = query.populate({
       path: "seat_id",
+      select: "seat_row seat_number seat_code seat_type_id status operational_status",
       populate: { path: "seat_type_id", select: "name description price_multiplier" },
     });
   }
@@ -158,6 +160,9 @@ export const acquireSeatHold = async ({
   }
   if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
     throw makeError("Ghế hỏng không thể giữ vé", 409);
+  }
+  if (seats.some((seat) => isSeatInMaintenance(seat.seat_id))) {
+    throw makeError("Ghế đang bảo trì không thể giữ hoặc đặt vé", 409);
   }
   validateCoupleSeatSelection(seats);
 

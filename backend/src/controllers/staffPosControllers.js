@@ -8,6 +8,7 @@ import Ticket from "../models/Ticket.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { issueBookingOrderQr } from "../services/bookingOrderService.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 
 const transactionUnsupported = (error) => /transaction numbers are only allowed|replica set member or mongos|only servers in a sharded cluster/i.test(String(error?.message || ""));
 const idOf = (value) => value?._id || value || null;
@@ -66,9 +67,9 @@ export const createCounterSale = async (req, res) => {
       if (!showtime || !showtime.movie_id || !showtime.room_id) throw Object.assign(new Error("Suất chiếu không còn khả dụng."), { statusCode: 404 });
 
       const seats = await ShowtimeSeat.find({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null })
-        .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id", populate: { path: "seat_type_id", select: "name" } })
+        .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id status operational_status", populate: { path: "seat_type_id", select: "name" } })
         .session(session);
-      if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id))) throw Object.assign(new Error("Có ghế không hợp lệ trong đơn."), { statusCode: 409 });
+      if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id) || isSeatInMaintenance(item.seat_id))) throw Object.assign(new Error("Có ghế không hợp lệ hoặc đang bảo trì trong đơn."), { statusCode: 409 });
 
       const bookingId = new mongoose.Types.ObjectId();
       const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "available" }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
