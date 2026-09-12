@@ -68,27 +68,24 @@ const formatDiscountValue = (voucher) => {
   return formatCurrency(voucher.discount_value);
 };
 
-const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus, onDelete }) => (
+const VoucherTable = ({ vouchers, onView, onEdit, onToggleStatus, onDelete }) => (
   <div className="table-wrapper vouchers-table-wrapper">
-    <table className="data-table vouchers-table">
+    <table className="data-table vouchers-table voucher-management-table">
       <thead>
         <tr>
-          <th style={{ width: "58px" }}>#</th>
-          <th style={{ width: "130px" }}>Mã giảm giá</th>
-          <th>Tên chương trình</th>
-          <th style={{ width: "120px" }}>Loại giảm</th>
-          <th style={{ width: "130px" }}>Giá trị giảm</th>
-          <th style={{ width: "190px" }}>Thời gian áp dụng</th>
-          <th style={{ width: "140px" }}>Lượt dùng</th>
-          <th style={{ width: "130px" }}>Phạm vi</th>
-          <th style={{ width: "150px" }}>Trạng thái</th>
-          <th style={{ width: "190px", textAlign: "center" }}>Thao tác</th>
+          <th>Chương trình</th>
+          <th>Ưu đãi</th>
+          <th>Điều kiện</th>
+          <th>Hiệu lực</th>
+          <th>Lượt dùng</th>
+          <th>Trạng thái</th>
+          <th className="voucher-actions-heading">Thao tác</th>
         </tr>
       </thead>
       <tbody>
         {vouchers.length === 0 ? (
           <tr>
-            <td colSpan="10">
+            <td colSpan="7">
               <div className="table-empty">
                 <div className="table-empty-icon">%</div>
                 <div className="table-empty-text">Chưa có mã giảm giá phù hợp</div>
@@ -97,7 +94,7 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus, 
             </td>
           </tr>
         ) : (
-          vouchers.map((voucher, index) => {
+          vouchers.map((voucher) => {
             const status = resolveVoucherStatus(voucher);
             const usageLimit = Number(voucher.usage_limit ?? voucher.quantity ?? 0);
             const usageCount = Number(
@@ -107,62 +104,76 @@ const VoucherTable = ({ vouchers, rowStart = 0, onView, onEdit, onToggleStatus, 
 
             return (
               <tr key={voucher._id}>
-                <td style={{ color: "var(--color-text-muted)", fontWeight: 500 }}>
-                  {rowStart + index + 1}
-                </td>
-                <td>
+                <td data-label="Chương trình">
                   <span className="voucher-code">{voucher.code}</span>
-                </td>
-                <td>
                   <div className="table-cell-name">{voucher.name || voucher.code}</div>
-                  {Number(voucher.min_order || 0) > 0 && (
-                    <div className="table-cell-desc">Đơn tối thiểu {formatCurrency(voucher.min_order)}</div>
+                </td>
+                <td data-label="Ưu đãi">
+                  <strong className="voucher-discount-value">{formatDiscountValue(voucher)}</strong>
+                  <span className="voucher-cell-sub">{discountTypeLabels[voucher.discount_type] || voucher.discount_type}</span>
+                  {voucher.discount_type === "percent" && Number(voucher.max_discount_amount || 0) > 0 && (
+                    <span className="voucher-cell-sub">Tối đa {formatCurrency(voucher.max_discount_amount)}</span>
                   )}
                 </td>
-                <td>{discountTypeLabels[voucher.discount_type] || voucher.discount_type}</td>
-                <td className="voucher-discount-value">{formatDiscountValue(voucher)}</td>
-                <td className="table-cell-date">
-                  {formatDate(voucher.start_date)} - {formatDate(voucher.end_date)}
+                <td data-label="Điều kiện">
+                  <strong className="voucher-cell-main">{scopeLabels[voucher.apply_scope] || "Toàn đơn"}</strong>
+                  <span className="voucher-cell-sub">
+                    {Number(voucher.min_order || 0) > 0
+                      ? `Đơn từ ${formatCurrency(voucher.min_order)}`
+                      : "Không yêu cầu đơn tối thiểu"}
+                  </span>
                 </td>
-                <td>
+                <td className="table-cell-date" data-label="Hiệu lực">
+                  <span>{formatDate(voucher.start_date)}</span>
+                  <span className="voucher-date-separator">→</span>
+                  <span>{formatDate(voucher.end_date)}</span>
+                </td>
+                <td data-label="Lượt dùng">
                   <strong className="text-usage">{usageCount}</strong>
                   <span className="text-muted-inline"> / {usageLimit || "∞"}</span>
                 </td>
-                <td>{scopeLabels[voucher.apply_scope] || "Toàn đơn"}</td>
-                <td>
+                <td data-label="Trạng thái">
                   <span className={`status-badge ${status.className}`}>{status.label}</span>
                 </td>
-                <td>
-                  <div className="table-actions" style={{ justifyContent: "center" }}>
+                <td className="voucher-actions-cell" data-label="Thao tác">
+                  <div className="table-actions voucher-table-actions">
                     <button
                       className="btn btn-icon btn-ghost"
+                      aria-label={`Xem chi tiết ${voucher.code}`}
                       title="Xem chi tiết"
                       onClick={() => onView(voucher)}
                       disabled={isCancelled}
+                      type="button"
                     >
                       <HiOutlineEye />
                     </button>
                     <button
                       className="btn btn-icon btn-ghost"
+                      aria-label={`Chỉnh sửa ${voucher.code}`}
                       title="Chỉnh sửa"
                       onClick={() => onEdit(voucher)}
                       disabled={isCancelled}
+                      type="button"
                     >
                       <HiOutlinePencil />
                     </button>
                     <button
                       className="btn btn-icon btn-ghost"
+                      aria-label={`${voucher.status ? "Tạm dừng" : "Kích hoạt"} ${voucher.code}`}
                       title={voucher.status ? "Tạm dừng mã" : "Kích hoạt mã"}
                       onClick={() => onToggleStatus(voucher)}
                       disabled={isCancelled}
+                      type="button"
                     >
                       {voucher.status ? <HiOutlinePause /> : <HiOutlinePlay />}
                     </button>
                     <button
                       className="btn btn-icon btn-ghost btn-danger-text"
+                      aria-label={`${usageCount > 0 ? "Hủy" : "Xóa"} ${voucher.code}`}
                       title={usageCount > 0 ? "Hủy mã và giữ lịch sử" : "Xóa mã"}
                       onClick={() => onDelete(voucher)}
                       disabled={isCancelled}
+                      type="button"
                     >
                       <HiOutlineTrash />
                     </button>
