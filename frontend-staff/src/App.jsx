@@ -75,7 +75,7 @@ function RoomSeatManagement() {
   const [showtimeSeats, setShowtimeSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [seatLoading, setSeatLoading] = useState(false);
-  const [updatingId, setUpdatingId] = useState("");
+  const [updatingIds, setUpdatingIds] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [currentTime, setCurrentTime] = useState(() => Date.now());
@@ -119,21 +119,32 @@ function RoomSeatManagement() {
 
   const updateStatus = async (showtimeSeat) => {
     const physicalSeat = showtimeSeat.seat_id;
+    const couplePair = getCoupleSeatPair(showtimeSeat, showtimeSeats, describeShowtimeSeat);
+    if (getSeatTypeTone(physicalSeat.seat_type_id) === "couple" && !couplePair) {
+      setError("Ghế đôi này chưa có đủ cặp liền kề để cập nhật.");
+      return;
+    }
+    const seatsToUpdate = couplePair || [showtimeSeat];
     const nextStatus = physicalSeat.operational_status === "maintenance" || showtimeSeat.status === "maintenance" ? "active" : "maintenance";
-    setUpdatingId(physicalSeat._id); setError(""); setNotice("");
+    setUpdatingIds(seatsToUpdate.map((item) => String(item.seat_id._id))); setError(""); setNotice("");
     try {
-      const result = await api(`/staff/pos/rooms/${room._id}/seats/${physicalSeat._id}/status`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) });
-      const refreshedSeats = await api(`/showtime-seats?showtime_id=${showtime.id}`);
+      const results = await Promise.all(seatsToUpdate.map((item) => api(`/staff/pos/rooms/${room._id}/seats/${item.seat_id._id}/status`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) })));
+      const [roomDetail, refreshedSeats] = await Promise.all([
+        api(`/staff/pos/rooms/${room._id}/seats`),
+        api(`/showtime-seats?showtime_id=${showtime.id}`),
+      ]);
       setShowtimeSeats(refreshedSeats);
-      setRoom((current) => ({ ...current, seats: current.seats.map((item) => item._id === physicalSeat._id ? result.seat : item) }));
+      setRoom(roomDetail);
       setRooms((current) => current.map((item) => {
         if (item._id !== room._id) return item;
-        const delta = nextStatus === "maintenance" ? 1 : -1;
-        return { ...item, seat_summary: { ...item.seat_summary, maintenance: item.seat_summary.maintenance + delta, active: item.seat_summary.active - delta } };
+        const maintenance = roomDetail.seats.filter((seat) => seat.operational_status === "maintenance").length;
+        return { ...item, seat_summary: { total: roomDetail.seats.length, maintenance, active: roomDetail.seats.length - maintenance } };
       }));
-      setNotice(`${result.seat.seat_code}: ${nextStatus === "maintenance" ? "đang bảo trì" : "đã sẵn sàng"}. Đã đồng bộ ${result.synced_showtime_seats} ghế theo suất chiếu.`);
+      const seatCodes = results.map((result) => result.seat.seat_code).join(" & ");
+      const syncedCount = results.reduce((sum, result) => sum + result.synced_showtime_seats, 0);
+      setNotice(`${seatCodes}: ${nextStatus === "maintenance" ? "đang bảo trì" : "đã sẵn sàng"}. Đã đồng bộ ${syncedCount} ghế theo suất chiếu.`);
     } catch (err) { setError(err.message); }
-    finally { setUpdatingId(""); }
+    finally { setUpdatingIds([]); }
   };
 
   const summary = useMemo(() => {
@@ -149,7 +160,7 @@ function RoomSeatManagement() {
         {loading ? <p className="empty-note">Đang tải phòng...</p> : rooms.map((item) => { const upcomingShowtimes = (item.today_showtimes || []).filter((itemShowtime) => itemShowtime.status === "scheduled" && new Date(itemShowtime.start_time).getTime() > currentTime); return <div className={`room-choice ${room?._id === item._id ? "selected" : ""}`} key={item._id}><div className="room-choice-title"><strong>{item.name}</strong><em>{item.seat_summary?.maintenance || 0} bảo trì</em></div><div className="room-showtimes">{upcomingShowtimes.length ? upcomingShowtimes.map((itemShowtime) => <button className={showtime?.id === itemShowtime.id ? "active" : ""} key={itemShowtime.id} onClick={() => chooseShowtime(item, itemShowtime)}><b>{showtimeTime(itemShowtime.start_time)}</b><span>{itemShowtime.movie.title}</span></button>) : <small>Không còn suất chiếu sắp tới trong ngày</small>}</div></div>; })}
       </aside>
       <section className="room-seat-panel">
-        {seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : !room || !selectedShowtimeIsUpcoming ? <div className="room-empty"><span>▤</span><h2>Chọn một suất chiếu sắp tới</h2><p>Các suất đã bắt đầu chiếu sẽ tự động được ẩn.</p></div> : <><div className="room-detail-heading"><div><span>{showtime.movie.title} · {showtimeTime(showtime.start_time)}</span><h2>{room.name}</h2></div><div className="room-stats"><b>{summary.total}<small>Tổng ghế</small></b><b className="maintenance-count">{summary.maintenance}<small>Bảo trì</small></b></div></div><div className="maintenance-help">Màu ghế thể hiện loại <strong>Thường / VIP / Đôi</strong>. Viền vàng là ghế bảo trì; ghế xám là ghế đã bán hoặc đang giữ.</div><MaintenanceSeatMap seats={showtimeSeats} updatingId={updatingId} updateStatus={updateStatus} /></>}
+        {seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : !room || !selectedShowtimeIsUpcoming ? <div className="room-empty"><span>▤</span><h2>Chọn một suất chiếu sắp tới</h2><p>Các suất đã bắt đầu chiếu sẽ tự động được ẩn.</p></div> : <><div className="room-detail-heading"><div><span>{showtime.movie.title} · {showtimeTime(showtime.start_time)}</span><h2>{room.name}</h2></div><div className="room-stats"><b>{summary.total}<small>Tổng ghế</small></b><b className="maintenance-count">{summary.maintenance}<small>Bảo trì</small></b></div></div><div className="maintenance-help">Màu ghế thể hiện loại <strong>Thường / VIP / Đôi</strong>. Bấm một ghế đôi sẽ cập nhật cả cặp. Viền vàng là ghế bảo trì; ghế xám là ghế đã bán hoặc đang giữ.</div><MaintenanceSeatMap seats={showtimeSeats} updatingIds={updatingIds} updateStatus={updateStatus} /></>}
         {notice && <div className="room-feedback success">{notice}</div>}
         {error && <div className="room-feedback error">{error}</div>}
       </section>
@@ -157,9 +168,9 @@ function RoomSeatManagement() {
   );
 }
 
-function MaintenanceSeatMap({ seats, updatingId, updateStatus }) {
+function MaintenanceSeatMap({ seats, updatingIds, updateStatus }) {
   const rows = [...new Set(seats.map((item) => item.seat_id?.seat_row))].sort();
-  return <div className="maintenance-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="maintenance" />Bảo trì</span><span><i className="taken" />Đã bán / đang giữ</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((item) => item.seat_id?.seat_row === row).sort((a, b) => a.seat_id.seat_number - b.seat_id.seat_number).map((item, index, rowSeats) => { const seat = item.seat_id; const tone = getSeatTypeTone(seat.seat_type_id); const nextTone = getSeatTypeTone(rowSeats[index + 1]?.seat_id?.seat_type_id); let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && getSeatTypeTone(rowSeats[cursor]?.seat_id?.seat_type_id) === "couple"; cursor -= 1) previousCouples += 1; const pairClass = tone === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : nextTone === "couple" ? "couple-right" : "") : ""; const maintenance = item.status === "maintenance" || seat.operational_status === "maintenance"; const unavailable = !["available", "maintenance"].includes(item.status); return <button key={item._id} disabled={updatingId === seat._id} onClick={() => updateStatus(item)} className={`seat maintenance-seat ${tone} ${pairClass} ${maintenance ? "is-maintenance" : ""} ${unavailable ? "is-taken" : ""}`} title={`${seat.seat_code} · ${seat.seat_type_id?.name || "Ghế thường"} · ${maintenance ? "Bảo trì" : item.status}`}><span>{seat.seat_number}</span>{updatingId === seat._id && <i />}</button>; })}</div><b>{row}</b></div>)}</div>;
+  return <div className="maintenance-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="maintenance" />Bảo trì</span><span><i className="taken" />Đã bán / đang giữ</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((item) => item.seat_id?.seat_row === row).sort((a, b) => a.seat_id.seat_number - b.seat_id.seat_number).map((item, index, rowSeats) => { const seat = item.seat_id; const tone = getSeatTypeTone(seat.seat_type_id); const nextTone = getSeatTypeTone(rowSeats[index + 1]?.seat_id?.seat_type_id); let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && getSeatTypeTone(rowSeats[cursor]?.seat_id?.seat_type_id) === "couple"; cursor -= 1) previousCouples += 1; const pairClass = tone === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : nextTone === "couple" ? "couple-right" : "") : ""; const maintenance = item.status === "maintenance" || seat.operational_status === "maintenance"; const unavailable = !["available", "maintenance"].includes(item.status); const updating = updatingIds.includes(String(seat._id)); return <button key={item._id} disabled={updating} onClick={() => updateStatus(item)} className={`seat maintenance-seat ${tone} ${pairClass} ${maintenance ? "is-maintenance" : ""} ${unavailable ? "is-taken" : ""}`} title={`${seat.seat_code} · ${seat.seat_type_id?.name || "Ghế thường"} · ${maintenance ? "Bảo trì" : item.status}`}><span>{seat.seat_number}</span>{updating && <i />}</button>; })}</div><b>{row}</b></div>)}</div>;
 }
 
 function CounterSale() {
@@ -181,14 +192,27 @@ function CounterSale() {
   }, [visibleShowtimes]);
   const selectedMovie = movies.find((movie) => String(movie.id) === selectedMovieId) || null;
   const activeCurrent = current && new Date(current.start_time).getTime() > clock ? current : null;
-  const chosen = seats.filter((seat) => selected.includes(seat.id)); const total = chosen.reduce((sum, seat) => sum + seat.price, 0);
+  const chosen = seats.filter((seat) => selected.includes(seat.id)); const total = calculateSelectedSeatTotal(chosen, seats);
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(effectiveDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [effectiveDate, clock]);
   const resetOrder = () => { setCurrent(null); setSeats([]); setSelected([]); setSale(null); };
   const changeDate = (date) => { setSelectedDate(date); setSelectedMovieId(""); resetOrder(); setError(""); setLoading(true); };
   const chooseMovie = (movie) => { setSelectedMovieId(String(movie.id)); resetOrder(); setError(""); };
   const choose = async (showtime) => { setCurrent(showtime); setSelected([]); setSeats([]); setSale(null); setError(""); setSeatLoading(true); try { const data = await api(`/showtime-seats?showtime_id=${showtime.id}`); setSeats(data.map(normalizeSeat)); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
-  const toggle = (seat) => seat.status === "available" && setSelected((list) => list.includes(seat.id) ? list.filter((id) => id !== seat.id) : [...list, seat.id]);
+  const toggle = (seat) => {
+    const couplePair = getCoupleSeatPair(seat, seats, (item) => item);
+    if (seat.type === "couple" && !couplePair) { setError("Ghế đôi này chưa có đủ cặp liền kề để bán."); return; }
+    const seatsToToggle = couplePair || [seat];
+    const selectedIds = new Set(selected);
+    if (seatsToToggle.some((item) => selectedIds.has(item.id))) {
+      setSelected(selected.filter((id) => !seatsToToggle.some((item) => item.id === id)));
+      setError("");
+      return;
+    }
+    if (seatsToToggle.some((item) => item.status !== "available")) { setError("Cặp ghế đôi này đã có ghế không còn trống."); return; }
+    setSelected([...selected, ...seatsToToggle.map((item) => item.id)]);
+    setError("");
+  };
   const pay = async () => { if (!current || !selected.length) return; setBusy(true); setError(""); try { const data = await api("/staff/pos/sales", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: selected, payment_method: "cash" }) }); setSale(data); setSeats((list) => list.map((seat) => selected.includes(seat.id) ? { ...seat, status: "booked" } : seat)); setSelected([]); } catch (err) { setError(err.message); choose(current); } finally { setBusy(false); } };
   const print = async () => { try { await api(`/staff/pos/sales/${sale.booking_id}/print`, { method: "POST" }); window.print(); } catch (err) { setError(err.message); } };
   return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" text="Chỉ ghế màu tím còn trống mới có thể bán." />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <SeatMap seats={seats} selected={selected} toggle={toggle} />}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span><button onClick={print}>In vé cứng</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
@@ -214,5 +238,33 @@ function getRollingDateOptions(clock) {
   });
 }
 function getSeatTypeTone(seatType) { const name = String(seatType?.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase(); if (name.includes("vip")) return "vip"; if (name.includes("doi") || name.includes("couple")) return "couple"; return "normal"; }
+function describeShowtimeSeat(item) { const seat = item.seat_id || {}; return { id: String(item._id || item.id), row: seat.seat_row, number: Number(seat.seat_number), type: getSeatTypeTone(seat.seat_type_id) }; }
+function getCoupleSeatPair(targetSeat, allSeats, describeSeat) {
+  const target = describeSeat(targetSeat);
+  if (target.type !== "couple") return [targetSeat];
+  const rowSeats = allSeats.filter((item) => describeSeat(item).row === target.row).sort((first, second) => describeSeat(first).number - describeSeat(second).number);
+  const seatIndex = rowSeats.findIndex((item) => describeSeat(item).id === target.id);
+  if (seatIndex < 0) return null;
+  let previousCouples = 0;
+  for (let index = seatIndex - 1; index >= 0 && describeSeat(rowSeats[index]).type === "couple"; index -= 1) previousCouples += 1;
+  const pairIndex = previousCouples % 2 === 1 ? seatIndex - 1 : seatIndex + 1;
+  const pairSeat = rowSeats[pairIndex];
+  if (!pairSeat || describeSeat(pairSeat).type !== "couple" || Math.abs(describeSeat(pairSeat).number - target.number) !== 1) return null;
+  return [targetSeat, pairSeat].sort((first, second) => describeSeat(first).number - describeSeat(second).number);
+}
+function calculateSelectedSeatTotal(selectedSeats, allSeats) {
+  const selectedIds = new Set(selectedSeats.map((seat) => seat.id));
+  const countedIds = new Set();
+  return selectedSeats.reduce((total, seat) => {
+    if (countedIds.has(seat.id)) return total;
+    const pair = getCoupleSeatPair(seat, allSeats, (item) => item);
+    if (seat.type === "couple" && pair?.every((item) => selectedIds.has(item.id))) {
+      pair.forEach((item) => countedIds.add(item.id));
+      return total + pair[0].price;
+    }
+    countedIds.add(seat.id);
+    return total + seat.price;
+  }, 0);
+}
 function normalizeSeat(item) { const seat = item.seat_id || item.seat || {}; const seatType = seat.seat_type_id || seat.seat_type || {}; const label = String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).toUpperCase(); return { id: item._id || item.id, label, row: seat.seat_row || label.charAt(0) || "?", number: Number(seat.seat_number || label.slice(1) || 0), price: Number(item.price || 0), status: item.status, type: getSeatTypeTone(seatType), typeName: seatType.name || "Ghế thường" }; }
 function SeatMap({ seats, selected, toggle }) { const rows = [...new Set(seats.map((seat) => seat.row))].sort(); return <div className="seat-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend sale-seat-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="selected" />Đang chọn</span><span><i className="taken" />Đã bán / đang giữ</span><span><i className="maintenance" />Bảo trì</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((seat) => seat.row === row).sort((a, b) => a.number - b.number).map((seat, index, rowSeats) => { let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && rowSeats[cursor].type === "couple"; cursor -= 1) previousCouples += 1; const pairClass = seat.type === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : rowSeats[index + 1]?.type === "couple" ? "couple-right" : "") : ""; return <button key={seat.id} disabled={seat.status !== "available"} onClick={() => toggle(seat)} className={`seat sale-seat ${seat.type} ${pairClass} ${seat.status} ${selected.includes(seat.id) ? "selected" : ""}`} title={`${seat.label} · ${seat.typeName} · ${seat.status === "maintenance" ? "Đang bảo trì" : money.format(seat.price)}`}>{seat.number || seat.label}</button>; })}</div><b>{row}</b></div>)}</div>; }

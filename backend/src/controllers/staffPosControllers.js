@@ -7,6 +7,7 @@ import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import Ticket from "../models/Ticket.js";
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { issueBookingOrderQr } from "../services/bookingOrderService.js";
+import { validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
 import { isSeatInMaintenance } from "../utils/seatStatus.js";
 
@@ -14,6 +15,24 @@ const transactionUnsupported = (error) => /transaction numbers are only allowed|
 const idOf = (value) => value?._id || value || null;
 const seatLabel = (seat = {}) => String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).trim().toUpperCase();
 const counterCode = () => `POS${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`.toUpperCase();
+const isCoupleSeat = (item) => {
+  const name = String(item?.seat_id?.seat_type_id?.name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").toLowerCase();
+  return name.includes("doi") || name.includes("couple") || name.includes("double");
+};
+const calculateSeatTotal = (seats = []) => {
+  const countedIds = new Set();
+  const sortedSeats = [...seats].sort((first, second) => String(first.seat_id?.seat_row || "").localeCompare(String(second.seat_id?.seat_row || "")) || Number(first.seat_id?.seat_number || 0) - Number(second.seat_id?.seat_number || 0));
+  return sortedSeats.reduce((total, seat, index) => {
+    const seatId = String(seat._id);
+    if (countedIds.has(seatId)) return total;
+    countedIds.add(seatId);
+    if (isCoupleSeat(seat)) {
+      const nextSeat = sortedSeats[index + 1];
+      if (nextSeat && isCoupleSeat(nextSeat) && String(nextSeat.seat_id?.seat_row || "") === String(seat.seat_id?.seat_row || "") && Number(nextSeat.seat_id?.seat_number || 0) === Number(seat.seat_id?.seat_number || 0) + 1) countedIds.add(String(nextSeat._id));
+    }
+    return total + Number(seat.price || 0);
+  }, 0);
+};
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const getVietnamDateRange = (date) => {
   const match = DATE_PATTERN.exec(String(date || ""));
@@ -86,6 +105,7 @@ export const createCounterSale = async (req, res) => {
         .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id status operational_status", populate: { path: "seat_type_id", select: "name" } })
         .session(session);
       if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id) || isSeatInMaintenance(item.seat_id))) throw Object.assign(new Error("Có ghế không hợp lệ hoặc đang bảo trì trong đơn."), { statusCode: 409 });
+      validateCoupleSeatSelection(seats);
 
       const bookingId = new mongoose.Types.ObjectId();
       const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "available" }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
@@ -96,7 +116,7 @@ export const createCounterSale = async (req, res) => {
 
       try {
         const items = seats.map((item) => ({ showtime_seat_id: item._id, seat_id: idOf(item.seat_id), seat_code: String(item.seat_id?.seat_code || ""), seat_label: seatLabel(item.seat_id), seat_type: String(item.seat_id?.seat_type_id?.name || ""), price: Number(item.price || 0) }));
-        const total = items.reduce((sum, item) => sum + item.price, 0);
+        const total = calculateSeatTotal(seats);
         const now = new Date();
         const [booking] = await Booking.create([{
           _id: bookingId, booking_code: counterCode(), ticketing_version: 2, order_qr: issueBookingOrderQr(now),
