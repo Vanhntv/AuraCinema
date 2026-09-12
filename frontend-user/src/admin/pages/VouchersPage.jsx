@@ -261,14 +261,14 @@ const VouchersPage = () => {
         </div>
       </div>
 
-      <div className="stats-grid">
+      <div className="stats-grid voucher-stats-grid">
         <div className="stat-card">
           <div className="stat-card-icon purple">
             <HiOutlineTag />
           </div>
           <div>
             <div className="stat-card-value">{totalItems}</div>
-            <div className="stat-card-label">Tổng mã giảm giá</div>
+            <div className="stat-card-label">Tổng mã</div>
           </div>
         </div>
         <div className="stat-card">
@@ -277,7 +277,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : stats.active_voucher_count}</div>
-            <div className="stat-card-label">Mã đang hoạt động</div>
+            <div className="stat-card-label">Đang hoạt động</div>
           </div>
         </div>
         <div className="stat-card">
@@ -286,7 +286,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : Number(stats.total_usage || 0).toLocaleString("vi-VN")}</div>
-            <div className="stat-card-label">Tổng lượt sử dụng</div>
+            <div className="stat-card-label">Lượt sử dụng</div>
           </div>
         </div>
         <div className="stat-card">
@@ -304,7 +304,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : formatCurrency(stats.revenue_from_voucher_orders)}</div>
-            <div className="stat-card-label">Doanh thu đơn có mã</div>
+            <div className="stat-card-label">Doanh thu từ mã</div>
           </div>
         </div>
         <div className="stat-card">
@@ -313,7 +313,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : stats.most_used_voucher?.code || "-"}</div>
-            <div className="stat-card-label">Mã dùng nhiều nhất</div>
+            <div className="stat-card-label">Dùng nhiều nhất</div>
           </div>
         </div>
         <div className="stat-card">
@@ -322,7 +322,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : Number(stats.low_remaining?.length || 0)}</div>
-            <div className="stat-card-label">Mã sắp hết lượt</div>
+            <div className="stat-card-label">Sắp hết lượt</div>
           </div>
         </div>
         <div className="stat-card">
@@ -331,7 +331,7 @@ const VouchersPage = () => {
           </div>
           <div>
             <div className="stat-card-value">{statsLoading ? "..." : formatPercent(stats.usage_rate)}</div>
-            <div className="stat-card-label">Tỷ lệ sử dụng mã</div>
+            <div className="stat-card-label">Tỷ lệ sử dụng</div>
           </div>
         </div>
       </div>
