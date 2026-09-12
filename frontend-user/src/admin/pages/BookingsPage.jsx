@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  HiOutlineChevronLeft,
+  HiOutlineChevronRight,
   HiOutlineEye,
   HiOutlineRefresh,
   HiOutlinePrinter,
@@ -377,42 +379,72 @@ const BookingsPage = () => {
         </div>
       </div>
 
-      <div className="pagination">
-        <button className="pagination-btn" disabled={currentPage <= 1 || loading} onClick={() => fetchBookings(currentPage - 1)} type="button">
-          Trước
-        </button>
-        <span className="pagination-info">Trang {currentPage} / {totalPages}</span>
-        <button className="pagination-btn" disabled={currentPage >= totalPages || loading} onClick={() => fetchBookings(currentPage + 1)} type="button">
-          Sau
-        </button>
-        <form className="pagination-lookup" onSubmit={handlePageLookup}>
-          <label htmlFor="booking-page-lookup">Đến trang</label>
-          <input
-            id="booking-page-lookup"
-            aria-describedby={pageLookupError ? "booking-page-lookup-error" : undefined}
-            aria-invalid={Boolean(pageLookupError)}
-            inputMode="numeric"
-            maxLength={String(totalPages).length}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "" || /^\d+$/.test(value)) {
-                setPageLookup(value);
-                setPageLookupError("");
-              }
-            }}
-            pattern="[0-9]*"
-            value={pageLookup}
-          />
-          <button className="pagination-go-btn" disabled={loading || pageLookup === ""} type="submit">
-            Đi
-          </button>
-        </form>
-        {pageLookupError && (
-          <span className="pagination-lookup-error" id="booking-page-lookup-error" role="alert">
-            {pageLookupError}
-          </span>
-        )}
-      </div>
+      {totalPages > 1 && (
+        <nav aria-label="Phân trang đơn vé" className="booking-pagination">
+          <div className="booking-pagination-nav">
+            <button
+              aria-label="Trang trước"
+              className="pagination-btn"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => fetchBookings(currentPage - 1)}
+              type="button"
+            >
+              <HiOutlineChevronLeft />
+              <span>Trước</span>
+            </button>
+
+            <span aria-live="polite" className="pagination-info">
+              Trang <strong>{currentPage}</strong> / {totalPages}
+            </span>
+
+            <button
+              aria-label="Trang sau"
+              className="pagination-btn"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => fetchBookings(currentPage + 1)}
+              type="button"
+            >
+              <span>Sau</span>
+              <HiOutlineChevronRight />
+            </button>
+          </div>
+
+          <form className="pagination-lookup" onSubmit={handlePageLookup}>
+            <label htmlFor="booking-page-lookup">Đi tới</label>
+            <input
+              id="booking-page-lookup"
+              aria-describedby={pageLookupError ? "booking-page-lookup-error" : undefined}
+              aria-invalid={Boolean(pageLookupError)}
+              aria-label={`Số trang, từ 1 đến ${totalPages}`}
+              inputMode="numeric"
+              maxLength={String(totalPages).length}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "" || /^\d+$/.test(value)) {
+                  setPageLookup(value);
+                  setPageLookupError("");
+                }
+              }}
+              pattern="[0-9]*"
+              value={pageLookup}
+            />
+            <button
+              aria-label="Đi đến trang đã nhập"
+              className="pagination-go-btn"
+              disabled={loading || pageLookup === "" || Number(pageLookup) === currentPage}
+              type="submit"
+            >
+              Đi
+            </button>
+          </form>
+
+          {pageLookupError && (
+            <span className="pagination-lookup-error" id="booking-page-lookup-error" role="alert">
+              {pageLookupError}
+            </span>
+          )}
+        </nav>
+      )}
 
       {selectedBooking && (
         <BookingDetailModal

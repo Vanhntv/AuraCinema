@@ -4549,11 +4549,11 @@
 }
 
 .bookings-table th:nth-child(8) {
-  width: 14%;
+  width: 12%;
 }
 
 .bookings-table th:nth-child(9) {
-  width: 6%;
+  width: 8%;
 }
 
 .bookings-table th,
@@ -4597,6 +4597,8 @@
 .bookings-table th:last-child {
   z-index: 2;
   background: #232b4b;
+  padding-right: 8px;
+  padding-left: 8px;
 }
 
 .bookings-table .booking-actions-cell {
@@ -4631,6 +4633,90 @@
   justify-content: center;
   min-width: 82px;
   max-width: none;
+}
+
+.booking-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.booking-pagination-nav,
+.booking-pagination .pagination-lookup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.booking-pagination .pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 12px;
+}
+
+.booking-pagination .pagination-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.booking-pagination .pagination-info {
+  min-width: 104px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.booking-pagination .pagination-info strong {
+  color: var(--color-text-primary);
+}
+
+.booking-pagination .pagination-lookup {
+  margin-inline-start: 0;
+  padding-inline-start: 20px;
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.booking-pagination .pagination-lookup input {
+  width: 52px;
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.booking-pagination .pagination-go-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+  color: #ffffff;
+}
+
+.booking-pagination .pagination-lookup-error {
+  flex-basis: 100%;
+  color: var(--color-danger);
+}
+
+@media (max-width: 640px) {
+  .booking-pagination {
+    gap: 10px;
+  }
+
+  .booking-pagination .pagination-lookup {
+    flex-basis: auto;
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  .booking-pagination .pagination-btn span {
+    display: none;
+  }
+
+  .booking-pagination .pagination-btn {
+    width: 36px;
+    padding: 7px;
+  }
 }
 
 .booking-detail-modal {
