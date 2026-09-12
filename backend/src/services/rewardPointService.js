@@ -58,50 +58,6 @@ export const creditRewardPointsForBooking = async ({ booking, session = null } =
   return { points, credited: true };
 };
 
-export const reverseRewardPointsForBooking = async ({ booking, session = null } = {}) => {
-  if (!booking?.user_id || !booking.reward_points_credited_at || booking.reward_points_reversed_at) {
-    return { points: 0, reversed: false };
-  }
-  requireTransaction(session);
-
-  const points = Math.max(Number(booking.reward_points_earned || 0), 0);
-  const amount = Math.max(Number(booking.total_price || 0), 0);
-  const reversedAt = new Date();
-  const claimed = await Booking.updateOne(
-    { _id: booking._id, reward_points_credited_at: { $ne: null }, reward_points_reversed_at: null },
-    { $set: { reward_points_reversed_at: reversedAt } }, { session },
-  );
-  if (!claimed.modifiedCount) return { points: 0, reversed: false };
-  const user = await User.findOneAndUpdate(
-    { _id: booking.user_id },
-    [{
-      $set: {
-        reward_points: { $subtract: [{ $ifNull: ["$reward_points", 0] }, points] },
-        total_spent: { $max: [{ $subtract: ["$total_spent", amount] }, 0] },
-      },
-    }, tierUpdateStage],
-    { returnDocument: "after", session, updatePipeline: true },
-  );
-
-  if (!user) throw new Error("Không tìm thấy chủ đơn để hoàn điểm.");
-
-  booking.reward_points_reversed_at = reversedAt;
-  if (points > 0) {
-    await RewardPointLog.create([{
-      user_id: booking.user_id,
-      booking_id: booking._id,
-      type: "subtract",
-      event_key: `refund:${booking._id}`,
-      occurred_at: reversedAt,
-      points,
-      balance_after: Number(user.reward_points || 0),
-      reason: `Thu hồi điểm do hoàn tiền đơn ${booking.booking_code}`,
-    }], { session });
-  }
-
-  return { points, reversed: true };
-};
-
 export const syncMissingRewardPointLogsForUser = async ({ userId, limit = 100 } = {}) => {
   if (!userId) return { created: 0 };
 

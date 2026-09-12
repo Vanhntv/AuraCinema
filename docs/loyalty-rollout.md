@@ -2,9 +2,9 @@
 
 ## Runtime
 
-MongoDB must be a replica set (including a single-node development replica set) or a sharded cluster. Booking, payment, expiry, admin refund, redemption and grant writes must not fall back to nontransactional execution. Do not change the topology of a running database without a backup.
+MongoDB must be a replica set (including a single-node development replica set) or a sharded cluster. Booking, payment, expiry, admin cancellation, redemption and grant writes must not fall back to nontransactional execution. Do not change the topology of a running database without a backup.
 
-`LOYALTY_REDEMPTION_ENABLED` defaults to false. Set it to `true` only after the integration suite and reconciliation succeed. Existing users also require `loyalty_reconciled_at`; newly created zero-balance accounts start reconciled. Points have no expiry in this release. Negative stored balances represent refund debt; the customer sees zero spendable points and a separate debt amount.
+`LOYALTY_REDEMPTION_ENABLED` defaults to false. Set it to `true` only after the integration suite and reconciliation succeed. Existing users also require `loyalty_reconciled_at`; newly created zero-balance accounts start reconciled. Points have no expiry in this release. Negative historical or adjusted balances remain visible as zero spendable points and a separate debt amount.
 
 ## Reconciliation
 
@@ -15,7 +15,9 @@ The script does not infer historic activation dates. Legacy wallet ownership and
 ## Business rules
 
 - Net paid spending determines Member / VIP at 3,000,000 VND / VVIP at 10,000,000 VND. Refunds recalculate the tier.
-- Earn `floor(net paid / 10,000)` points. Ticket and food spending both qualify. A refund reverses the original grant once, even if the points were already spent.
+- Earn `floor(net paid / 10,000)` points. Ticket and food spending both qualify. There is no refund workflow. Cancellation of paid bookings retains payment, points and used vouchers. Unpaid cancellation releases reserved vouchers only.
+
+Late payments are stored as `review_required` and must never reclaim released seats. Old payment states and reversal timestamps are retained only for reading historical records; admin cannot select those states. Reconciliation flags historical reversals for manual review instead of recreating them. Removing the workflow does not rewrite existing database records or test fixtures already inserted.
 - Configuring a reward or issuing a grant changes that template to personal-only. Its public code no longer applies to new orders. Existing reservations remain valid.
 - Each issued voucher allocates one unit of template inventory and snapshots terms. Checkout reserves the owned entitlement, not another template unit. Quantity shown in admin is unallocated inventory. Admin edits use a stock version check to avoid overwriting concurrent allocation.
 - A held voucher is honored until the booking payment deadline, including if its campaign changes after reservation. Failed/expired/cancelled bookings release it; the wallet then derives availability from its original expiry and live campaign status. Used vouchers stay in history even after template deletion.

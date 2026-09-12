@@ -11,15 +11,12 @@ import {
   createTicketsForPaidBooking,
 } from "../services/ticketService.js";
 import {
-  refundVoucherUsageForBooking,
+  releaseReservedVoucherForBooking,
 } from "../services/voucherService.js";
-import {
-  reverseRewardPointsForBooking,
-} from "../services/rewardPointService.js";
 import { expirePendingBooking } from "../services/bookingExpiryService.js";
 
-const PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "expired", "refund_pending", "refunded"];
-const EDITABLE_PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "refunded"];
+const PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled", "expired", "review_required", "refund_pending", "refunded"];
+const EDITABLE_PAYMENT_STATUSES = ["pending", "paid", "failed", "cancelled"];
 const BOOKING_STATUSES = ["pending", "confirmed", "cancelled"];
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -41,12 +38,6 @@ const normalizePaymentStatusForBooking = (booking, paymentStatus) => {
   }
 
   if (paymentStatus === "cancelled") {
-    updates.status = "cancelled";
-    updates.cancelled_by = booking.cancelled_by || "cinema";
-    updates.cancelled_at = booking.cancelled_at || new Date();
-  }
-
-  if (paymentStatus === "refunded") {
     updates.status = "cancelled";
     updates.cancelled_by = booking.cancelled_by || "cinema";
     updates.cancelled_at = booking.cancelled_at || new Date();
@@ -251,15 +242,15 @@ export const updateAdminBookingPayment = async (req, res) => {
 
       const wasCancelled = booking.status === "cancelled";
       const previousPaymentStatus = booking.payment_status;
-      if (paymentStatus === "refunded" && !["paid", "refunded"].includes(previousPaymentStatus)) {
-        throw Object.assign(new Error("Chỉ hoàn tiền cho đơn đã thanh toán"), { statusCode: 409 });
+      if (["review_required", "refund_pending", "refunded"].includes(previousPaymentStatus)) {
+        throw Object.assign(new Error("Không thể sửa trạng thái giao dịch cần đối soát hoặc giao dịch lịch sử"), { statusCode: 409 });
       }
 
-      if (previousPaymentStatus === "paid" && !["paid", "cancelled", "refunded"].includes(paymentStatus)) {
+      if (previousPaymentStatus === "paid" && paymentStatus !== "paid") {
         throw Object.assign(new Error("Không thể đưa đơn đã thanh toán về trạng thái chưa thanh toán"), { statusCode: 409 });
       }
 
-      if (booking.status === "cancelled" && !["cancelled", "refunded"].includes(paymentStatus)) {
+      if (booking.status === "cancelled" && paymentStatus !== "cancelled") {
         throw Object.assign(new Error("Không thể đổi đơn đã hủy về trạng thái đang bán"), { statusCode: 409 });
       }
 
@@ -274,28 +265,20 @@ export const updateAdminBookingPayment = async (req, res) => {
       ).trim();
 
       Object.assign(booking, updates);
-      if (paymentStatus === "refunded" && previousPaymentStatus !== "refunded") {
-        await reverseRewardPointsForBooking({ booking, session });
-      }
       await booking.save({ session });
 
       if (booking.status === "confirmed" && booking.payment_status === "paid" && previousPaymentStatus === "paid") {
         await createTicketsForPaidBooking(booking._id, { session });
       }
 
-      if (["cancelled", "refunded"].includes(paymentStatus) && !wasCancelled) {
+      if (paymentStatus === "cancelled" && !wasCancelled) {
         await releaseBookingSeats(booking, session);
         await restoreComboStock({ combos: booking.combos, session });
         await cancelValidTicketsForBooking(booking._id, { session });
       }
-        if ((paymentStatus === "refunded" && previousPaymentStatus !== "refunded") || (paymentStatus === "cancelled" && previousPaymentStatus !== "paid" && !wasCancelled)) {
-          await refundVoucherUsageForBooking({
-            bookingId: booking._id,
-            refundUsage: true,
-            finalStatus: paymentStatus === "refunded" ? "refunded" : "cancelled",
-            session,
-          });
-        }
+      if (paymentStatus === "cancelled" && previousPaymentStatus !== "paid" && !wasCancelled) {
+        await releaseReservedVoucherForBooking({ bookingId: booking._id, session });
+      }
       return booking._id;
     });
     const populatedBooking = await populateBooking(Booking.findById(bookingId));
@@ -307,11 +290,13 @@ export const updateAdminBookingPayment = async (req, res) => {
 
 export const cancelAdminBooking = async (req, res) => {
   try {
+    if (req.body?.refund_payment !== undefined) {
+      return res.status(400).json({ success: false, message: "Yêu cầu có tùy chọn không còn được hỗ trợ" });
+    }
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: "ID đơn vé không hợp lệ" });
     }
 
-    const refundPayment = req.body?.refund_payment === true;
     const bookingId = await withTransaction(async (session) => {
       const booking = await Booking.findById(req.params.id).session(session);
       if (!booking) {
@@ -319,20 +304,19 @@ export const cancelAdminBooking = async (req, res) => {
       }
 
       const wasCancelled = booking.status === "cancelled";
-      if (wasCancelled && (!refundPayment || booking.payment_status === "refunded")) {
+      if (wasCancelled) {
         return booking._id;
       }
 
       const wasPaid = booking.payment_status === "paid";
-      if (refundPayment && !wasPaid) throw Object.assign(new Error("Chỉ hoàn tiền cho đơn đã thanh toán"), { statusCode: 409 });
+      if (!["pending", "paid", "failed", "cancelled"].includes(booking.payment_status)) {
+        throw Object.assign(new Error("Không thể thay đổi giao dịch cần đối soát hoặc giao dịch lịch sử"), { statusCode: 409 });
+      }
       booking.status = "cancelled";
       booking.cancelled_by = "cinema";
       booking.cancellation_reason = String(req.body?.reason || "").trim();
       booking.cancelled_at = new Date();
-      booking.payment_status = refundPayment ? "refunded" : (wasPaid ? "paid" : "cancelled");
-      if (refundPayment) {
-        await reverseRewardPointsForBooking({ booking, session });
-      }
+      booking.payment_status = wasPaid ? "paid" : "cancelled";
       await booking.save({ session });
 
       if (!wasCancelled) {
@@ -340,11 +324,9 @@ export const cancelAdminBooking = async (req, res) => {
         await restoreComboStock({ combos: booking.combos, session });
         await cancelValidTicketsForBooking(booking._id, { session });
       }
-      if (!wasPaid || refundPayment) {
-        await refundVoucherUsageForBooking({
+      if (!wasPaid) {
+        await releaseReservedVoucherForBooking({
           bookingId: booking._id,
-          refundUsage: true,
-          finalStatus: refundPayment ? "refunded" : "cancelled",
           session,
         });
       }
@@ -354,7 +336,7 @@ export const cancelAdminBooking = async (req, res) => {
     const populatedBooking = await populateBooking(Booking.findById(bookingId));
     return res.json({
       success: true,
-      message: refundPayment ? "Đã hủy đơn và ghi nhận hoàn tiền" : "Đã hủy đơn vé",
+      message: "Đã hủy đơn vé",
       data: populatedBooking,
     });
   } catch (error) {

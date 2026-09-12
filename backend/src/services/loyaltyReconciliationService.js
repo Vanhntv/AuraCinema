@@ -18,15 +18,19 @@ export const reconcileLoyaltyUser = async (id, { apply = false } = {}) => {
     for (const booking of bookings) {
       if (booking.payment_status === "paid" && !booking.reward_points_credited_at) issues.push(`paid-without-credit:${booking._id}`);
       if (!booking.reward_points_credited_at) continue;
-      if (booking.payment_status === "refunded" && !booking.reward_points_reversed_at) issues.push(`refund-without-reversal:${booking._id}`);
+      // Historical reversals are read-only; do not reconstruct a removed workflow.
+      if (booking.payment_status === "refunded" || booking.reward_points_reversed_at) {
+        issues.push(`legacy-payment-history:${booking._id}`);
+        continue;
+      }
       if (!booking.reward_points_reversed_at) spent += Number(booking.total_price || 0);
-      for (const [type, time] of [["earn", booking.reward_points_credited_at], ["subtract", booking.reward_points_reversed_at]]) {
+      for (const [type, time] of [["earn", booking.reward_points_credited_at]]) {
         if (!time || !booking.reward_points_earned) continue;
         const matches = logs.filter(log => String(log.booking_id) === String(booking._id) && log.type === type);
         if (matches.length > 1) issues.push(`duplicate:${booking._id}:${type}`);
         if (!matches.length) missing.push({
           user_id: id, booking_id: booking._id, type, points: booking.reward_points_earned,
-          event_key: `${type === "earn" ? "earn" : "refund"}:${booking._id}`,
+          event_key: `earn:${booking._id}`,
           balance_after: null, reconstructed: true, occurred_at: time,
           reason: `${type === "earn" ? "Tích" : "Thu hồi"} điểm từ đơn ${booking.booking_code} (phục dựng)`,
         });
@@ -41,10 +45,10 @@ export const reconcileLoyaltyUser = async (id, { apply = false } = {}) => {
     for (const log of logs) {
       if (log.event_key) continue;
       const booking = bookings.find(b => String(b._id) === String(log.booking_id));
-      const time = booking ? log.type === "earn" ? booking.reward_points_credited_at : booking.reward_points_reversed_at : log.created_at;
+      const time = booking && log.type === "earn" ? booking.reward_points_credited_at : log.created_at;
       await RewardPointLog.updateOne({ _id: log._id }, { $set: {
         reconstructed: true, balance_after: null, occurred_at: time || null,
-        event_key: booking && ["earn", "subtract"].includes(log.type) ? `${log.type === "earn" ? "earn" : "refund"}:${booking._id}` : `legacy:${log._id}`,
+        event_key: booking && log.type === "earn" ? `earn:${booking._id}` : `legacy:${log._id}`,
       } }, { session });
     }
     const owned = await UserVoucher.find({ user_id: id }).session(session).lean();

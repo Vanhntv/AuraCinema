@@ -9,6 +9,7 @@
     "start": "node src/server.js",
     "reconcile:sepay": "node src/scripts/reconcileSepayTransactions.js",
     "reconcile:loyalty": "node src/scripts/reconcileLoyalty.js",
+    "seed:loyalty": "node src/scripts/seedLoyaltyDemo.js",
     "test": "node --test"
   },
   "keywords": [],

@@ -11,7 +11,7 @@ import Ticket from "../models/Ticket.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import {
   consumeReservedVoucherForBooking,
-  refundVoucherUsageForBooking,
+  releaseReservedVoucherForBooking,
   reserveVoucherForBooking,
   reserveVoucherUsageForPayment,
   verifyVoucherService,
@@ -789,10 +789,8 @@ export const cancelBooking = async (req, res) => {
       booking.payment_status = "cancelled";
       await booking.save({ session });
 
-      await refundVoucherUsageForBooking({
+      await releaseReservedVoucherForBooking({
         bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: "cancelled",
         session,
       });
 

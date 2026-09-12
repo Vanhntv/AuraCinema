@@ -21,7 +21,7 @@ export function getPaymentCountdownTone(remainingSeconds) {
 
 export function isBookingExpired(paymentStatus, expiresAt, now = new Date()) {
   if (paymentStatus === "paid") return false;
-  if (["expired", "refund_pending"].includes(String(paymentStatus || ""))) return true;
+  if (["expired", "review_required", "refund_pending"].includes(String(paymentStatus || ""))) return true;
   if (!expiresAt) return false;
   return getRemainingSeconds(expiresAt, now) === 0;
 }

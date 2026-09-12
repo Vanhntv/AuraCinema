@@ -23,11 +23,12 @@ const paymentStatusLabels = {
   failed: "Thanh toán lỗi",
   cancelled: "Đã hủy",
   expired: "Hết hạn TT",
-  refund_pending: "Chờ đối soát hoàn tiền",
-  refunded: "Đã hoàn tiền",
+  review_required: "Cần đối soát",
+  refund_pending: "Cần đối soát (dữ liệu cũ)",
+  refunded: "Đã hoàn tiền (dữ liệu cũ)",
 };
 
-const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled", "refunded"]);
+const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled"]);
 
 const bookingStatusLabels = {
   pending: "Chờ thanh toán",
@@ -56,7 +57,7 @@ const formatDateTime = (value) => {
 
 const statusBadgeClass = (status) => {
   if (status === "paid" || status === "confirmed") return "status-badge status-now-showing";
-  if (["pending", "failed", "refund_pending"].includes(status)) return "status-badge status-coming-soon";
+  if (["pending", "failed", "review_required", "refund_pending"].includes(status)) return "status-badge status-coming-soon";
   return "status-badge status-ended";
 };
 
@@ -557,11 +558,12 @@ const BookingDetailModal = ({
                   className="form-input"
                   onChange={(event) => onPaymentChange((current) => ({ ...current, payment_status: event.target.value }))}
                   value={paymentForm.payment_status}
+                  disabled={!editablePaymentStatuses.has(booking.payment_status) || booking.status === "cancelled"}
                 >
                   {Object.entries(paymentStatusLabels)
                     .filter(([value]) =>
                       (editablePaymentStatuses.has(value) || value === booking.payment_status) &&
-                      (booking.payment_status !== "paid" || ["paid", "cancelled", "refunded"].includes(value)),
+                      (booking.payment_status !== "paid" || value === "paid"),
                     )
                     .map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -573,7 +575,7 @@ const BookingDetailModal = ({
                   placeholder="Mã giao dịch"
                   value={paymentForm.payment_transaction_id}
                 />
-                <button className="btn btn-primary" disabled={submitting} onClick={onUpdatePayment} type="button">
+                <button className="btn btn-primary" disabled={submitting || !editablePaymentStatuses.has(booking.payment_status) || booking.status === "cancelled"} onClick={onUpdatePayment} type="button">
                   Lưu thanh toán
                 </button>
               </div>
@@ -582,10 +584,10 @@ const BookingDetailModal = ({
             <div>
               <h3>Hủy đơn</h3>
               {booking.payment_status === "paid" && (
-                <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ Ticket. Hoàn tiền cần được xử lý và đối soát trong workflow thanh toán riêng.</p>
+                <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ vé. Trạng thái đã thanh toán, điểm thưởng và voucher đã sử dụng được giữ nguyên.</p>
               )}
-              {booking.payment_status === "refund_pending" && (
-                <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; hãy đối soát giao dịch và chuyển sang “Đã hoàn tiền” sau khi xử lý.</p>
+              {["review_required", "refund_pending"].includes(booking.payment_status) && (
+                <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; giao dịch cần được đối soát.</p>
               )}
               <div className="booking-action-row">
                 <input

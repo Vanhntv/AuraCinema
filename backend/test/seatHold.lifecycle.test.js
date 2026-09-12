@@ -288,7 +288,7 @@ test("an expired booking releases owned seats and combo stock only once", async 
   });
 });
 
-test("a successful provider callback after expiry is marked for refund review", async () => {
+test("a successful provider callback after expiry requires payment review without reclaiming seats", async () => {
   const booking = {
     status: "cancelled",
     payment_status: "expired",
@@ -311,7 +311,7 @@ test("a successful provider callback after expiry is marked for refund review", 
   });
 
   assert.equal(booking.status, "cancelled");
-  assert.equal(booking.payment_status, "refund_pending");
+  assert.equal(booking.payment_status, "review_required");
   assert.equal(booking.payment_provider, "vnpay");
   assert.equal(booking.payment_transaction_id, "late-transaction");
   assert.equal(payment.status, "review_required");

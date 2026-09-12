@@ -19,7 +19,7 @@ import {
   isBookingPaymentExpired,
   markLatePaymentForReview,
 } from "../services/bookingExpiryService.js";
-import { refundVoucherUsageForBooking } from "../services/voucherService.js";
+import { releaseReservedVoucherForBooking } from "../services/voucherService.js";
 
 const normalizeMoney = (value) => Math.round(Number(value || 0));
 
@@ -105,10 +105,8 @@ const cancelUnpaidBookingAfterPaymentFailure = async ({
   );
   await restoreComboStock({ combos: booking.combos, session });
   if (booking.voucher?.voucher_id) {
-    await refundVoucherUsageForBooking({
+    await releaseReservedVoucherForBooking({
       bookingId: booking._id,
-      refundUsage: true,
-      finalStatus: "cancelled",
       session,
     });
   }
@@ -391,11 +389,11 @@ export const verifyVnpayReturn = async (req, res) => {
       return { booking: cancelledBooking, payment };
     });
 
-    const requiresRefundReview = Boolean(result.lateSuccess);
-    return res.status(requiresRefundReview ? 409 : 200).json({
-      success: success && !requiresRefundReview,
-      message: requiresRefundReview
-        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch đang chờ đối soát và hoàn tiền"
+    const requiresPaymentReview = Boolean(result.lateSuccess);
+    return res.status(requiresPaymentReview ? 409 : 200).json({
+      success: success && !requiresPaymentReview,
+      message: requiresPaymentReview
+        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch cần đối soát"
         : success ? "Thanh toán VNPay thành công" : "Thanh toán VNPay thất bại",
       data: {
         booking_id: result.booking._id,
@@ -404,7 +402,7 @@ export const verifyVnpayReturn = async (req, res) => {
         payment_id: result.payment._id,
         vnp_ResponseCode: responseCode,
         vnp_TransactionStatus: transactionStatus,
-        requires_refund_review: requiresRefundReview,
+        requires_payment_review: requiresPaymentReview,
       },
     });
   } catch (error) {
@@ -520,11 +518,11 @@ export const verifySepayPgReturn = async (req, res) => {
       return { booking, payment };
     });
 
-    const requiresRefundReview = Boolean(result.lateSuccess);
-    return res.status(requiresRefundReview ? 409 : 200).json({
-      success: success && !requiresRefundReview,
-      message: requiresRefundReview
-        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch đang chờ đối soát và hoàn tiền"
+    const requiresPaymentReview = Boolean(result.lateSuccess);
+    return res.status(requiresPaymentReview ? 409 : 200).json({
+      success: success && !requiresPaymentReview,
+      message: requiresPaymentReview
+        ? "Đã nhận thanh toán sau khi đơn hết hạn; giao dịch cần đối soát"
         : success ? "Thanh toán SePay thành công" : isExplicitFailureReturn ? "Thanh toán SePay đã bị hủy" : "Thanh toán SePay chưa hoàn tất",
       data: {
         booking_id: result.booking._id,
@@ -532,7 +530,7 @@ export const verifySepayPgReturn = async (req, res) => {
         payment_status: result.booking.payment_status,
         payment_id: result.payment._id,
         sepay_status: orderStatus,
-        requires_refund_review: requiresRefundReview,
+        requires_payment_review: requiresPaymentReview,
       },
     });
   } catch (error) {

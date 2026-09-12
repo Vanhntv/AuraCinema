@@ -21,6 +21,7 @@ test("booking expiry recognizes server statuses and a reached deadline", () => {
 
   assert.equal(isBookingExpired("expired", null, now), true);
   assert.equal(isBookingExpired("refund_pending", null, now), true);
+  assert.equal(isBookingExpired("review_required", null, now), true);
   assert.equal(isBookingExpired("pending", "2026-08-18T00:10:00.000Z", now), true);
   assert.equal(isBookingExpired("pending", "2026-08-18T00:10:00.001Z", now), false);
   assert.equal(isBookingExpired("paid", "2026-08-18T00:00:00.000Z", now), false);

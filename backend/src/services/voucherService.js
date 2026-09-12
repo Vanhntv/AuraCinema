@@ -267,28 +267,26 @@ const reserveVoucherUsageForCustomer = async ({
   throw limitError;
 };
 
-export const refundVoucherUsageForBooking = async ({
+export const releaseReservedVoucherForBooking = async ({
   bookingId,
-  refundUsage = true,
-  finalStatus = "refunded",
   session = null,
 } = {}) => {
   if (!bookingId) return null;
 
   const usage = await VoucherUsage.findOne({
     booking_id: bookingId,
-    status: { $in: ["reserved", "used"] },
+    status: "reserved",
   }).session(session);
 
   if (!usage) return null;
 
-  if (usage.user_voucher_id && refundUsage) {
+  if (usage.user_voucher_id) {
     requireTransaction(session);
-    await UserVoucher.updateOne({ _id: usage.user_voucher_id, booking_id: bookingId }, {
+    await UserVoucher.updateOne({ _id: usage.user_voucher_id, booking_id: bookingId, status: "reserved" }, {
       $set: { status: "available", booking_id: null, used_at: null },
     }, { session });
   }
-  if (!usage.user_voucher_id && refundUsage && ["reserved", "used"].includes(usage.status)) {
+  if (!usage.user_voucher_id) {
     await Voucher.updateOne(
       {
         _id: usage.voucher_id,
@@ -314,10 +312,9 @@ export const refundVoucherUsageForBooking = async ({
     );
   }
 
-  usage.status = finalStatus;
-  usage.payment_status = refundUsage ? "refunded" : usage.payment_status;
-  if (refundUsage) usage.refunded_at = new Date();
-  if (finalStatus === "cancelled") usage.cancelled_at = new Date();
+  usage.status = "cancelled";
+  usage.payment_status = "failed";
+  usage.cancelled_at = new Date();
   await usage.save({ session });
 
   return usage;

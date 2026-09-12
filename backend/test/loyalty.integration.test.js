@@ -14,10 +14,10 @@ import RewardPointLog from "../src/models/RewardPointLog.js";
 import RewardOffer from "../src/models/RewardOffer.js";
 import VoucherGrant from "../src/models/VoucherGrant.js";
 import VoucherUsage from "../src/models/VoucherUsage.js";
-import { creditRewardPointsForBooking, reverseRewardPointsForBooking, calculateEarnedRewardPoints } from "../src/services/rewardPointService.js";
+import { creditRewardPointsForBooking, calculateEarnedRewardPoints } from "../src/services/rewardPointService.js";
 import { tierForSpend, membershipView } from "../src/services/loyaltyPolicy.js";
 import { redeemReward, getWallet, getPointHistory, previewGrant, confirmGrant, walletState, saveRewardOffer } from "../src/services/loyaltyService.js";
-import { verifyVoucherService, reserveVoucherForBooking, consumeReservedVoucherForBooking, refundVoucherUsageForBooking } from "../src/services/voucherService.js";
+import { verifyVoucherService, reserveVoucherForBooking, consumeReservedVoucherForBooking, releaseReservedVoucherForBooking } from "../src/services/voucherService.js";
 import { withTransaction } from "../src/services/transactionService.js";
 
 test("loyalty thresholds, rounding and debt are explicit", () => {
@@ -104,21 +104,10 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   await assert.rejects(withTransaction(session => reserveVoucherForBooking({ bookingId: new mongoose.Types.ObjectId(), userId: user._id, voucherResult: verified, subtotalPrice: 100000, session })), /giữ/);
   await withTransaction(session => consumeReservedVoucherForBooking({ bookingId: reservationId, session }));
   assert.equal((await getWallet(user._id))[0].status, "used");
-  await withTransaction(session => refundVoucherUsageForBooking({ bookingId: reservationId, session }));
-  assert.equal((await getWallet(user._id))[0].status, "available");
-  assert.equal((await Voucher.findById(voucher._id)).quantity, 9, "refund returns entitlement, not allocated stock");
-  const reverse = () => withTransaction(async session => {
-    const fresh = await Booking.findById(booking._id).session(session);
-    await reverseRewardPointsForBooking({ booking: fresh, session });
-    fresh.payment_status = "refunded"; await fresh.save({ session });
-  });
-  await Promise.all([reverse(), reverse()]);
-  const afterRefund = await User.findById(user._id);
-  assert.equal(afterRefund.reward_points, -250);
-  assert.equal(afterRefund.total_spent, 0);
-  assert.equal(afterRefund.member_tier, "member");
+  await withTransaction(session => releaseReservedVoucherForBooking({ bookingId: reservationId, session }));
+  assert.equal((await getWallet(user._id))[0].status, "used", "used vouchers cannot be released");
+  assert.equal((await Voucher.findById(voucher._id)).quantity, 9);
   await assert.rejects(redeemReward(user._id, offer._id, "redemption-request-0003"), /điểm/);
-  assert.equal(await RewardPointLog.countDocuments({ event_key: `refund:${booking._id}` }), 1);
   const history = await getPointHistory(user._id, { type: "redeem" });
   assert.equal(history.data.length, 1);
   assert.equal(history.data[0].user_voucher_id.code, item.code);
@@ -128,6 +117,17 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   assert.equal(preview.count, 1);
   await Promise.all([confirmGrant(admin, preview.id), confirmGrant(admin, preview.id)]);
   assert.equal(await UserVoucher.countDocuments({ user_id: stranger._id }), 1);
+  const granted = await UserVoucher.findOne({ user_id: stranger._id });
+  const heldId = new mongoose.Types.ObjectId();
+  const grantedResult = await verifyVoucherService({ user_voucher_id: granted._id, user_id: stranger._id, order_amount: 100000 });
+  await withTransaction(session => reserveVoucherForBooking({ bookingId: heldId, userId: stranger._id, voucherResult: grantedResult, subtotalPrice: 100000, session }));
+  await Promise.all([
+    withTransaction(session => releaseReservedVoucherForBooking({ bookingId: heldId, session })),
+    withTransaction(session => releaseReservedVoucherForBooking({ bookingId: heldId, session })),
+  ]);
+  assert.equal((await UserVoucher.findById(granted._id)).status, "available");
+  assert.equal((await VoucherUsage.findOne({ booking_id: heldId })).status, "cancelled");
+  assert.equal((await Voucher.findById(voucher._id)).quantity, 8, "releasing a hold preserves allocated stock");
   const beforeRollback = (await Voucher.findById(voucher._id)).quantity;
   await assert.rejects(withTransaction(async session => {
     await Voucher.updateOne({ _id: voucher._id }, { $inc: { quantity: -1 } }, { session });
@@ -135,9 +135,9 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
     throw new Error("injected failure");
   }), /injected failure/);
   assert.equal((await Voucher.findById(voucher._id)).quantity, beforeRollback);
-  assert.equal((await User.findById(user._id)).reward_points, -250);
+  assert.equal((await User.findById(user._id)).reward_points, 50);
   await Voucher.updateOne({ _id: voucher._id }, { $set: { deleted_at: new Date() } });
-  const pausedWallet = await getWallet(user._id);
+  const pausedWallet = await getWallet(stranger._id);
   assert.equal(pausedWallet.length, 1);
   assert.equal(pausedWallet[0].status, "paused");
   assert.equal(pausedWallet[0].voucher.name, "Test reward");

@@ -204,7 +204,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
         transactionKey,
         bookingId: expiredBooking._id,
         status: "review_required",
-        errorMessage: "Thanh toán đến sau khi đơn đã hết hạn; cần hoàn tiền/đối soát",
+        errorMessage: "Thanh toán đến sau khi đơn đã hết hạn; cần đối soát",
         session,
       });
       return;
