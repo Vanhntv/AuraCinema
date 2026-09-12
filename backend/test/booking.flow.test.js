@@ -495,7 +495,7 @@ test("confirm booking payment marks reserved seats as booked", async () => {
         }).then(resolve, reject);
       },
     })],
-    [Showtime, "findOne", () => sessionResult({
+    [Showtime, "findOneAndUpdate", async () => ({
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
       room_id: new mongoose.Types.ObjectId(),
@@ -583,7 +583,7 @@ test("admin payment cannot confirm a booking whose seats are owned by another bo
   await withPatched([
     [mongoose, "startSession", async () => makeFakeSession()],
     [Booking, "findById", () => sessionResult(booking)],
-    [Showtime, "findOne", () => sessionResult({ _id: showtimeId })],
+    [Showtime, "findOneAndUpdate", async () => ({ _id: showtimeId })],
     [ShowtimeSeat, "updateMany", async (filter) => {
       assert.equal(String(filter.reserved_by_booking_id), String(bookingId));
       return { modifiedCount: 0 };

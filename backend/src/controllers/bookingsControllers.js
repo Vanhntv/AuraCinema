@@ -166,9 +166,14 @@ export const markBookingAsPaid = async ({
     throw Object.assign(new Error("Đơn vé không ở trạng thái chờ thanh toán"), { statusCode: 409 });
   }
 
-  const showtime = await Showtime.findOne({ _id: booking.showtime_id, deleted_at: null }).session(session);
+  // Serialize payment with showtime cancellation on the same document.
+  const showtime = await Showtime.findOneAndUpdate(
+    { _id: booking.showtime_id, deleted_at: null, status: { $ne: "cancelled" } },
+    { $inc: { __v: 1 } },
+    { session, returnDocument: "after" },
+  );
   if (!showtime) {
-    throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
+    throw Object.assign(new Error("Suất chiếu không còn khả dụng"), { statusCode: 409 });
   }
 
   const seatIds = booking.showtime_seat_ids.map((seatId) => seatId);

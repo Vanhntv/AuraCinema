@@ -15,7 +15,7 @@ The script does not infer historic activation dates. Legacy wallet ownership and
 ## Business rules
 
 - Net paid spending determines Member / VIP at 3,000,000 VND / VVIP at 10,000,000 VND. Refunds recalculate the tier.
-- Earn `floor(net paid / 10,000)` points. Ticket and food spending both qualify. There is no refund workflow. Cancellation of paid bookings retains payment, points and used vouchers. Unpaid cancellation releases reserved vouchers only.
+- Earn `floor(net paid / 10,000)` points. Ticket and food spending both qualify. Paid bookings cannot be cancelled or refunded, including by admins. A showtime with a paid booking cannot be cancelled. Unpaid cancellation releases reserved vouchers only.
 
 Late payments are stored as `review_required` and must never reclaim released seats. Old payment states and reversal timestamps are retained only for reading historical records; admin cannot select those states. Reconciliation flags historical reversals for manual review instead of recreating them. Removing the workflow does not rewrite existing database records or test fixtures already inserted.
 - Configuring a reward or issuing a grant changes that template to personal-only. Its public code no longer applies to new orders. Existing reservations remain valid.

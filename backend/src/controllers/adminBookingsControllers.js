@@ -304,19 +304,21 @@ export const cancelAdminBooking = async (req, res) => {
       }
 
       const wasCancelled = booking.status === "cancelled";
+      if (booking.payment_status === "paid") {
+        throw Object.assign(new Error("Đơn đã thanh toán không thể hủy hoặc hoàn tiền"), { statusCode: 409 });
+      }
       if (wasCancelled) {
         return booking._id;
       }
 
-      const wasPaid = booking.payment_status === "paid";
-      if (!["pending", "paid", "failed", "cancelled"].includes(booking.payment_status)) {
+      if (!["pending", "failed", "cancelled"].includes(booking.payment_status)) {
         throw Object.assign(new Error("Không thể thay đổi giao dịch cần đối soát hoặc giao dịch lịch sử"), { statusCode: 409 });
       }
       booking.status = "cancelled";
       booking.cancelled_by = "cinema";
       booking.cancellation_reason = String(req.body?.reason || "").trim();
       booking.cancelled_at = new Date();
-      booking.payment_status = wasPaid ? "paid" : "cancelled";
+      booking.payment_status = "cancelled";
       await booking.save({ session });
 
       if (!wasCancelled) {
@@ -324,12 +326,7 @@ export const cancelAdminBooking = async (req, res) => {
         await restoreComboStock({ combos: booking.combos, session });
         await cancelValidTicketsForBooking(booking._id, { session });
       }
-      if (!wasPaid) {
-        await releaseReservedVoucherForBooking({
-          bookingId: booking._id,
-          session,
-        });
-      }
+      await releaseReservedVoucherForBooking({ bookingId: booking._id, session });
 
       return booking._id;
     });

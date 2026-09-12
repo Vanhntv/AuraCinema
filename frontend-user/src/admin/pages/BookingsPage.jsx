@@ -581,11 +581,8 @@ const BookingDetailModal = ({
               </div>
             </div>
 
-            <div>
+            {booking.payment_status !== "paid" && <div>
               <h3>Hủy đơn</h3>
-              {booking.payment_status === "paid" && (
-                <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ vé. Trạng thái đã thanh toán, điểm thưởng và voucher đã sử dụng được giữ nguyên.</p>
-              )}
               {["review_required", "refund_pending"].includes(booking.payment_status) && (
                 <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; giao dịch cần được đối soát.</p>
               )}
@@ -606,7 +603,7 @@ const BookingDetailModal = ({
                   Hủy đơn
                 </button>
               </div>
-            </div>
+            </div>}
           </div>
         </>
       )}
