@@ -363,8 +363,8 @@ const BookingsPage = () => {
                     <td>{currencyFormatter.format(Number(booking.total_price || 0))}</td>
                     <td><span className={statusBadgeClass(booking.payment_status)}>{paymentStatusLabels[booking.payment_status] || booking.payment_status}</span></td>
                     <td><span className={statusBadgeClass(booking.status)}>{bookingStatusLabels[booking.status] || booking.status}</span></td>
-                    <td>
-                      <button className="action-btn view" onClick={() => openDetail(booking)} title="Xem chi tiết" type="button">
+                    <td className="booking-actions-cell">
+                      <button aria-label="Xem chi tiết đơn vé" className="action-btn view" onClick={() => openDetail(booking)} title="Xem chi tiết" type="button">
                         <HiOutlineEye />
                       </button>
                     </td>
@@ -467,8 +467,8 @@ const BookingDetailModal = ({
   reprinting,
   submitting,
 }) => (
-  <div className="modal-overlay active">
-    <div className="booking-detail-modal">
+  <div className="modal-overlay active" onClick={onClose}>
+    <div className="booking-detail-modal" onClick={(event) => event.stopPropagation()}>
       <div className="modal-header">
         <div>
           <h2>Chi tiết đơn vé</h2>
@@ -500,12 +500,12 @@ const BookingDetailModal = ({
               <div>
                 <h3>Vé trong đơn và in lại</h3>
                 <p className="booking-admin-note">Chỉ vé còn hiệu lực mới được in lại. Lý do là bắt buộc và được lưu trong lịch sử đơn.</p>
-                <div style={{ display: "grid", gap: "8px", margin: "12px 0" }}>
+                <div className="booking-ticket-list">
                   {(booking.tickets || []).map((ticket) => {
                     const selectable = ticket.status === "VALID";
                     const selected = reprintTicketIds.includes(String(ticket.id));
                     return (
-                      <label className="booking-info-item" key={ticket.id} style={{ cursor: selectable ? "pointer" : "not-allowed" }}>
+                      <label className={`booking-ticket-item${selected ? " selected" : ""}${selectable ? "" : " disabled"}`} key={ticket.id}>
                         <input
                           type="checkbox"
                           disabled={!selectable || reprinting}
@@ -514,8 +514,10 @@ const BookingDetailModal = ({
                             ? [...current, String(ticket.id)]
                             : current.filter((id) => id !== String(ticket.id)))}
                         />
-                        <span>{ticket.seatLabel} · {ticket.seatType || "Loại ghế chưa cập nhật"}</span>
-                        <strong>{ticket.ticketCode} · {ticket.status}{ticket.printedAt ? " · Đã in" : " · Chưa in"}</strong>
+                        <span className="booking-ticket-copy">
+                          <strong>{ticket.seatLabel} · {ticket.seatType || "Loại ghế chưa cập nhật"}</strong>
+                          <small>{ticket.ticketCode} · {ticket.status}{ticket.printedAt ? " · Đã in" : " · Chưa in"}</small>
+                        </span>
                       </label>
                     );
                   })}
