@@ -14,6 +14,18 @@ const transactionUnsupported = (error) => /transaction numbers are only allowed|
 const idOf = (value) => value?._id || value || null;
 const seatLabel = (seat = {}) => String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).trim().toUpperCase();
 const counterCode = () => `POS${Date.now().toString(36)}${crypto.randomBytes(3).toString("hex")}`.toUpperCase();
+const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const getVietnamDateRange = (date) => {
+  const match = DATE_PATTERN.exec(String(date || ""));
+  if (!match) return null;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return null;
+  const start = new Date(Date.UTC(year, month - 1, day, -7));
+  return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
+};
+const getVietnamDay = (date = new Date()) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 const runWithTransaction = async (work) => {
   const session = await mongoose.startSession();
   try {
@@ -29,10 +41,13 @@ const runWithTransaction = async (work) => {
 export const getCounterShowtimes = async (req, res) => {
   try {
     const now = new Date();
+    const selectedDate = String(req.query?.date || getVietnamDay(now));
+    const dateRange = getVietnamDateRange(selectedDate);
+    if (!dateRange) return res.status(400).json({ success: false, message: "Ngày chiếu không hợp lệ." });
     const showtimes = await Showtime.find({
       deleted_at: null,
-      status: { $in: ["scheduled", "now_showing"] },
-      end_time: { $gt: now },
+      status: "scheduled",
+      start_time: { $gte: new Date(Math.max(dateRange.start.getTime(), now.getTime() + 1)), $lt: dateRange.end },
     })
       .populate("movie_id", "title poster age_limit")
       .populate({ path: "room_id", select: "name status cinema_id", populate: { path: "cinema_id", select: "name address" } })
@@ -46,7 +61,8 @@ export const getCounterShowtimes = async (req, res) => {
     return res.json({ success: true, data: showtimes.filter((item) => item.movie_id && item.room_id?.status === "active").map((item) => ({
       id: item._id, movie: { id: item.movie_id._id, title: item.movie_id.title, poster: item.movie_id.poster || "" },
       room: { id: item.room_id._id, name: item.room_id.name, cinema: item.room_id.cinema_id?.name || "" },
-      start_time: item.start_time, end_time: item.end_time, available_seats: countByShowtime.get(String(item._id)) || 0,
+      start_time: item.start_time, end_time: item.end_time, status: item.status,
+      available_seats: countByShowtime.get(String(item._id)) || 0,
     })) });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
 };
