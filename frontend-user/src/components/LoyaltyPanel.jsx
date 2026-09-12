@@ -85,22 +85,24 @@ export default function LoyaltyPanel({ tab, user, onTabChange, refreshProfile })
   const count = (status) => wallet.filter(item => status === "available" ? !["used", "expired"].includes(item.status) : item.status === status).length;
   const voucher = selected?.wallet?.voucher || selected?.offer?.voucher_id;
 
-  return <section className="loyalty-surface" aria-busy={loading}>
+  return <section className={`loyalty-surface${tab === "member" ? " loyalty-member-surface" : ""}`} aria-busy={loading}>
     {notice && <p className="loyalty-success" role="status">{notice}</p>}
     {loading ? <p role="status">Đang tải...</p> : error ? <div role="alert"><p>{error}</p><button onClick={reload}>Thử lại</button></div> : membership && <>
       {tab === "member" && <>
-        <h2>Thẻ thành viên</h2>
+        <h2>Thông tin thẻ thành viên</h2>
         <div className="loyalty-member-layout">
           <div className={`loyalty-member-card tier-${membership.tier}`}>
             <header><strong>AURACINEMA</strong><span>{membership.label}</span></header>
-            <div><h3>{user.full_name}</h3><p>{membership.code || "Chưa cấp mã"}</p></div>
-            <footer>{membership.active ? "Đang hoạt động" : "Chưa hoạt động"}</footer>
+            <div className="loyalty-card-tier"><p>Hạng thẻ</p><strong>{membership.label}</strong></div>
+            <div className="loyalty-card-owner"><p>Chủ thẻ</p><h3>{user.full_name || "Aura Member"}</h3><p>Mã thẻ</p><strong>{membership.code || "Chưa cấp mã"}</strong></div>
           </div>
           <div className="loyalty-member-details">
-            <dl><div><dt>Điểm khả dụng</dt><dd>{membership.available_points.toLocaleString("vi-VN")}</dd></div>
+            <dl>
+              <div><dt>Trạng thái thẻ</dt><dd className={membership.active ? "loyalty-success" : undefined}>{membership.active ? "Đang hoạt động" : "Chưa hoạt động"}</dd></div>
+              <div><dt>Điểm khả dụng</dt><dd>{membership.available_points.toLocaleString("vi-VN")}</dd></div>
               {membership.points_debt > 0 && <div><dt>Điểm cần bù</dt><dd>{membership.points_debt}</dd></div>}
               <div><dt>Chi tiêu xét hạng</dt><dd>{money(membership.spent)}</dd></div>
-              <div><dt>Ngày kích hoạt</dt><dd>{date(membership.activated_at)}</dd></div></dl>
+            </dl>
             <progress aria-label="Tiến độ lên hạng" max="100" value={membership.progress} />
             <p>{membership.next ? `Còn ${money(membership.remaining)} để lên ${membership.next}.` : "Bạn đang ở hạng cao nhất."}</p>
             <button onClick={() => onTabChange("points")}>Đổi điểm lấy voucher</button>
