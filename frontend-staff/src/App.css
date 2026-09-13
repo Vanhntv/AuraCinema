@@ -159,7 +159,14 @@
 .scanner-empty span, .room-empty > span, .showtime-clock, .order-total strong, .combo-info small, .order-combos strong, .pos-date-tabs strong, .room-showtimes b, .room-stats b { color: var(--accent); }
 .room-stats b { background: var(--surface-subtle); }
 .screen { color: var(--accent); background: linear-gradient(180deg, rgba(70, 95, 255, .18), rgba(70, 95, 255, .02)); }
-.seat-legend .available, .seat.available, .maintenance-seat.normal, .type-legend .normal, .seat.sale-seat.normal { background: #465fff; }
+.seat-legend .available,
+.seat.available,
+.maintenance-seat.normal,
+.type-legend .normal,
+.seat.sale-seat.normal {
+  color: #344054;
+  background: #c9dcf8;
+}
 .seat-legend .selected, .seat.selected, .maintenance-seat.vip, .type-legend .vip, .seat.sale-seat.vip { background: #7f56d9; }
 .maintenance-seat.couple, .type-legend .couple, .seat.sale-seat.couple { background: #f04438; }
 .order-seats b { color: #3641f5; background: #ecf3ff; }
