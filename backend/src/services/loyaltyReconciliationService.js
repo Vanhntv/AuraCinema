@@ -7,6 +7,12 @@ import Voucher from "../models/Voucher.js";
 import { tierForSpend } from "./loyaltyPolicy.js";
 import { withTransaction } from "./transactionService.js";
 
+export const bookingNeedsRewardCreditReview = (booking, memberActivatedAt) => {
+  if (booking.payment_status !== "paid" || booking.reward_points_credited_at) return false;
+  if (!memberActivatedAt || !booking.created_at) return true;
+  return new Date(booking.created_at) >= new Date(memberActivatedAt);
+};
+
 export const reconcileLoyaltyUser = async (id, { apply = false } = {}) => {
   const inspect = async session => {
     const user = await User.findById(id).session(session).lean();
@@ -15,8 +21,13 @@ export const reconcileLoyaltyUser = async (id, { apply = false } = {}) => {
     const missing = [];
     const issues = [];
     let spent = 0;
+    const memberActivatedAt = user.member_activated_at
+      ? new Date(user.member_activated_at)
+      : null;
     for (const booking of bookings) {
-      if (booking.payment_status === "paid" && !booking.reward_points_credited_at) issues.push(`paid-without-credit:${booking._id}`);
+      if (bookingNeedsRewardCreditReview(booking, memberActivatedAt)) {
+        issues.push(`paid-without-credit:${booking._id}`);
+      }
       if (!booking.reward_points_credited_at) continue;
       // Historical reversals are read-only; do not reconstruct a removed workflow.
       if (booking.payment_status === "refunded" || booking.reward_points_reversed_at) {
