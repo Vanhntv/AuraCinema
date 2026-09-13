@@ -18,6 +18,45 @@
 .room-empty { display:grid; min-height:390px; place-content:center; text-align:center; }.room-empty>span { color:#8b5cf6; font-size:48px; }.room-empty h2 { margin:10px 0 5px; }.room-empty p { margin:0; color:var(--muted); font-size:13px; }.room-feedback { margin-top:14px; padding:11px 13px; border-radius:8px; font-size:12px; }.room-feedback.success { color:#bbf7d0; background:rgba(34,197,94,.12); }.room-feedback.error { color:#fecaca; background:rgba(239,68,68,.13); }
 @keyframes seat-spin { to { transform:rotate(360deg); } }
 @media (max-width:900px) { .room-management { grid-template-columns:1fr; }.room-list-panel { max-height:260px; overflow:auto; } }
+.counter-print-document { display:none; }
+@media print {
+  @page { size:A6 landscape; margin:7mm; }
+  html,body,#root { margin:0!important; color:#111!important; background:#fff!important; }
+  .sidebar,.header,.page-heading,.pos-layout>.pos-workspace,.pos-layout>.order-panel,.pos-alert { display:none!important; }
+  .staff-main { min-height:0!important; margin:0!important; }
+  .staff-content { max-width:none!important; padding:0!important; }
+  .pos-layout { display:block!important; margin:0!important; }
+  .counter-print-document { display:block!important; color:#111; font-family:Arial,Helvetica,sans-serif; }
+  .counter-ticket,.counter-order-receipt { box-sizing:border-box; min-height:88mm; padding:5mm; overflow:hidden; border:1.2px solid #111; border-radius:3mm; background:#fff; break-inside:avoid; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  .print-page-break { break-after:page; page-break-after:always; }
+  .counter-ticket header,.counter-order-receipt header { display:flex; align-items:flex-start; justify-content:space-between; padding-bottom:3mm; border-bottom:1px solid #111; }
+  .counter-ticket header>div { display:grid; gap:1mm; }
+  .counter-ticket header>div>strong,.counter-order-receipt header>strong { font-size:16pt; letter-spacing:1px; }
+  .counter-ticket header span { font-size:8pt; }
+  .counter-ticket header>b,.counter-order-receipt header>b { padding:1.5mm 2.5mm; color:#fff; background:#111; font-size:8pt; letter-spacing:.8px; }
+  .counter-ticket-body { display:grid; grid-template-columns:minmax(0,1fr) 34mm; gap:5mm; padding:4mm 0 3mm; }
+  .counter-ticket-info h1 { margin:0 0 3mm; font-size:15pt; line-height:1.15; }
+  .counter-ticket-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:3mm; }
+  .counter-ticket-grid>div,.counter-order-meta>div { display:grid; gap:.8mm; }
+  .counter-ticket-grid span,.counter-order-meta span,.counter-ticket-code span { color:#555; font-size:6.5pt; text-transform:uppercase; letter-spacing:.25px; }
+  .counter-ticket-grid strong,.counter-order-meta strong { font-size:9pt; }
+  .counter-ticket-grid .prominent strong { font-size:17pt; line-height:1; }
+  .counter-ticket-code { display:grid; gap:1mm; margin-top:3mm; padding-top:2mm; border-top:1px dashed #888; }
+  .counter-ticket-code strong { font-family:"Courier New",monospace; font-size:11pt; letter-spacing:.7px; }
+  .counter-ticket-qr { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }
+  .counter-ticket-qr img { width:31mm; height:31mm; image-rendering:pixelated; }
+  .counter-ticket-qr strong { margin-top:1mm; font-size:6.5pt; }
+  .counter-ticket-qr small { margin-top:.5mm; color:#555; font-size:5.5pt; }
+  .counter-ticket footer { display:flex; justify-content:space-between; gap:5mm; padding-top:2mm; border-top:1px solid #bbb; color:#444; font-size:6pt; }
+  .counter-ticket footer b { color:#111; white-space:nowrap; }
+  .counter-order-receipt h1 { margin:5mm 0 4mm; font-size:15pt; }
+  .counter-order-meta { display:grid; grid-template-columns:repeat(3,1fr); gap:4mm; padding-bottom:4mm; border-bottom:1px dashed #888; }
+  .counter-combo-list { display:grid; gap:2mm; padding:4mm 0; }
+  .counter-combo-list>div,.counter-order-totals>span,.counter-order-totals>strong { display:flex; justify-content:space-between; gap:8mm; font-size:9pt; }
+  .counter-order-totals { display:grid; gap:1.5mm; padding-top:3mm; border-top:1px solid #111; }
+  .counter-order-totals>strong { margin-top:1mm; font-size:11pt; }
+  .counter-order-receipt p { margin:4mm 0 0; color:#555; font-size:7pt; text-align:center; }
+}
 .room-choice { display:block; cursor:default; }.room-choice:hover { border-color:transparent; background:#151c2e; }.room-choice.selected { border-color:rgba(139,92,246,.65); background:#1b223a; }
 .room-choice-title { display:flex; align-items:center; justify-content:space-between; gap:10px; }.room-choice-title strong { font-size:14px; }.room-choice-title em { color:#fbbf24; font-size:10px; font-style:normal; }
 .room-showtimes { display:grid; gap:6px; margin-top:10px; }.room-showtimes>button { display:grid; grid-template-columns:48px minmax(0,1fr); gap:8px; align-items:center; width:100%; padding:8px 9px; border:1px solid rgba(148,163,184,.1); border-radius:8px; color:#cbd5e1; background:#0f1629; text-align:left; }.room-showtimes>button:hover,.room-showtimes>button.active { border-color:#8b5cf6; background:rgba(139,92,246,.14); }.room-showtimes b { color:#c4b5fd; font-size:12px; }.room-showtimes span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; }.room-showtimes>small { padding:7px 2px 2px; color:#64748b; font-size:11px; font-style:italic; }

@@ -9,7 +9,7 @@ import SeatHold from "../models/SeatHold.js";
 import Ticket from "../models/Ticket.js";
 import TicketScanLog, { createTicketScanLogSafe } from "../models/TicketScanLog.js";
 import User from "../models/User.js";
-import { createTicketsForPaidBooking, hashQrToken } from "../services/ticketService.js";
+import { buildTicketQrPayload, createTicketsForPaidBooking, decryptQrToken, hashQrToken } from "../services/ticketService.js";
 import { issueBookingOrderQr, parseBookingQrPayload } from "../services/bookingOrderService.js";
 import { validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
@@ -298,13 +298,33 @@ export const printCounterSale = async (req, res) => {
     if (req.user.role !== "admin") filter.sold_by = req.user.id;
     const booking = await Booking.findOne(filter);
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn bán tại quầy." });
-    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt").sort({ seatLabel: 1 });
+    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("+qrTokenEncrypted").sort({ seatLabel: 1 });
     if (!existingTickets.length) return res.status(404).json({ success: false, message: "Đơn chưa có vé để in." });
     if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in trước đó và không thể in lại tại quầy." });
+    const payment = await Payment.findOne({ booking_id: booking._id, status: "paid" }).sort({ paid_at: -1 });
+    const printData = {
+      order_code: booking.booking_code,
+      payment_code: payment?.payment_code || booking.payment_transaction_id || "",
+      cinema_name: booking.showtime_snapshot?.cinema_name || "Aura Cinema",
+      cinema_address: booking.showtime_snapshot?.cinema_address || "",
+      movie: booking.movie_snapshot?.title || "",
+      start_time: booking.showtime_snapshot?.start_time || null,
+      room_name: booking.showtime_snapshot?.room_name || "",
+      combos: booking.combos || [],
+      pricing: booking.pricing || {},
+      total_price: Number(booking.total_price || 0),
+      paid_at: payment?.paid_at || booking.paid_at || null,
+      tickets: existingTickets.map((ticket) => ({
+        ticket_code: ticket.ticketCode,
+        seat_label: ticket.seatLabel,
+        seat_type: ticket.seatType || "Ghế thường",
+        price: Number(ticket.price || 0),
+        qr_payload: buildTicketQrPayload(decryptQrToken(ticket.qrTokenEncrypted)),
+      })),
+    };
     const now = new Date();
     const printClaim = await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
     if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in hoặc không còn đủ điều kiện in." });
-    const tickets = await Ticket.find({ bookingId: booking._id }).sort({ seatLabel: 1 });
-    return res.json({ success: true, data: { booking_code: booking.booking_code, movie: booking.movie_snapshot.title, showtime: booking.showtime_snapshot, seats: booking.seat_items.map((item) => item.seat_label), total_price: booking.total_price, tickets: tickets.map((item) => ({ code: item.ticketCode, seat: item.seatLabel })) } });
+    return res.json({ success: true, data: printData });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
 };
