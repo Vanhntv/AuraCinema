@@ -7,6 +7,7 @@ import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import SeatHold from "../models/SeatHold.js";
 import Ticket from "../models/Ticket.js";
+import TicketScanLog, { createTicketScanLogSafe } from "../models/TicketScanLog.js";
 import User from "../models/User.js";
 import { createTicketsForPaidBooking, hashQrToken } from "../services/ticketService.js";
 import { issueBookingOrderQr, parseBookingQrPayload } from "../services/bookingOrderService.js";
@@ -95,6 +96,15 @@ export const lookupStaffBookingOrder = async (req, res) => {
       return res.status(409).json({ success: false, message: "Đơn vé chưa thanh toán hoặc đã bị hủy." });
     }
 
+    const bookingTickets = await Ticket.find({ bookingId: booking._id }).select("_id").lean();
+    await Promise.all(bookingTickets.map((ticket) => createTicketScanLogSafe({
+      ticketId: ticket._id,
+      adminId: req.user.id,
+      action: "VERIFY",
+      result: "SUCCESS",
+      scannedAt: new Date(),
+    })));
+
     const seats = Array.isArray(booking.seat_items) ? booking.seat_items : [];
     const seatLabels = seats.map((item) => item.seat_label || item.seat_code).filter(Boolean);
     const seatTypes = [...new Set(seats.map((item) => item.seat_type).filter(Boolean))];
@@ -173,7 +183,7 @@ export const getShiftReport = async (req, res) => {
     const dateRange = getVietnamDateRange(selectedDate);
     if (!dateRange) return res.status(400).json({ success: false, message: "Ngày báo cáo không hợp lệ." });
 
-    const [staff, bookings] = await Promise.all([
+    const [staff, bookings, scannedTicketIds] = await Promise.all([
       User.findOne({ _id: req.user.id, deleted_at: null }).select("full_name").lean(),
       Booking.find({
         sales_channel: "counter",
@@ -182,7 +192,17 @@ export const getShiftReport = async (req, res) => {
         payment_status: "paid",
         paid_at: { $gte: dateRange.start, $lt: dateRange.end },
       }).select("total_price showtime_seat_ids").lean(),
+      TicketScanLog.distinct("ticketId", {
+        adminId: req.user.id,
+        action: { $in: ["VERIFY", "CHECK_IN"] },
+        result: "SUCCESS",
+        scannedAt: { $gte: dateRange.start, $lt: dateRange.end },
+        ticketId: { $ne: null },
+      }),
     ]);
+    const onlineScannedCount = scannedTicketIds.length
+      ? await Ticket.countDocuments({ _id: { $in: scannedTicketIds }, userId: { $ne: null } })
+      : 0;
 
     const cashTotal = bookings.reduce((sum, booking) => sum + Number(booking.total_price || 0), 0);
     const posTicketCount = bookings.reduce((sum, booking) => sum + (booking.showtime_seat_ids?.length || 0), 0);
@@ -193,7 +213,7 @@ export const getShiftReport = async (req, res) => {
         date: selectedDate,
         cash_total: cashTotal,
         pos_ticket_count: posTicketCount,
-        online_scanned_count: null,
+        online_scanned_count: onlineScannedCount,
       },
     });
   } catch (error) {

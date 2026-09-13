@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import TransactionHistory from "./TransactionHistory.jsx";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const menu = [
@@ -68,7 +69,7 @@ export default function App() {
         <header className="header"><div className="header-left"><button className="header-toggle desktop-toggle" onClick={() => setCollapsed(!collapsed)}>☰</button><button className="header-toggle mobile-toggle" onClick={() => setMobile(true)}>☰</button><div className="breadcrumb"><span>Nhân viên</span><b>/</b><strong>{crumb}</strong></div></div><div className="header-right"><label className="header-search"><span>⌕</span><input placeholder="Tìm kiếm..." /></label><button className="header-icon">♢<i /></button><div className="header-user"><div>N</div><span><strong>Nhân viên</strong><small>Quầy vé</small></span></div></div></header>
         <main className="staff-content">
           <section className="page-heading"><span>{crumb}</span><h1>{title}</h1><p>{description}</p></section>
-          {active === "scanner" ? <TicketScanner /> : active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
+          {active === "scanner" ? <TicketScanner /> : active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : active === "history" ? <TransactionHistory api={api} /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
         </main>
       </div>
     </div>
@@ -188,16 +189,30 @@ function ShiftReport() {
 
   useEffect(() => {
     let live = true;
-    api(`/staff/pos/shift-report?date=${encodeURIComponent(today)}`)
-      .then((data) => { if (live) { setReport(data); setError(""); } })
-      .catch((err) => live && setError(err.message))
-      .finally(() => live && setLoading(false));
-    return () => { live = false; };
+    let refreshing = false;
+    const loadReport = async () => {
+      if (!live || refreshing) return;
+      refreshing = true;
+      try {
+        const data = await api(`/staff/pos/shift-report?date=${encodeURIComponent(today)}`);
+        if (live) { setReport(data); setError(""); }
+      } catch (err) {
+        if (live) setError(err.message);
+      } finally {
+        refreshing = false;
+        if (live) setLoading(false);
+      }
+    };
+    loadReport();
+    const timer = window.setInterval(loadReport, 10_000);
+    window.addEventListener("focus", loadReport);
+    return () => { live = false; window.clearInterval(timer); window.removeEventListener("focus", loadReport); };
   }, [today]);
 
   const cashTotal = Number(report?.cash_total || 0);
   const ticketCount = Number(report?.pos_ticket_count || 0);
-  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền mặt thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong className="empty-value">—</strong><small>Chưa cập nhật dữ liệu đối soát vé online.</small></article></div></section>;
+  const onlineScannedCount = Number(report?.online_scanned_count || 0);
+  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền mặt thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong>{loading ? "..." : `${onlineScannedCount} vé`}</strong><small>Vé online do bạn xác nhận check-in trong ngày.</small></article></div></section>;
 }
 
 function RoomSeatManagement() {
