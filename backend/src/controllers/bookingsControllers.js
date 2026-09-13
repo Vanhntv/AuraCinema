@@ -109,7 +109,6 @@ const isTransactionUnsupportedError = (error) => {
 
   return (
     message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
     message.includes("replica set member or mongos")
   );
 };
@@ -125,6 +124,12 @@ const runWithOptionalTransaction = async (work) => {
     return result;
   } catch (error) {
     if (isTransactionUnsupportedError(error)) {
+      console.error("Booking transaction failed because MongoDB rejected transaction support", {
+        name: error?.name,
+        code: error?.code,
+        codeName: error?.codeName,
+        message: error?.message,
+      });
       if (process.env.NODE_ENV === "production") {
         throw Object.assign(
           new Error("MongoDB production cần replica set hoặc sharded cluster để xử lý booking an toàn"),
@@ -369,20 +374,19 @@ const reserveComboStock = async ({ combos, session }) => {
     }
   }
 
-  const updateResults = await Promise.all(
-    combos.map((item) =>
-      Combo.updateOne(
-        {
-          _id: item.combo_id,
-          deleted_at: null,
-          status: true,
-          stock: { $gte: item.quantity },
-        },
-        { $inc: { stock: -item.quantity } },
-        { session },
-      ),
-    ),
-  );
+  const updateResults = [];
+  for (const item of combos) {
+    updateResults.push(await Combo.updateOne(
+      {
+        _id: item.combo_id,
+        deleted_at: null,
+        status: true,
+        stock: { $gte: item.quantity },
+      },
+      { $inc: { stock: -item.quantity } },
+      { session },
+    ));
+  }
 
   const failedIndex = updateResults.findIndex((result) => result.modifiedCount !== 1);
   if (failedIndex !== -1) {
@@ -414,15 +418,13 @@ const restoreComboStock = async ({ combos = [], session }) => {
 
   if (!restorableCombos.length) return;
 
-  await Promise.all(
-    restorableCombos.map((item) =>
-      Combo.updateOne(
-        { _id: item.combo_id },
-        { $inc: { stock: item.quantity } },
-        { session },
-      ),
-    ),
-  );
+  for (const item of restorableCombos) {
+    await Combo.updateOne(
+      { _id: item.combo_id },
+      { $inc: { stock: item.quantity } },
+      { session },
+    );
+  }
 };
 
 export const createBooking = async (req, res) => {
@@ -444,24 +446,22 @@ export const createBooking = async (req, res) => {
 
     const createdBooking = await runWithOptionalTransaction(async (session) => {
       const now = new Date();
-      const [user, showtime, hold] = await Promise.all([
-        User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session),
-        Showtime.findOne({ _id: showtime_id, deleted_at: null })
-          .populate({ path: "movie_id", select: "title poster age_limit" })
-          .populate({
-            path: "room_id",
-            select: "name cinema_id",
-            populate: { path: "cinema_id", select: "name address" },
-          })
-          .session(session),
-        SeatHold.findOne({
-          token: holdToken,
-          user_id: req.user.id,
-          showtime_id,
-          status: "active",
-          expires_at: { $gt: now },
-        }).session(session),
-      ]);
+      const user = await User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session);
+      const showtime = await Showtime.findOne({ _id: showtime_id, deleted_at: null })
+        .populate({ path: "movie_id", select: "title poster age_limit" })
+        .populate({
+          path: "room_id",
+          select: "name cinema_id",
+          populate: { path: "cinema_id", select: "name address" },
+        })
+        .session(session);
+      const hold = await SeatHold.findOne({
+        token: holdToken,
+        user_id: req.user.id,
+        showtime_id,
+        status: "active",
+        expires_at: { $gt: now },
+      }).session(session);
 
       if (!user) throw Object.assign(new Error("Không tìm thấy tài khoản"), { statusCode: 404 });
       if (!showtime) throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
