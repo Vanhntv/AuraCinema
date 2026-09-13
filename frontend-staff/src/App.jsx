@@ -1,14 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  HiOutlineBell,
+  HiOutlineChartBar,
+  HiOutlineClipboardList,
+  HiOutlineLogout,
+  HiOutlineMenu,
+  HiOutlineMoon,
+  HiOutlineQrcode,
+  HiOutlineSearch,
+  HiOutlineShoppingBag,
+  HiOutlineSparkles,
+  HiOutlineViewGrid,
+} from "react-icons/hi";
 import "./App.css";
 import TransactionHistory from "./TransactionHistory.jsx";
+import auraCinemaLogo from "../../frontend-user/src/assets/logo-datn-auracinema.jpg";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const menu = [
-  ["scanner", "Quét vé", "⌗"],
-  ["counter", "Bán vé tại quầy", "▣"],
-  ["rooms", "Quản lý phòng và ghế", "▤"],
-  ["shift", "Báo cáo ca làm việc", "▥"],
-  ["history", "Lịch sử giao dịch", "◷"],
+  ["scanner", "Quét vé", HiOutlineQrcode],
+  ["counter", "Bán vé tại quầy", HiOutlineShoppingBag],
+  ["rooms", "Quản lý phòng và ghế", HiOutlineViewGrid],
+  ["shift", "Báo cáo ca làm việc", HiOutlineChartBar],
+  ["history", "Lịch sử giao dịch", HiOutlineClipboardList],
 ];
 const titles = {
   scanner: ["Quét vé", "Quét và check-in vé", "Dùng camera, ảnh QR hoặc mã vé để kiểm tra và đón khách vào rạp."],
@@ -51,24 +65,62 @@ export default function App() {
   const [active, setActive] = useState("counter");
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
+  const [staff, setStaff] = useState(null);
   const [crumb, title, description] = titles[active];
   consumeStaffTokenFromHash();
+
+  useEffect(() => {
+    let live = true;
+    api("/auth/profile")
+      .then((profile) => live && setStaff(profile))
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  const staffName = staff?.full_name || staff?.email || "Nhân viên";
+  const staffInitial = staffName.charAt(0).toUpperCase();
+  const handleLogout = () => {
+    localStorage.removeItem("staffAccessToken");
+    localStorage.removeItem("adminAccessToken");
+    localStorage.removeItem("accessToken");
+    const userAppUrl = (import.meta.env.VITE_USER_URL || "http://localhost:5173").replace(/\/$/, "");
+    window.location.assign(`${userAppUrl}/dang-nhap`);
+  };
 
   return (
     <div className={`staff-layout ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${collapsed ? "collapsed" : ""} ${mobile ? "mobile-open" : ""}`}>
-        <div className="sidebar-logo"><div className="sidebar-logo-icon">A</div><span className="sidebar-logo-text">AuraCinema</span></div>
+        <div className="sidebar-logo">
+          <img className="sidebar-logo-image" src={auraCinemaLogo} alt="AuraCinema" />
+          <div className="sidebar-logo-copy"><span className="sidebar-logo-text">AuraCinema</span></div>
+        </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-title">Nhân viên</div>
-          {menu.map(([id, label, icon]) => <button key={id} className={`sidebar-link ${active === id ? "active" : ""}`} onClick={() => { setActive(id); setMobile(false); }} title={collapsed ? label : undefined}><span className="sidebar-link-icon">{icon}</span><span className="sidebar-link-text">{label}</span></button>)}
+          {menu.map(([id, label, Icon]) => <button key={id} type="button" className={`sidebar-link ${active === id ? "active" : ""}`} onClick={() => { setActive(id); setMobile(false); }} title={collapsed ? label : undefined}><span className="sidebar-link-icon"><Icon /></span><span className="sidebar-link-text">{label}</span></button>)}
         </nav>
-        <div className="sidebar-footer"><div className="sidebar-footer-avatar">N</div><div className="sidebar-footer-details"><strong>Nhân viên</strong><span>Nhân viên quầy vé</span></div></div>
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-kicker"><HiOutlineSparkles /><span>Vận hành rạp phim</span></div>
+          <div className="sidebar-footer-info"><div className="sidebar-footer-avatar">{staffInitial}</div><div className="sidebar-footer-details"><strong>{staffName}</strong><span>Nhân viên quầy vé</span></div></div>
+        </div>
       </aside>
       {mobile && <button className="sidebar-overlay" onClick={() => setMobile(false)} aria-label="Đóng menu" />}
       <div className="staff-main">
-        <header className="header"><div className="header-left"><button className="header-toggle desktop-toggle" onClick={() => setCollapsed(!collapsed)}>☰</button><button className="header-toggle mobile-toggle" onClick={() => setMobile(true)}>☰</button><div className="breadcrumb"><span>Nhân viên</span><b>/</b><strong>{crumb}</strong></div></div><div className="header-right"><label className="header-search"><span>⌕</span><input placeholder="Tìm kiếm..." /></label><button className="header-icon">♢<i /></button><div className="header-user"><div>N</div><span><strong>Nhân viên</strong><small>Quầy vé</small></span></div></div></header>
+        <header className="header">
+          <div className="header-left">
+            <button type="button" className="header-toggle header-toggle-desktop" onClick={() => setCollapsed(!collapsed)} title="Thu/mở sidebar"><HiOutlineMenu /></button>
+            <button type="button" className="header-toggle header-toggle-mobile" onClick={() => setMobile(true)} title="Mở menu"><HiOutlineMenu /></button>
+            <div className="header-title-group"><div className="breadcrumb"><span>Nhân viên</span><b>/</b><span>{crumb}</span></div><strong>{crumb}</strong></div>
+          </div>
+          <div className="header-right">
+            <label className="header-search"><HiOutlineSearch /><input placeholder="Tìm kiếm..." aria-label="Tìm kiếm" /></label>
+            <button type="button" className="header-icon" title="Chế độ tối"><HiOutlineMoon /></button>
+            <button type="button" className="header-icon header-notification" title="Thông báo"><HiOutlineBell /><i /></button>
+            <div className="header-user"><div>{staffInitial}</div><span><strong>{staffName}</strong><small>Nhân viên quầy vé</small></span></div>
+            <button type="button" className="header-icon" onClick={handleLogout} title="Đăng xuất"><HiOutlineLogout /></button>
+          </div>
+        </header>
         <main className="staff-content">
-          <section className="page-heading"><span>{crumb}</span><h1>{title}</h1><p>{description}</p></section>
+          <section className="page-heading"><h1>{title}</h1><p>{description}</p></section>
           {active === "scanner" ? <TicketScanner /> : active === "counter" ? <CounterSale /> : active === "rooms" ? <RoomSeatManagement /> : active === "shift" ? <ShiftReport /> : active === "history" ? <TransactionHistory api={api} /> : <section className="content-card empty-page"><h2>{crumb}</h2><p>Chức năng này đang được chuẩn bị cho nhân viên rạp.</p></section>}
         </main>
       </div>
