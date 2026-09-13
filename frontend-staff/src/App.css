@@ -25,7 +25,7 @@
 .maintenance-seat { border:2px solid transparent; overflow:visible; }.maintenance-seat.is-maintenance { border-color:#fbbf24; color:#fef3c7; box-shadow:0 0 0 2px rgba(245,158,11,.2); }.maintenance-seat.is-taken { border-color:transparent; color:#cbd5e1; background:#475569; opacity:.55; }
 .maintenance-seat.is-maintenance.is-taken { border-color:#fbbf24; }
 .maintenance-seat.couple-right { margin-right:-5px; border-radius:7px 2px 2px 7px; }.maintenance-seat.couple-left { border-left:1px solid rgba(255,255,255,.2); border-radius:2px 7px 7px 2px; }
-.seat.sale-seat { border:2px solid transparent; overflow:visible; }.seat.sale-seat.normal { background:#3b82f6; }.seat.sale-seat.vip { background:#8b5cf6; }.seat.sale-seat.couple { background:#ec4899; }.seat.sale-seat.booked,.seat.sale-seat.held,.seat.sale-seat.reserved { border-color:transparent; color:#cbd5e1; background:#475569; opacity:.55; }.seat.sale-seat.maintenance { border-color:#fbbf24; color:#422006; background:#f59e0b; opacity:.75; }.seat.sale-seat.selected { border-color:#f8fafc; box-shadow:0 0 0 2px rgba(248,250,252,.28); }.seat.sale-seat.couple-right { margin-right:-5px; border-radius:7px 2px 2px 7px; }.seat.sale-seat.couple-left { border-left-color:rgba(255,255,255,.25); border-radius:2px 7px 7px 2px; }.sale-seat-legend .selected { border:2px solid #f8fafc; background:transparent; box-shadow:0 0 0 2px rgba(248,250,252,.2); }
+.seat.sale-seat { border:2px solid transparent; overflow:visible; transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .15s ease; }.seat.sale-seat.normal { background:#3b82f6; }.seat.sale-seat.vip { background:#8b5cf6; }.seat.sale-seat.couple { background:#ec4899; }.seat.sale-seat.booked,.seat.sale-seat.held,.seat.sale-seat.reserved { border-color:transparent; color:#cbd5e1; background:#475569; opacity:.55; }.seat.sale-seat.maintenance { border-color:#fbbf24; color:#422006; background:#f59e0b; opacity:.75; }.seat.sale-seat.selected { border-color:#f8fafc; box-shadow:0 0 0 2px rgba(248,250,252,.28); }.seat.sale-seat.couple-right { margin-right:-5px; border-radius:7px 2px 2px 7px; }.seat.sale-seat.couple-left { border-left-color:rgba(255,255,255,.25); border-radius:2px 7px 7px 2px; }.sale-seat-legend .selected { border:2px solid #f8fafc; background:transparent; box-shadow:0 0 0 2px rgba(248,250,252,.2); }
 .seat-map + .pos-step { margin-top:28px; }.combo-picker { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; margin:0 0 8px 39px; }.combo-card { display:grid; grid-template-columns:72px minmax(0,1fr); gap:12px; padding:11px; border:1px solid var(--border); border-radius:11px; background:#151c2e; }.combo-card.sold-out { opacity:.65; }.combo-image { display:grid; width:72px; height:72px; place-items:center; overflow:hidden; border-radius:9px; color:#c4b5fd; background:#0f1629; font-size:13px; font-weight:700; }.combo-image img { width:100%; height:100%; object-fit:cover; }.combo-info { display:grid; align-content:space-between; gap:6px; min-width:0; }.combo-info>div:first-child { display:grid; gap:3px; }.combo-info strong { overflow:hidden; color:#f8fafc; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }.combo-info small { color:#c4b5fd; font-size:12px; font-weight:700; }.combo-info p { display:-webkit-box; overflow:hidden; margin:0; color:#64748b; font-size:10px; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.combo-actions,.combo-actions>span { display:flex; align-items:center; justify-content:space-between; gap:7px; }.combo-actions em { color:#4ade80; font-size:10px; font-style:normal; }.sold-out .combo-actions em { color:#fca5a5; }.combo-actions button { display:grid; width:28px; height:28px; place-items:center; border-radius:50%; color:#fff; background:rgba(139,92,246,.28); font-size:17px; font-weight:700; }.combo-actions button:last-child { background:#8b5cf6; }.combo-actions button:disabled { cursor:not-allowed; opacity:.35; }.combo-actions b { min-width:18px; text-align:center; font-size:12px; }.combo-message { margin:0 0 24px 39px; padding:12px; border-radius:9px; background:#151c2e; }.combo-error { color:#fca5a5; background:rgba(239,68,68,.12); }.order-combos { display:grid; gap:7px; padding:12px 0; border-bottom:1px solid var(--border); }.order-combos>span { color:var(--secondary); font-size:12px; }.order-combos>div,.order-breakdown span { display:flex; justify-content:space-between; gap:10px; font-size:11px; }.order-combos>div span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.order-combos strong { color:#c4b5fd; white-space:nowrap; }.order-breakdown { display:grid; gap:6px; padding:12px 0 0; color:var(--secondary); }.order-breakdown strong { color:#f1f5f9; }
 .pos-date-tabs { display:flex; gap:9px; margin:6px 0 18px 39px; overflow-x:auto; }.pos-date-tabs button { display:grid; grid-template-columns:auto auto; align-items:center; gap:1px 8px; min-width:104px; padding:9px 12px; border:1px solid var(--border); border-radius:10px; color:#94a3b8; background:#151c2e; text-align:left; }.pos-date-tabs button:hover,.pos-date-tabs button.active { border-color:#8b5cf6; color:#f1f5f9; background:rgba(139,92,246,.14); }.pos-date-tabs span { grid-column:1/-1; font-size:10px; font-weight:600; text-transform:capitalize; }.pos-date-tabs strong { color:#c4b5fd; font-size:22px; line-height:1; }.pos-date-tabs small { font-size:10px; white-space:nowrap; }
 @media (max-width:900px) { .combo-picker { grid-template-columns:1fr; } }
@@ -57,6 +57,8 @@
   --seat-normal-text: #344054;
   --seat-vip-bg: #7f56d9;
   --seat-couple-bg: #d94f41;
+  --seat-selected-bg: #12b76a;
+  --seat-selected-hover-bg: #039855;
   --seat-maintenance-bg: #f59e0b;
   --seat-maintenance-text: #422006;
   --seat-unavailable-bg: #98a2b3;
@@ -212,17 +214,6 @@
   opacity: .65;
 }
 
-.seat.sale-seat.selected:not(.maintenance) {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(70, 95, 255, .2);
-}
-
-.sale-seat-legend .selected {
-  border: 2px solid var(--accent);
-  background: #fff;
-  box-shadow: none;
-}
-
 /* One shared seat palette for counter sale and room management. */
 .maintenance-seat.normal:not(.is-maintenance):not(.is-taken),
 .seat.sale-seat.normal:not(.maintenance):not(.booked):not(.held):not(.reserved) {
@@ -262,6 +253,26 @@
 .type-legend .couple { background: var(--seat-couple-bg); }
 .type-legend .maintenance { background: var(--seat-maintenance-bg); }
 .type-legend .taken { background: var(--seat-unavailable-bg); }
+
+/* A selected seat uses one solid confirmation color, regardless of seat type. */
+.seat.sale-seat.selected:not(.maintenance):not(.booked):not(.held):not(.reserved) {
+  border-color: #079455;
+  color: #fff;
+  background: var(--seat-selected-bg);
+  box-shadow: 0 0 0 3px rgba(18, 183, 106, .2), 0 4px 8px rgba(3, 152, 85, .2);
+  transform: translateY(-1px);
+}
+
+.seat.sale-seat.selected:not(.maintenance):not(.booked):not(.held):not(.reserved):hover {
+  background: var(--seat-selected-hover-bg);
+}
+
+.sale-seat-legend .selected {
+  border: 1px solid #079455;
+  background: var(--seat-selected-bg);
+  box-shadow: 0 0 0 2px rgba(18, 183, 106, .16);
+}
+
 .order-seats b { color: #3641f5; background: #ecf3ff; }
 .combo-info strong, .order-breakdown strong, .pos-date-tabs button.active { color: var(--primary); }
 .combo-actions button { color: #3641f5; background: #ecf3ff; }
