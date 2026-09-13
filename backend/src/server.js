@@ -31,6 +31,7 @@ import adminTicketsRoute from "./router/adminTicketsRouters.js";
 import giftsRoute from "./router/giftsRouters.js";
 import policiesRoute from "./router/policiesRouters.js";
 import staffPosRoute from "./router/staffPosRouters.js";
+import { startGiftLifecycleWorker } from "./services/giftLifecycleWorker.js";
 import { startBookingLifecycleWorker } from "./services/bookingLifecycleWorker.js";
 
 const app = express();
@@ -118,6 +119,7 @@ app.use((error, req, res, next) => {
 
 connectDB().then(() => {
   startBookingLifecycleWorker();
+  startGiftLifecycleWorker();
   const server = app.listen(PORT, () => {
     console.log(`Backend running on port ${PORT}`);
   });

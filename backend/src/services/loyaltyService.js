@@ -85,7 +85,7 @@ export const saveRewardOffer = async (body) => {
   });
 };
 
-const allocateVoucher = async ({ voucherId, userId, source, issueKey, adminId, session }) => {
+export const allocateVoucher = async ({ voucherId, userId, source, issueKey, adminId, session }) => {
   // Stock is allocated at issuance; checkout only consumes the owned entitlement.
   const template = await Voucher.findOneAndUpdate({
     _id: voucherId, deleted_at: null, status: true, quantity: { $gt: 0 }, end_date: { $gt: new Date() },

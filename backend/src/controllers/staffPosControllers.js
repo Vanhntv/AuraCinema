@@ -1,5 +1,22 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
+import { lookupGiftQr, useGiftQr } from "../services/giftEntitlementService.js";
+
+export const lookupStaffGift = async (req, res) => {
+  try {
+    return res.json({ success: true, data: await lookupGiftQr(req.body?.qr_payload) });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+export const redeemStaffGift = async (req, res) => {
+  try {
+    return res.json({ success: true, message: "Đã xác nhận trao quà.", data: await useGiftQr(req.body?.qr_payload, req.user.id) });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";

@@ -14,7 +14,7 @@ const userVoucherSchema = new mongoose.Schema(
       required: true,
     },
     code: { type: String, default: () => `AW${randomBytes(10).toString("hex").toUpperCase()}` },
-    source: { type: String, enum: ["admin", "redeem", "legacy"], default: "legacy" },
+    source: { type: String, enum: ["admin", "redeem", "gift", "legacy"], default: "legacy" },
     requires_review: { type: Boolean, default: false },
     issue_key: { type: String },
     snapshot: { type: mongoose.Schema.Types.Mixed, default: null },

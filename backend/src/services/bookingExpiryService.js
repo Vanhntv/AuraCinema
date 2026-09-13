@@ -5,6 +5,7 @@ import Payment from "../models/Payment.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { PAYMENT_DURATION_MS, createPaymentExpiry, isExpired } from "./seatHoldPolicy.js";
 import { releaseReservedVoucherForBooking } from "./voucherService.js";
+import { releaseGiftForBooking } from "./giftEntitlementService.js";
 
 const makeError = (message, statusCode) =>
   Object.assign(new Error(message), { statusCode });
@@ -27,7 +28,7 @@ const runWithOptionalTransaction = async (work) => {
     return result;
   } catch (error) {
     if (isTransactionUnsupportedError(error) && process.env.NODE_ENV !== "production") {
-      throw Object.assign(new Error("MongoDB cần replica set để giải phóng đơn và voucher an toàn."), { statusCode: 503 });
+      throw Object.assign(new Error("MongoDB cần replica set để giải phóng đơn, voucher và quà tặng an toàn."), { statusCode: 503 });
     }
     throw error;
   } finally {
@@ -130,6 +131,9 @@ export const expirePendingBooking = async ({
       bookingId: expiredBooking._id,
       session,
     });
+  }
+  if (expiredBooking.gift?.user_gift_id) {
+    await releaseGiftForBooking({ bookingId: expiredBooking._id, session });
   }
 
   await Payment.updateMany(

@@ -13,7 +13,7 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
-import { createGift, deleteGift, getGiftById, getGifts, toggleGiftStatus, updateGift } from "../services/giftService";
+import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -37,7 +37,6 @@ const statusClasses = {
 
 const memberTierOptions = [
   { value: "member", label: "Member" },
-  { value: "gold", label: "Gold" },
   { value: "vip", label: "VIP" },
   { value: "vvip", label: "VVIP" },
 ];
@@ -260,6 +259,14 @@ const emptyGiftForm = {
   description: "",
   image_url: "",
   type: "ticket",
+  acquisition_modes: ["manual"],
+  trigger: "none",
+  redemption_channel: "online",
+  max_per_user: 1,
+  validity_days: "",
+  benefit_reference_id: "",
+  benefit_quantity: 1,
+  seat_types: "",
   value_label: "",
   value: "",
   quantity: "",
@@ -284,6 +291,14 @@ const buildGiftFormFromGift = (gift) => ({
   description: gift?.description || "",
   image_url: gift?.image_url || "",
   type: gift?.type || "ticket",
+  acquisition_modes: gift?.acquisition_modes?.length ? gift.acquisition_modes : ["manual"],
+  trigger: gift?.trigger || "none",
+  redemption_channel: gift?.redemption_channel || "online",
+  max_per_user: gift?.max_per_user || 1,
+  validity_days: gift?.validity_days ?? "",
+  benefit_reference_id: gift?.benefit?.combo_id || gift?.benefit?.voucher_id || "",
+  benefit_quantity: gift?.benefit?.quantity || 1,
+  seat_types: stringifyList(gift?.benefit?.seat_types),
   value_label: gift?.value_label || "",
   value: gift?.value ?? "",
   quantity: gift?.quantity ?? "",
@@ -336,6 +351,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
         : prev.member_tiers.filter((item) => item !== tier),
     }));
   };
+  const handleModeToggle = (mode, checked) => handleChange("acquisition_modes", checked
+    ? [...new Set([...formData.acquisition_modes, mode])]
+    : formData.acquisition_modes.filter((item) => item !== mode));
 
   const validate = () => {
     const nextErrors = {};
@@ -351,6 +369,10 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     const objectIdPattern = /^[a-f\d]{24}$/i;
 
     if (!formData.name.trim()) nextErrors.name = "Tên quà là bắt buộc";
+    if (!formData.acquisition_modes.length) nextErrors.acquisition_modes = "Chọn ít nhất một hình thức nhận";
+    if (["combo", "voucher"].includes(formData.type) && !objectIdPattern.test(formData.benefit_reference_id)) nextErrors.benefit_reference_id = `ID ${formData.type === "combo" ? "combo" : "voucher"} không hợp lệ`;
+    if (!Number.isInteger(Number(formData.max_per_user)) || Number(formData.max_per_user) < 1) nextErrors.max_per_user = "Giới hạn nhận phải là số nguyên dương";
+    if (formData.validity_days !== "" && (!Number.isInteger(Number(formData.validity_days)) || Number(formData.validity_days) < 1)) nextErrors.validity_days = "Số ngày phải là số nguyên dương";
     if (!isIssuedGift && !/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
       nextErrors.code = "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự";
     }
@@ -411,6 +433,20 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       description: formData.description.trim(),
       image_url: formData.image_url.trim(),
       type: formData.type,
+      acquisition_modes: formData.acquisition_modes,
+      trigger: formData.trigger,
+      redemption_channel: formData.redemption_channel,
+      max_per_user: Number(formData.max_per_user),
+      validity_days: formData.validity_days === "" ? null : Number(formData.validity_days),
+      benefit: formData.type === "ticket"
+        ? { quantity: Number(formData.benefit_quantity), max_unit_price: Number(formData.value || 0), seat_types: parseDelimitedList(formData.seat_types) }
+        : formData.type === "combo"
+          ? { combo_id: formData.benefit_reference_id, quantity: Number(formData.benefit_quantity) }
+          : formData.type === "voucher"
+            ? { voucher_id: formData.benefit_reference_id }
+            : formData.type === "point"
+              ? { points: Number(formData.value || 0) }
+              : { label: formData.value_label.trim() },
       value_label: formData.value_label.trim(),
       value: formData.value === "" ? 0 : Number(formData.value),
       quantity: Number(formData.quantity),
@@ -485,6 +521,25 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                     <option value="physical">Quà vật phẩm</option>
                   </select>
                 </div>
+              </div>
+            </section>
+
+            <section className="voucher-form-section">
+              <h3>Cách nhận và sử dụng</h3>
+              <div className="segmented-options">
+                {[{ value: "manual", label: "Admin cấp" }, { value: "automatic", label: "Tự động" }, { value: "points", label: "Đổi bằng điểm" }].map((mode) => <label key={mode.value}><input type="checkbox" checked={formData.acquisition_modes.includes(mode.value)} onChange={(event) => handleModeToggle(mode.value, event.target.checked)} disabled={isIssuedGift} />{mode.label}</label>)}
+              </div>
+              {errors.acquisition_modes && <p className="form-error">{errors.acquisition_modes}</p>}
+              <div className="form-row">
+                <div className="form-group"><label className="form-label">Sự kiện phát tự động</label><select className="form-input" value={formData.trigger} onChange={(event) => handleChange("trigger", event.target.value)} disabled={isIssuedGift}><option value="none">Không áp dụng</option><option value="new_member">Thành viên mới</option><option value="birthday">Sinh nhật</option><option value="tier_reached">Đạt hạng thành viên</option><option value="paid_booking">Thanh toán đơn thành công</option></select></div>
+                <div className="form-group"><label className="form-label">Kênh sử dụng</label><select className="form-input" value={formData.redemption_channel} onChange={(event) => handleChange("redemption_channel", event.target.value)} disabled={isIssuedGift}><option value="online">Đặt vé trực tuyến</option><option value="counter">Nhận tại quầy</option><option value="both">Trực tuyến hoặc tại quầy</option><option value="instant">Chuyển ngay vào tài khoản</option></select></div>
+                <div className="form-group"><label className="form-label">Số lượt tối đa mỗi người</label><input className={`form-input ${errors.max_per_user ? "error" : ""}`} type="number" min="1" value={formData.max_per_user} onChange={(event) => handleChange("max_per_user", event.target.value)} disabled={isIssuedGift} />{errors.max_per_user && <p className="form-error">{errors.max_per_user}</p>}</div>
+                <div className="form-group"><label className="form-label">Hiệu lực sau khi nhận (ngày)</label><input className={`form-input ${errors.validity_days ? "error" : ""}`} type="number" min="1" placeholder="Bỏ trống để dùng ngày kết thúc" value={formData.validity_days} onChange={(event) => handleChange("validity_days", event.target.value)} disabled={isIssuedGift} />{errors.validity_days && <p className="form-error">{errors.validity_days}</p>}</div>
+              </div>
+              <div className="form-row">
+                {["combo", "voucher"].includes(formData.type) && <div className="form-group"><label className="form-label">ID {formData.type === "combo" ? "combo" : "voucher"} liên kết <span className="required">*</span></label><input className={`form-input ${errors.benefit_reference_id ? "error" : ""}`} value={formData.benefit_reference_id} onChange={(event) => handleChange("benefit_reference_id", event.target.value)} disabled={isIssuedGift} />{errors.benefit_reference_id && <p className="form-error">{errors.benefit_reference_id}</p>}</div>}
+                {["ticket", "combo"].includes(formData.type) && <div className="form-group"><label className="form-label">Số lượng được tặng</label><input className="form-input" type="number" min="1" value={formData.benefit_quantity} onChange={(event) => handleChange("benefit_quantity", event.target.value)} disabled={isIssuedGift} /></div>}
+                {formData.type === "ticket" && <div className="form-group"><label className="form-label">Loại ghế áp dụng</label><input className="form-input" placeholder="normal, vip; bỏ trống là tất cả" value={formData.seat_types} onChange={(event) => handleChange("seat_types", event.target.value)} disabled={isIssuedGift} /></div>}
               </div>
             </section>
 
@@ -624,6 +679,9 @@ const GiftsPage = () => {
   const [statusTarget, setStatusTarget] = useState(null);
   const [deletingGift, setDeletingGift] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [grantForm, setGrantForm] = useState({ gift_id: "", email: "", tier: "" });
+  const [grantPreview, setGrantPreview] = useState(null);
+  const [grantHistory, setGrantHistory] = useState([]);
 
   const addToast = useCallback((type, message) => {
     const id = Date.now() + Math.random();
@@ -664,7 +722,30 @@ const GiftsPage = () => {
 
   useEffect(() => {
     fetchGifts(1);
+    getGiftGrantHistory().then((response) => setGrantHistory(response.data || [])).catch(() => {});
   }, [fetchGifts]);
+
+  const handlePreviewGrant = async (event) => {
+    event.preventDefault();
+    try {
+      setSubmitting(true);
+      const response = await previewGiftGrant({ ...grantForm, key: crypto.randomUUID() });
+      setGrantPreview(response.data);
+    } catch (error) { addToast("error", error.response?.data?.message || "Không thể xem trước đợt cấp quà"); } finally { setSubmitting(false); }
+  };
+
+  const handleConfirmGrant = async () => {
+    try {
+      setSubmitting(true);
+      const response = await confirmGiftGrant(grantPreview.id);
+      addToast("success", response.message || "Cấp quà thành công.");
+      setGrantPreview(null);
+      setGrantForm({ gift_id: "", email: "", tier: "" });
+      const history = await getGiftGrantHistory();
+      setGrantHistory(history.data || []);
+      fetchGifts(currentPage);
+    } catch (error) { addToast("error", error.response?.data?.message || "Không thể cấp quà"); } finally { setSubmitting(false); }
+  };
 
   const handleSearch = (event) => {
     const value = event.target.value;
@@ -791,6 +872,18 @@ const GiftsPage = () => {
           </button>
         </div>
       </div>
+
+      <details className="content-card" style={{ marginBottom: "20px" }}>
+        <summary className="table-toolbar-title" style={{ cursor: "pointer", padding: "20px" }}>Cấp quà cho thành viên</summary>
+        <form className="table-toolbar voucher-filter-row" onSubmit={handlePreviewGrant}>
+          <select className="user-filter-select" required value={grantForm.gift_id} onChange={(event) => setGrantForm((current) => ({ ...current, gift_id: event.target.value }))}><option value="">Chọn chương trình quà</option>{gifts.filter((gift) => gift.acquisition_modes?.includes("manual") && gift.computed_status === "active").map((gift) => <option value={gift._id} key={gift._id}>{gift.code} · còn {gift.remaining_quantity}</option>)}</select>
+          <input className="user-filter-select" type="email" placeholder="Email người nhận" value={grantForm.email} disabled={Boolean(grantForm.tier)} onChange={(event) => setGrantForm((current) => ({ ...current, email: event.target.value }))} />
+          <select className="user-filter-select" value={grantForm.tier} disabled={Boolean(grantForm.email)} onChange={(event) => setGrantForm((current) => ({ ...current, tier: event.target.value }))}><option value="">Hoặc chọn nhóm hạng</option><option value="member">Member</option><option value="vip">VIP</option><option value="vvip">VVIP</option></select>
+          <button className="btn btn-secondary" disabled={submitting || !grantForm.gift_id || (!grantForm.email && !grantForm.tier)}>Xem trước</button>
+        </form>
+        {grantPreview && <div className="table-toolbar"><span><strong>{grantPreview.count}</strong> thành viên sẽ nhận quà.</span><button className="btn btn-primary" type="button" disabled={submitting} onClick={handleConfirmGrant}>Xác nhận cấp quà</button></div>}
+        {grantHistory.length > 0 && <div className="table-wrapper"><table className="data-table"><thead><tr><th>Đợt cấp gần đây</th><th>Người thực hiện</th><th>Số người nhận</th><th>Thời gian</th></tr></thead><tbody>{grantHistory.slice(0, 5).map((item) => <tr key={item._id}><td>{item.gift_id?.name || item.gift_id?.code}</td><td>{item.admin_id?.full_name || "Admin"}</td><td>{item.count}</td><td>{formatDateTime(item.completed_at)}</td></tr>)}</tbody></table></div>}
+      </details>
 
       <div className="content-card">
         <div className="table-toolbar">

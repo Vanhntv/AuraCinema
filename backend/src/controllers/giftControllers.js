@@ -6,6 +6,16 @@ import {
   toggleGiftStatusService,
   updateGiftService,
 } from "../services/giftService.js";
+import {
+  confirmGiftGrant,
+  getGiftGrantHistory,
+  getGiftWallet,
+  getMyGiftQr,
+  listEligibleGifts,
+  listGiftCatalog,
+  previewGiftGrant,
+  redeemGift,
+} from "../services/giftEntitlementService.js";
 
 const sendError = (res, error) => {
   const statusCode = error.statusCode || 500;
@@ -109,4 +119,53 @@ export const deleteGift = async (req, res) => {
   } catch (error) {
     return sendError(res, error);
   }
+};
+
+export const getGiftCatalog = async (req, res) => {
+  try {
+    return res.json({ success: true, data: await listGiftCatalog(req.user.id) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const redeemMyGift = async (req, res) => {
+  try {
+    return res.json({ success: true, message: "Đổi quà thành công.", data: await redeemGift(req.user.id, req.params.id, req.body?.key) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const getMyGiftWallet = async (req, res) => {
+  try {
+    const result = await getGiftWallet(req.user.id, req.query);
+    return res.json({ success: true, ...result });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const getMyGiftQrController = async (req, res) => {
+  try {
+    return res.json({ success: true, data: await getMyGiftQr(req.user.id, req.params.id) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const getEligibleGifts = async (req, res) => {
+  try {
+    return res.json({ success: true, data: await listEligibleGifts(req.user.id, req.body) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const previewAdminGiftGrant = async (req, res) => {
+  try {
+    return res.json({ success: true, data: await previewGiftGrant(req.user.id, req.body) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const confirmAdminGiftGrant = async (req, res) => {
+  try {
+    return res.json({ success: true, message: "Cấp quà thành công.", data: await confirmGiftGrant(req.user.id, req.params.id) });
+  } catch (error) { return sendError(res, error); }
+};
+
+export const getAdminGiftGrantHistory = async (req, res) => {
+  try {
+    return res.json({ success: true, ...(await getGiftGrantHistory(req.query.page)) });
+  } catch (error) { return sendError(res, error); }
 };

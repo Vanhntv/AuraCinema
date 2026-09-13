@@ -29,6 +29,23 @@ const giftSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    acquisition_modes: [{
+      type: String,
+      enum: ["automatic", "points", "manual"],
+    }],
+    trigger: {
+      type: String,
+      enum: ["none", "new_member", "birthday", "tier_reached", "paid_booking"],
+      default: "none",
+    },
+    redemption_channel: {
+      type: String,
+      enum: ["online", "counter", "both", "instant"],
+      default: "online",
+    },
+    max_per_user: { type: Number, default: 1, min: 1 },
+    validity_days: { type: Number, default: null, min: 1 },
+    benefit: { type: mongoose.Schema.Types.Mixed, default: {} },
     value: {
       type: Number,
       default: 0,
@@ -98,11 +115,10 @@ const giftSchema = new mongoose.Schema(
   },
 );
 
-giftSchema.pre("validate", function syncRemainingQuantity(next) {
+giftSchema.pre("validate", function syncRemainingQuantity() {
   const quantity = Number(this.quantity || 0);
   const issuedQuantity = Number(this.issued_quantity || 0);
   this.remaining_quantity = Math.max(quantity - issuedQuantity, 0);
-  next();
 });
 
 giftSchema.index(
@@ -116,6 +132,7 @@ giftSchema.index(
 );
 giftSchema.index({ type: 1, status: 1, deleted_at: 1 });
 giftSchema.index({ start_date: 1, end_date: 1 });
+giftSchema.index({ acquisition_modes: 1, status: 1, start_date: 1, end_date: 1 });
 
 const Gift = mongoose.model("Gift", giftSchema);
 

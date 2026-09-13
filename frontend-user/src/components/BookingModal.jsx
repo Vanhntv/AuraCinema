@@ -16,6 +16,7 @@ import {
 } from "../services/bookingService";
 import { getAvailableConcessions } from "../services/concessionService";
 import { getEligibleVouchers, verifyVoucher } from "../services/voucherService";
+import { getEligibleGifts } from "../services/giftService";
 import { useAuth } from "../hooks/useAuth";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, getShowtimeStartDate, isShowtimeUpcoming } from "../utils/dateTime";
@@ -331,6 +332,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [eligibleVouchersContextKey, setEligibleVouchersContextKey] = useState("");
   const [isLoadingEligibleVouchers, setIsLoadingEligibleVouchers] = useState(false);
   const [eligibleVouchersError, setEligibleVouchersError] = useState("");
+  const [eligibleGifts, setEligibleGifts] = useState([]);
+  const [appliedGift, setAppliedGift] = useState(null);
   const [showLoginNotice, setShowLoginNotice] = useState(false);
   const [releasedPaymentReturnBookingId, setReleasedPaymentReturnBookingId] = useState("");
   const [initialRequestedDate] = useState(
@@ -609,6 +612,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     setVoucherError("");
     setVoucherMessage("");
     setEligibleVouchers([]);
+    setEligibleGifts([]);
     setEligibleVouchersContextKey("");
     setEligibleVouchersError("");
   }, [
@@ -832,12 +836,30 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   );
 
   const totalPrice = seatTotal + concessionTotal;
+  const voucherPricing = getVoucherBookingPricing({ appliedVoucher, totalPrice });
+  const giftDiscountAmount = useMemo(() => {
+    if (!appliedGift?.gift) return 0;
+    const benefit = appliedGift.gift.benefit || {};
+    if (appliedGift.gift.type === "ticket") {
+      const allowed = benefit.seat_types || [];
+      const prices = selectedSeats
+        .filter((seat) => !allowed.length || allowed.includes(getSeatType(seat)))
+        .map((seat) => Number(seat.price || 0))
+        .sort((a, b) => b - a)
+        .slice(0, Math.max(Number(benefit.quantity || 1), 1));
+      return prices.reduce((sum, price) => sum + (Number(benefit.max_unit_price || 0) > 0 ? Math.min(price, Number(benefit.max_unit_price)) : price), 0);
+    }
+    const item = concessions.find((entry) => String(entry._id) === String(benefit.combo_id || ""));
+    return item ? Number(item.price || 0) * Math.max(Number(benefit.quantity || 1), 1) : 0;
+  }, [appliedGift, concessions, selectedSeats]);
+  const giftAddedAmount = appliedGift?.gift?.type === "combo" ? giftDiscountAmount : 0;
   const {
     voucherCode: verifiedVoucherCode,
     isCurrent: isAppliedVoucherCurrent,
-    discountAmount,
-    finalTotal,
-  } = getVoucherBookingPricing({ appliedVoucher, totalPrice });
+  } = voucherPricing;
+  const discountAmount = appliedGift ? giftDiscountAmount : voucherPricing.discountAmount;
+  const checkoutSubtotal = totalPrice + giftAddedAmount;
+  const finalTotal = Math.max(checkoutSubtotal - discountAmount, 0);
   const voucherContextKey = `${movie._id}:${seatTotal}:${concessionTotal}:${totalPrice}`;
   const hasCurrentEligibleVoucherResult = eligibleVouchersContextKey === voucherContextKey;
 
@@ -864,20 +886,24 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       try {
         setIsLoadingEligibleVouchers(true);
         setEligibleVouchersError("");
-        const response = await getEligibleVouchers(
-          {
+        const context = {
             order_amount: totalPrice,
             ticket_amount: seatTotal,
             concession_amount: concessionTotal,
             movie_id: movie._id,
-          },
+            combo_ids: selectedConcessionItems.map((item) => item._id),
+          };
+        const [response, giftResponse] = await Promise.all([getEligibleVouchers(
+          context,
           { signal: abortController.signal },
-        );
+        ), getEligibleGifts(context, { signal: abortController.signal })]);
         setEligibleVouchers(response?.data || []);
+        setEligibleGifts(giftResponse?.data || []);
         setEligibleVouchersContextKey(requestContextKey);
       } catch (requestError) {
         if (requestError.code === "ERR_CANCELED") return;
         setEligibleVouchers([]);
+        setEligibleGifts([]);
         setEligibleVouchersContextKey(requestContextKey);
         setEligibleVouchersError(
           requestError.response?.data?.message || "Không thể tải mã giảm giá lúc này.",
@@ -891,7 +917,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       window.clearTimeout(timerId);
       abortController.abort();
     };
-  }, [concessionTotal, isAuthenticated, movie._id, seatTotal, totalPrice, voucherContextKey]);
+  }, [concessionTotal, isAuthenticated, movie._id, seatTotal, selectedConcessionItems, totalPrice, voucherContextKey]);
 
   const seatPriceNotes = useMemo(() => {
     const priceByType = new Map();
@@ -1285,8 +1311,9 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
           subtotal: Number(item.price || 0) * item.quantity,
         })),
         voucherCode: verifiedVoucherCode,
+        giftCode: appliedGift?.code || "",
         discountAmount,
-        totalPrice,
+        totalPrice: checkoutSubtotal,
         finalTotal,
       };
       const response = await createBooking({
@@ -1298,6 +1325,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         })),
         voucher_code: verifiedVoucherCode || undefined,
         user_voucher_id: appliedVoucher?.user_voucher_id || undefined,
+        user_gift_id: appliedGift?.id || undefined,
         hold_token: holdToken,
       });
       const nextBookingSummary = mergeBookingVoucherPricing({
@@ -1318,6 +1346,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       setHoldExpiresAt(null);
       setSelectedConcessions({});
       setAppliedVoucher(null);
+      setAppliedGift(null);
       setVoucherCode("");
       setVoucherError("");
       setVoucherMessage("");
@@ -1817,6 +1846,15 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 	              <p><span className="text-slate-500">Bắp nước:</span> <strong className="text-white">{formatCurrency(concessionTotal)}</strong></p>
 	              {selectedConcessionItems.length > 0 && <div className="grid gap-1 rounded-xl bg-black/15 p-3 text-xs text-slate-400">{selectedConcessionItems.map((item) => <p key={item._id}>{item.name} x{item.quantity}: {formatCurrency(Number(item.price || 0) * item.quantity)}</p>)}</div>}
 
+              {isAuthenticated && eligibleGifts.length > 0 && <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+                <div className="flex items-center justify-between gap-3"><strong className="text-xs uppercase text-slate-400">Quà dùng được</strong>{appliedGift && <button type="button" className="rounded-md px-2 py-1 text-xs text-[#ff9aa5]" onClick={() => setAppliedGift(null)}>Bỏ quà</button>}</div>
+                <div className="mt-2 grid gap-2">
+                  {eligibleGifts.map((item) => <button key={item.id} type="button" aria-pressed={appliedGift?.id === item.id} className={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left ${appliedGift?.id === item.id ? "bg-[#ff5364] text-[#160b0f]" : "bg-white/[0.05] text-white"}`} onClick={() => { setAppliedGift(item); setAppliedVoucher(null); setVoucherCode(""); setVoucherError(""); }}>
+                    <span className="min-w-0"><strong className="block truncate text-sm">{item.gift.name}</strong><span className="block text-[11px] opacity-75">{item.gift.value_label || (item.gift.type === "ticket" ? "Vé tặng" : "Combo tặng")}</span></span><span className="shrink-0 text-xs font-black">Chọn</span>
+                  </button>)}
+                </div>
+              </div>}
+
               <div className="rounded-xl border border-white/10 bg-black/15 p-3">
                 <label className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Mã giảm giá</label>
                 <form className="mt-2 flex gap-2" onSubmit={(event) => { event.preventDefault(); void applyVoucher(); }}>
@@ -1830,7 +1868,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                       setVoucherError("");
                       setVoucherMessage("");
                     }}
-                    disabled={Boolean(appliedVoucher) || isApplyingVoucher}
+                    disabled={Boolean(appliedVoucher) || Boolean(appliedGift) || isApplyingVoucher}
                   />
                   {appliedVoucher ? (
                     <button
@@ -1842,7 +1880,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                       Bỏ mã
                     </button>
                   ) : (
-                    <button type="submit" className="rounded-full bg-[var(--aura-coral)] px-4 text-sm font-extrabold text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={isApplyingVoucher}>{isApplyingVoucher ? "Đang áp dụng" : "Áp dụng"}</button>
+                    <button type="submit" className="rounded-full bg-[var(--aura-coral)] px-4 text-sm font-extrabold text-[var(--aura-coral-ink)] disabled:cursor-not-allowed disabled:opacity-50" disabled={isApplyingVoucher || Boolean(appliedGift)}>{isApplyingVoucher ? "Đang áp dụng" : "Áp dụng"}</button>
                   )}
                 </form>
                 <div aria-live="polite">
@@ -1850,7 +1888,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   {voucherMessage && <p className="mt-2 text-xs font-semibold text-emerald-200">{voucherMessage}</p>}
                 </div>
 
-                {!appliedVoucher && totalPrice > 0 && (
+                {!appliedVoucher && !appliedGift && totalPrice > 0 && (
                   <div className="mt-4 border-t border-white/10 pt-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-bold text-slate-300">Mã dùng được cho đơn này</p>
@@ -1892,7 +1930,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 )}
               </div>
 
-	              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{formatCurrency(totalPrice)}</strong></p>
+	              <p><span className="text-slate-500">Tạm tính:</span> <strong className="text-white">{formatCurrency(checkoutSubtotal)}</strong></p>
 	              <p><span className="text-slate-500">Giảm giá:</span> <strong className="text-emerald-200">-{formatCurrency(discountAmount)}</strong></p>
 	              <p><span className="text-slate-500">Tổng sau giảm:</span> <strong className="text-[#ff9aa5]">{formatCurrency(finalTotal)}</strong></p>
             </div>

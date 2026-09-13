@@ -10,6 +10,8 @@
     "reconcile:sepay": "node src/scripts/reconcileSepayTransactions.js",
     "reconcile:loyalty": "node src/scripts/reconcileLoyalty.js",
     "seed:loyalty": "node src/scripts/seedLoyaltyDemo.js",
+    "migrate:gifts": "node src/scripts/migrateGifts.js",
+    "reconcile:gifts": "node src/scripts/reconcileGifts.js",
     "test": "node --test"
   },
   "keywords": [],

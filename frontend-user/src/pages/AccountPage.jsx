@@ -23,7 +23,7 @@ const tabs = [
   { id: "member", label: "Thông tin thẻ thành viên" },
   { id: "tickets", label: "Hành trình điện ảnh" },
   { id: "points", label: "Lịch sử điểm thưởng" },
-  { id: "vouchers", label: "Ví Voucher" },
+  { id: "vouchers", label: "Ví ưu đãi" },
 ];
 
 const ORDERS_PER_PAGE = 5;

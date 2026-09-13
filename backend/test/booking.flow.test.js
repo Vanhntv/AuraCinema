@@ -12,6 +12,7 @@ import ShowtimeSeat from "../src/models/ShowtimeSeat.js";
 import Ticket from "../src/models/Ticket.js";
 import User from "../src/models/User.js";
 import RewardPointLog from "../src/models/RewardPointLog.js";
+import Gift from "../src/models/Gift.js";
 
 const makeResponse = () => ({
   statusCode: 200,
@@ -506,6 +507,8 @@ test("confirm booking payment marks reserved seats as booked", async () => {
     }],
     [Booking, "updateOne", async () => ({ modifiedCount: 1 })],
     [User, "findOneAndUpdate", async () => ({ reward_points: 10 })],
+    [User, "findById", () => ({ session: async () => ({ _id: userId, member_tier: "member" }) })],
+    [Gift, "find", () => ({ session: async () => [] })],
     [RewardPointLog, "create", async () => []],
     [Ticket, "find", () => ({
       select() {
