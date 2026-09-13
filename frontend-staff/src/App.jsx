@@ -6,7 +6,7 @@ const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
 const menu = [
   ["scanner", "Quét vé", "⌗"],
   ["counter", "Bán vé tại quầy", "▣"],
-  ["rooms", "Quản lý phòng và ghế", "▤"],
+  ["rooms", "Quản lý ghế và phòng", "▤"],
   ["shift", "Báo cáo ca làm việc", "▥"],
   ["history", "Lịch sử giao dịch", "◷"],
 ];
