@@ -1,169 +1,75 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { getPublicVoucherById } from "../services/voucherService";
-import {
-  DEFAULT_PROMOTION_IMAGE,
-  mapVoucherToPromotion,
-} from "../utils/voucherPromotion";
+import { getPromotionBySlug, isPromotionExpired } from "../data/promotionContent";
 
-function PromotionSkeleton() {
+function MetaChip({ label, value }) {
   return (
-    <div className="mx-auto w-[min(1120px,calc(100%_-_56px))] py-8 text-white max-sm:w-[calc(100%_-_28px)]">
-      <div className="overflow-hidden rounded-[28px] border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-        <div className="h-4 w-36 animate-pulse rounded-full bg-white/10" />
-        <div className="mt-4 h-12 w-[86%] animate-pulse rounded-2xl bg-white/10" />
-        <div className="mt-4 h-6 w-[60%] animate-pulse rounded-full bg-white/10" />
-        <div className="mt-8 grid gap-4">
-          <div className="h-4 w-full animate-pulse rounded-full bg-white/10" />
-          <div className="h-4 w-[95%] animate-pulse rounded-full bg-white/10" />
-          <div className="h-4 w-[88%] animate-pulse rounded-full bg-white/10" />
-          <div className="h-4 w-[74%] animate-pulse rounded-full bg-white/10" />
-          <div className="h-4 w-[92%] animate-pulse rounded-full bg-white/10" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoChip({ label, value }) {
-  return (
-    <div className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-slate-300">
+    <div className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-300">
       <span className="font-bold text-white">{label}:</span> {value}
-    </div>
-  );
-}
-
-function DetailRow({ label, value }) {
-  return (
-    <div className="flex flex-wrap justify-between gap-3 border-b border-white/10 py-4 text-sm">
-      <span className="text-slate-400">{label}</span>
-      <strong className="text-right text-white">{value || "-"}</strong>
     </div>
   );
 }
 
 function PromotionDetailPage() {
   const { slug } = useParams();
-  const [isLoading, setIsLoading] = useState(true);
-  const [promotion, setPromotion] = useState(null);
-  const [error, setError] = useState("");
+  const promotion = getPromotionBySlug(slug);
+  const expired = isPromotionExpired(promotion);
 
   useEffect(() => {
-    let active = true;
-
-    const loadPromotion = async () => {
-      try {
-        setIsLoading(true);
-        setError("");
-        const detailResponse = await getPublicVoucherById(slug);
-        const detail = mapVoucherToPromotion(detailResponse.data);
-
-        if (!active) return;
-
-        setPromotion(detail);
-        document.title = `${detail.title} | AuraCinema`;
-      } catch (requestError) {
-        if (!active) return;
-        setPromotion(null);
-        setError(
-          requestError.response?.data?.message ||
-            "Không thể tải chi tiết khuyến mãi.",
-        );
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-
-    loadPromotion();
-
+    if (!promotion) return undefined;
+    const previousTitle = document.title;
+    document.title = `${promotion.title} | AuraCinema`;
     return () => {
-      active = false;
+      document.title = previousTitle;
     };
-  }, [slug]);
+  }, [promotion]);
 
-  if (isLoading) {
-    return <PromotionSkeleton />;
-  }
-
-  if (!promotion && !error) {
-    return <Navigate to="/khuyen-mai" replace />;
-  }
+  if (!promotion) return <Navigate to="/khuyen-mai" replace />;
 
   return (
     <main className="bg-[#0f141c] pb-24 pt-8 text-white">
-      <div className="mx-auto w-[min(1120px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
-        <div className="mb-5 flex flex-wrap items-center gap-3 text-sm text-slate-400">
-          <Link to="/khuyen-mai" className="font-semibold text-[#ff6070] no-underline">
-            ← Quay về khuyến mãi
-          </Link>
+      <div className="mx-auto w-[min(980px,calc(100%_-_56px))] max-sm:w-[calc(100%_-_28px)]">
+        <nav className="mb-7 flex flex-wrap items-center gap-3 text-sm text-slate-400" aria-label="Điều hướng khuyến mãi">
+          <Link to="/khuyen-mai" className="font-semibold text-[#ff7180] no-underline">← Quay về khuyến mãi</Link>
           <span className="hidden sm:inline">/</span>
-          <span>{promotion?.category || "Khuyến mãi"}</span>
-        </div>
+          <span>{promotion.category}</span>
+        </nav>
 
-        {error && !promotion ? (
-          <div className="rounded-[28px] border border-red-500/20 bg-red-500/10 px-6 py-10 text-center text-sm font-semibold text-red-100">
-            {error}
+        <article className="overflow-hidden rounded-[var(--aura-radius-lg)] border border-white/10 bg-[var(--aura-surface)] shadow-[0_24px_80px_rgba(0,0,0,0.28)]">
+          <div className="relative aspect-[16/8] min-h-[230px] overflow-hidden bg-slate-900 max-sm:aspect-[4/3]">
+            <img src={promotion.thumbnail} alt="" className="h-full w-full object-cover" decoding="async" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#111722] via-transparent to-transparent" />
+            <span className="absolute bottom-5 left-5 rounded-full bg-[#f24f65] px-3 py-1.5 text-xs font-extrabold text-white sm:bottom-7 sm:left-7">
+              {promotion.category}
+            </span>
           </div>
-        ) : (
-          <article className="overflow-hidden rounded-[30px] border border-white/10 bg-white/[0.03] shadow-[0_24px_80px_rgba(0,0,0,0.3)]">
-            <div className="grid gap-0 lg:grid-cols-[420px_minmax(0,1fr)]">
-              <div className="relative min-h-[260px] bg-slate-900">
-                <img
-                  src={promotion.thumbnail}
-                  alt={promotion.title}
-                  decoding="async"
-                  className="h-full min-h-[260px] w-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.src = DEFAULT_PROMOTION_IMAGE;
-                  }}
-                />
-              </div>
 
-              <div className="p-6 sm:p-8 lg:p-10">
-                <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-[0.18em] text-[#ff6070]">
-                  <span>{promotion.category}</span>
-                  <span className="text-slate-500">•</span>
-                  <span>Đang áp dụng</span>
-                </div>
-
-                <h1 className="mt-4 text-3xl font-black uppercase leading-tight text-white sm:text-4xl">
-                  {promotion.title}
-                </h1>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <InfoChip label="Mã" value={promotion.code} />
-                  <InfoChip label="Từ ngày" value={promotion.startDate} />
-                  <InfoChip label="Đến ngày" value={promotion.endDate} />
-                </div>
-
-                <div className="mt-8 rounded-[24px] border border-white/10 bg-[#0f141c] p-5">
-                  <div className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">
-                    Tóm tắt
-                  </div>
-                  <p className="mt-3 text-[15px] leading-8 text-slate-200">
-                    {promotion.summary}
-                  </p>
-                </div>
-              </div>
+          <div className="mx-auto max-w-[820px] px-6 pb-8 pt-8 sm:px-10 sm:pb-10">
+            <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-[#ff8996]">
+              <span>{promotion.startDate}</span>
+              <span aria-hidden="true" className="text-slate-600">-</span>
+              <span>{promotion.endDate}</span>
+              <span className={`rounded-full px-3 py-1 ${expired ? "bg-slate-700 text-slate-200" : "bg-emerald-400/10 text-emerald-300"}`}>
+                {expired ? "Đã kết thúc" : "Đang diễn ra"}
+              </span>
             </div>
 
-            <div className="grid gap-8 border-t border-white/10 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-10">
-              <div className="news-content space-y-5 text-[15px] leading-8 text-slate-200">
-                <h2>Điều kiện sử dụng</h2>
-                <p>{promotion.terms}</p>
-              </div>
+            <h1 className="mt-5 text-2xl font-black uppercase leading-tight text-white sm:text-3xl lg:text-[34px]">
+              {promotion.title}
+            </h1>
+            <p className="mt-5 max-w-[70ch] text-[15px] leading-8 text-slate-300 sm:text-base">{promotion.summary}</p>
 
-              <div className="rounded-[24px] border border-white/10 bg-[#0f141c] p-5">
-                <DetailRow label="Loại giảm" value={promotion.discountTypeLabel} />
-                <DetailRow label="Giá trị giảm" value={promotion.discountValueLabel} />
-                <DetailRow label="Giảm tối đa" value={promotion.maxDiscountLabel} />
-                <DetailRow label="Đơn tối thiểu" value={promotion.minOrderLabel} />
-                <DetailRow label="Phạm vi áp dụng" value={promotion.scopeLabel} />
-                <DetailRow label="Lượt còn lại" value={String(promotion.quantity ?? 0)} />
-              </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <MetaChip label="Thời gian" value={`${promotion.startDate} - ${promotion.endDate}`} />
+              <MetaChip label="Chương trình" value={promotion.category} />
             </div>
-          </article>
-        )}
+
+            <div
+              className="news-content mt-9 space-y-6 border-t border-white/10 pt-8 text-[16px] leading-9 text-slate-200 max-sm:text-[15px] max-sm:leading-8"
+              dangerouslySetInnerHTML={{ __html: promotion.contentHtml }}
+            />
+          </div>
+        </article>
       </div>
     </main>
   );

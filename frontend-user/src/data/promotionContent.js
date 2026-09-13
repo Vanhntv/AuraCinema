@@ -1,120 +1,159 @@
 export const promotionItems = [
   {
-    slug: 'bang-gia-bap-nuoc-moi-nhat-2026',
-    status: 'active',
-    startDate: '16/01/2026',
-    endDate: '31/12/2026',
-    title: 'Bảng giá bắp nước mới nhất 2026',
-    category: 'Ẩm thực',
-    summary:
-      'Cập nhật bảng giá combo bắp nước, mức giá ưu đãi và các lựa chọn đi kèm dành cho khách xem phim.',
-    viewCount: 1840,
-    thumbnail:
-      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR6QH43lv690B1hYiay1vOA8e-Zw5r5jlwrBfwvDp-4Xw&s',
+    slug: "thu-tu-thanh-vien-nhan-doi-niem-vui",
+    status: "active",
+    startDate: "01/09/2026",
+    endDate: "30/11/2026",
+    title: "Thứ Tư thành viên - Nhân đôi niềm vui điện ảnh",
+    category: "Thành viên",
+    summary: "Một ngày giữa tuần dành riêng cho thành viên AuraCinema với thêm quyền lợi khi đặt vé trực tuyến.",
+    thumbnail: "/promotions/member-wednesday.jpg",
     contentHtml: `
-      <p>Chương trình bắp nước 2026 mang đến nhiều lựa chọn phù hợp cho từng nhóm khách hàng.</p>
-      <h2>Ưu đãi đang áp dụng</h2>
+      <p>Thứ Tư thành viên mang đến một khoảng hẹn điện ảnh nhẹ nhàng giữa tuần. Khách hàng đăng nhập tài khoản trước khi đặt vé để hệ thống ghi nhận quyền lợi của chương trình.</p>
+      <h2>Điều kiện tham gia</h2>
       <ul>
-        <li>Combo tiết kiệm cho 1 khách.</li>
-        <li>Combo gia đình dành cho nhóm 2 đến 4 người.</li>
-        <li>Giá khuyến mãi có thể thay đổi theo chi nhánh.</li>
+        <li>Áp dụng cho tài khoản thành viên AuraCinema đang hoạt động.</li>
+        <li>Quyền lợi được hiển thị tại bước thanh toán nếu suất chiếu đủ điều kiện.</li>
+        <li>Không áp dụng đồng thời với chương trình ưu đãi khác.</li>
       </ul>
-      <p>Khách hàng vui lòng kiểm tra quầy bán hàng hoặc màn hình thanh toán trước khi xác nhận đơn hàng.</p>
+      <p>Số lượng ưu đãi mỗi ngày có giới hạn và có thể kết thúc sớm.</p>
     `,
   },
   {
-    slug: 'tang-voucher-30000khi-dat-ve-xem-phim-qua-momo',
-    status: 'active',
-    startDate: '12/12/2025',
-    endDate: '31/08/2026',
-    title: 'Tặng voucher 30.000đ khi đặt vé xem phim qua ví MoMo',
-    category: 'Thanh toán',
-    summary:
-      'Ưu đãi dành cho khách hàng thanh toán qua ví điện tử với điều kiện áp dụng theo chương trình.',
-    viewCount: 2210,
-    thumbnail:
-      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQCgAD5yS5ACODL7FfliwQlVWVa8T7gK9p1KWHnYEC6aG58LjsIxmTvvpE&s=10',
+    slug: "u22-dong-gia-ve-2d",
+    status: "active",
+    startDate: "15/08/2026",
+    endDate: "31/12/2026",
+    title: "U22 đến rạp - Đồng giá vé 2D cho khán giả trẻ",
+    category: "Giá vé",
+    summary: "Chương trình giá vé dành cho học sinh, sinh viên và khán giả trẻ tại các suất chiếu được chọn.",
+    thumbnail: "/promotions/u22-ticket.jpg",
     contentHtml: `
-      <p>Khách thanh toán vé phim qua MoMo sẽ nhận voucher theo điều kiện của từng đơn hàng.</p>
-      <h2>Cách tham gia</h2>
+      <p>AuraCinema dành chương trình U22 cho khán giả trẻ muốn tận hưởng phim mới trên màn ảnh rộng với mức giá dễ tiếp cận hơn.</p>
+      <h2>Thông tin cần lưu ý</h2>
+      <ul>
+        <li>Khách hàng cần xuất trình giấy tờ có ngày sinh hoặc thẻ học sinh, sinh viên hợp lệ.</li>
+        <li>Áp dụng cho phim 2D và các khung giờ được thông báo tại rạp.</li>
+        <li>Không áp dụng cho ngày lễ, suất chiếu đặc biệt và phụ thu ghế.</li>
+      </ul>
+    `,
+  },
+  {
+    slug: "combo-hen-ho-tron-vi",
+    status: "active",
+    startDate: "05/09/2026",
+    endDate: "31/10/2026",
+    title: "Combo hẹn hò - Trọn vị cho hai người",
+    category: "Bắp nước",
+    summary: "Bộ đôi bắp và nước dành cho hai người, phù hợp với những buổi xem phim cuối tuần.",
+    thumbnail: "/promotions/couple-combo.jpg",
+    contentHtml: `
+      <p>Combo hẹn hò kết hợp bắp rang và hai phần nước, giúp buổi xem phim của hai người thêm trọn vẹn mà không cần chọn từng món riêng lẻ.</p>
+      <h2>Cách nhận chương trình</h2>
       <ol>
-        <li>Chọn suất chiếu và hoàn tất thanh toán.</li>
-        <li>Kiểm tra thông tin voucher trong tài khoản.</li>
-        <li>Sử dụng đúng thời hạn hiển thị trên hệ thống.</li>
+        <li>Chọn combo trong mục bắp nước khi đặt vé.</li>
+        <li>Hoàn tất thanh toán cùng đơn vé xem phim.</li>
+        <li>Xuất trình mã đơn tại quầy để nhận món.</li>
       </ol>
+      <p>Hình ảnh sản phẩm mang tính minh họa; lựa chọn hương vị tùy tình trạng tại quầy.</p>
     `,
   },
   {
-    slug: 'bang-gia-bong-nuoc-moi-nhat-2025',
-    status: 'expired',
-    startDate: '08/08/2025',
-    endDate: '31/12/2025',
-    title: 'Bảng giá bắp, nước mới nhất 2025',
-    category: 'Ẩm thực',
-    summary:
-      'Bảng giá mẫu cho mùa khuyến mãi 2025, hiện đã hết hạn và chỉ dùng để minh họa giao diện.',
-    viewCount: 975,
-    thumbnail:
-      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcThZuSEhqJWqN98_KddKxezBjI9k7MfoUFIoQHwxXgjlw&s=10',
+    slug: "sang-som-xem-phim-gia-tot",
+    status: "active",
+    startDate: "01/09/2026",
+    endDate: "30/09/2026",
+    title: "Suất sớm giá tốt - Bắt đầu ngày mới cùng điện ảnh",
+    category: "Khung giờ vàng",
+    summary: "Ưu đãi dành cho một số suất chiếu buổi sáng trước 11 giờ tại hệ thống AuraCinema.",
+    thumbnail: "/promotions/morning-show.jpg",
     contentHtml: `
-      <p>Khuyến mãi này đã kết thúc và không còn hiệu lực đặt mua mới.</p>
-      <p>Hệ thống vẫn hiển thị để người dùng tham khảo lịch sử chương trình.</p>
-    `,
-  },
-  {
-    slug: 'uu-dai-gia-ve-55k-ve-2d-cho-thanh-vien-u22',
-    status: 'active',
-    startDate: '16/07/2025',
-    endDate: '30/09/2026',
-    title: 'Ưu đãi giá vé 55.000đ/vé 2D cho thành viên U22',
-    category: 'Giá vé',
-    summary:
-      'Ưu đãi dành riêng cho thành viên U22 với mức giá đồng giá cho vé 2D theo điều kiện chương trình.',
-    viewCount: 3105,
-    thumbnail:
-      'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTju8OTiFKLSt34XF-OiThu2zQOWXy49HC828bTKo35ag&s',
-    contentHtml: `
-      <p>Chương trình U22 áp dụng mức giá đồng giá 55.000đ cho vé 2D tại các suất chiếu đủ điều kiện.</p>
-      <h2>Điều kiện áp dụng</h2>
+      <p>Những suất chiếu đầu ngày mang đến không gian thư thả, ít đông và mức giá hấp dẫn cho người yêu điện ảnh.</p>
+      <h2>Phạm vi áp dụng</h2>
       <ul>
-        <li>Khách hàng dưới 22 tuổi.</li>
-        <li>Xuất trình giấy tờ xác minh khi được yêu cầu.</li>
-        <li>Không áp dụng cho các suất chiếu đặc biệt hoặc 3D.</li>
+        <li>Áp dụng cho các suất chiếu bắt đầu trước 11 giờ.</li>
+        <li>Giá thực tế được hiển thị trực tiếp khi chọn suất và ghế.</li>
+        <li>Không áp dụng cho suất chiếu đặc biệt hoặc ngày lễ.</li>
       </ul>
     `,
   },
   {
-    slug: 'ga-ran-sieu-me-ly-dong-gia-79k-cac-set-ga-ran',
-    status: 'active',
-    startDate: '31/01/2025',
-    endDate: '31/10/2026',
-    title: 'Gà rán siêu mê ly đồng giá chỉ 79K các set gà rán',
-    category: 'Ẩm thực',
-    summary:
-      'Chương trình khuyến mãi ẩm thực đồng giá cho các set gà rán tại quầy phục vụ.',
-    viewCount: 1290,
-    thumbnail:
-      'https://images.unsplash.com/photo-1562967914-608f82629710?w=500&auto=format&fit=crop&q=80',
+    slug: "tuan-le-phim-gia-dinh",
+    status: "active",
+    startDate: "20/09/2026",
+    endDate: "04/10/2026",
+    title: "Tuần lễ phim gia đình - Cùng nhau ra rạp",
+    category: "Sự kiện",
+    summary: "Chuỗi suất chiếu phim hoạt hình và phim gia đình với hoạt động trải nghiệm tại sảnh rạp.",
+    thumbnail: "/promotions/family-film-week.jpg",
     contentHtml: `
-      <p>Ưu đãi gà rán đồng giá 79K được áp dụng cho một số set chọn lọc.</p>
-      <p>Chương trình có thể kết thúc sớm khi hết số lượng khuyến mãi trong ngày.</p>
+      <p>Tuần lễ phim gia đình tuyển chọn các tác phẩm phù hợp để phụ huynh và trẻ nhỏ cùng tận hưởng trên màn ảnh rộng.</p>
+      <h2>Hoạt động nổi bật</h2>
+      <ul>
+        <li>Khu vực chụp ảnh theo chủ đề tại sảnh.</li>
+        <li>Các suất chiếu gia đình được sắp xếp vào khung giờ thuận tiện.</li>
+        <li>Quà tặng tại rạp có số lượng giới hạn.</li>
+      </ul>
     `,
   },
   {
-    slug: 'tung-bung-uu-dai-nam-2025-tai-trung-tam-chieu-phim-quoc-gia',
-    status: 'expired',
-    startDate: '31/12/2024',
-    endDate: '31/03/2025',
-    title: 'Tưng bừng ưu đãi năm 2025 tại Trung tâm Chiếu phim Quốc gia',
-    category: 'Sự kiện',
-    summary:
-      'Thông tin lưu trữ của chương trình ưu đãi năm 2025, hiện đã hết hạn và chỉ hiển thị cho mục đích tham khảo.',
-    viewCount: 760,
-    thumbnail:
-      'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=500&auto=format&fit=crop&q=80',
+    slug: "sinh-nhat-thanh-vien-them-vi-ngot",
+    status: "active",
+    startDate: "01/01/2026",
+    endDate: "31/12/2026",
+    title: "Sinh nhật thành viên - Thêm vị ngọt cho ngày đặc biệt",
+    category: "Thành viên",
+    summary: "Một lời chúc từ AuraCinema dành cho thành viên có ngày sinh trong tháng.",
+    thumbnail: "/promotions/member-birthday.jpg",
     contentHtml: `
-      <p>Khuyến mãi năm 2025 đã kết thúc và không còn hiệu lực sử dụng.</p>
-      <p>Người dùng có thể xem các chương trình đang chạy trên trang khuyến mãi chung.</p>
+      <p>Trong tháng sinh nhật, thành viên đủ điều kiện có thể nhận một quyền lợi nhỏ từ AuraCinema để buổi xem phim thêm đáng nhớ.</p>
+      <h2>Cách kiểm tra quyền lợi</h2>
+      <ol>
+        <li>Cập nhật ngày sinh chính xác trong thông tin tài khoản.</li>
+        <li>Mở Ví Voucher để kiểm tra quà được cấp.</li>
+        <li>Sử dụng trong thời hạn ghi trên voucher cá nhân.</li>
+      </ol>
+      <p>Quyền lợi phụ thuộc vào hạng thành viên và chương trình đang áp dụng tại thời điểm cấp.</p>
+    `,
+  },
+  {
+    slug: "hoi-ban-than-cung-ra-rap",
+    status: "active",
+    startDate: "12/09/2026",
+    endDate: "15/11/2026",
+    title: "Hội bạn thân - Càng đông càng vui",
+    category: "Ưu đãi nhóm",
+    summary: "Chương trình dành cho nhóm bạn cùng đặt vé trong một đơn tại các suất chiếu được lựa chọn.",
+    thumbnail: "/promotions/friends-movie-night.jpg",
+    contentHtml: `
+      <p>Điện ảnh vui hơn khi được chia sẻ. Chương trình Hội bạn thân dành cho những nhóm khách muốn cùng chọn ghế, đặt vé và tận hưởng một buổi xem phim trọn vẹn.</p>
+      <h2>Điều kiện tham gia</h2>
+      <ul>
+        <li>Các vé phải được đặt trong cùng một đơn hàng.</li>
+        <li>Áp dụng tại những suất chiếu có hiển thị chương trình.</li>
+        <li>Không áp dụng đồng thời với ưu đãi giá vé khác.</li>
+      </ul>
+      <p>Quyền lợi cụ thể được hiển thị trước khi khách hàng xác nhận thanh toán.</p>
+    `,
+  },
+  {
+    slug: "dem-phim-kinh-di-thu-bay",
+    status: "active",
+    startDate: "19/09/2026",
+    endDate: "31/10/2026",
+    title: "Đêm phim kinh dị - Thử thách màn đêm",
+    category: "Đêm điện ảnh",
+    summary: "Chuỗi suất chiếu kinh dị tối thứ Bảy với không gian sảnh và hoạt động theo chủ đề.",
+    thumbnail: "/promotions/horror-night.jpg",
+    contentHtml: `
+      <p>Đêm phim kinh dị mang đến chuỗi tác phẩm giật gân và kinh dị được tuyển chọn cho khán giả yêu cảm giác mạnh trên màn ảnh rộng.</p>
+      <h2>Thông tin chương trình</h2>
+      <ul>
+        <li>Diễn ra tại một số suất chiếu tối thứ Bảy trong thời gian chương trình.</li>
+        <li>Khán giả cần kiểm tra phân loại độ tuổi của từng bộ phim trước khi đặt vé.</li>
+        <li>Hoạt động tại sảnh và quà tặng có thể thay đổi theo từng ngày.</li>
+      </ul>
+      <p>Vui lòng đến sớm để hoàn tất kiểm tra vé và tham gia khu vực trải nghiệm trước giờ chiếu.</p>
     `,
   },
 ];
@@ -124,20 +163,12 @@ export function getPromotionBySlug(slug) {
 }
 
 export function isPromotionExpired(promotion, now = new Date()) {
-  if (!promotion) {
-    return false;
-  }
+  if (!promotion) return false;
+  if (promotion.status === "expired") return true;
 
-  if (promotion.status === 'expired') {
-    return true;
-  }
+  const [day, month, year] = String(promotion.endDate || "").split("/").map(Number);
+  if (![day, month, year].every(Number.isFinite)) return false;
 
-  const parts = promotion.endDate?.split('/');
-  if (!parts || parts.length !== 3) {
-    return false;
-  }
-
-  const [day, month, year] = parts.map(Number);
   const endDate = new Date(year, month - 1, day, 23, 59, 59, 999);
-  return Number.isFinite(endDate.getTime()) && endDate < now;
+  return endDate < now;
 }
