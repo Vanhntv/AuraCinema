@@ -53,6 +53,13 @@
   --surface-subtle: #f9fafb;
   --surface-hover: #f2f4f7;
   --shadow-card: 0 1px 2px rgba(16, 24, 40, .05);
+  --seat-normal-bg: #c9dcf8;
+  --seat-normal-text: #344054;
+  --seat-vip-bg: #7f56d9;
+  --seat-couple-bg: #d94f41;
+  --seat-maintenance-bg: #f59e0b;
+  --seat-maintenance-text: #422006;
+  --seat-unavailable-bg: #98a2b3;
 }
 
 .staff-layout {
@@ -177,6 +184,84 @@
   box-shadow: 0 0 0 2px rgba(245, 158, 11, .22);
   opacity: 1;
 }
+
+/* Keep the counter-sale seat map visually identical to room management. */
+.seat-map,
+.maintenance-map {
+  padding: 20px;
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.seat.sale-seat.maintenance {
+  border-color: #f59e0b;
+  color: #422006;
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, .22);
+  opacity: 1;
+}
+
+.seat.sale-seat.booked,
+.seat.sale-seat.held,
+.seat.sale-seat.reserved,
+.maintenance-seat.is-taken:not(.is-maintenance) {
+  border-color: transparent;
+  color: #fff;
+  background: #475467;
+  box-shadow: none;
+  opacity: .65;
+}
+
+.seat.sale-seat.selected:not(.maintenance) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(70, 95, 255, .2);
+}
+
+.sale-seat-legend .selected {
+  border: 2px solid var(--accent);
+  background: #fff;
+  box-shadow: none;
+}
+
+/* One shared seat palette for counter sale and room management. */
+.maintenance-seat.normal:not(.is-maintenance):not(.is-taken),
+.seat.sale-seat.normal:not(.maintenance):not(.booked):not(.held):not(.reserved) {
+  color: var(--seat-normal-text);
+  background: var(--seat-normal-bg);
+}
+
+.maintenance-seat.vip:not(.is-maintenance):not(.is-taken),
+.seat.sale-seat.vip:not(.maintenance):not(.booked):not(.held):not(.reserved) {
+  color: #fff;
+  background: var(--seat-vip-bg);
+}
+
+.maintenance-seat.couple:not(.is-maintenance):not(.is-taken),
+.seat.sale-seat.couple:not(.maintenance):not(.booked):not(.held):not(.reserved) {
+  color: #fff;
+  background: var(--seat-couple-bg);
+}
+
+.maintenance-seat.is-maintenance,
+.maintenance-seat.is-maintenance.is-taken,
+.seat.sale-seat.maintenance {
+  color: var(--seat-maintenance-text);
+  background: var(--seat-maintenance-bg);
+}
+
+.maintenance-seat.is-taken:not(.is-maintenance),
+.seat.sale-seat.booked,
+.seat.sale-seat.held,
+.seat.sale-seat.reserved {
+  color: #fff;
+  background: var(--seat-unavailable-bg);
+}
+
+.type-legend .normal { background: var(--seat-normal-bg); }
+.type-legend .vip { background: var(--seat-vip-bg); }
+.type-legend .couple { background: var(--seat-couple-bg); }
+.type-legend .maintenance { background: var(--seat-maintenance-bg); }
+.type-legend .taken { background: var(--seat-unavailable-bg); }
 .order-seats b { color: #3641f5; background: #ecf3ff; }
 .combo-info strong, .order-breakdown strong, .pos-date-tabs button.active { color: var(--primary); }
 .combo-actions button { color: #3641f5; background: #ecf3ff; }
