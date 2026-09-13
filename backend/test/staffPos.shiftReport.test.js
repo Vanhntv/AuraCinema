@@ -4,7 +4,7 @@ import Booking from "../src/models/Booking.js";
 import Ticket from "../src/models/Ticket.js";
 import TicketScanLog from "../src/models/TicketScanLog.js";
 import User from "../src/models/User.js";
-import { createCounterSale, getShiftReport, lookupStaffBookingOrder } from "../src/controllers/staffPosControllers.js";
+import { createCounterSale, getShiftReport, lookupStaffBookingOrder, printCounterSale } from "../src/controllers/staffPosControllers.js";
 
 const makeResponse = () => ({
   statusCode: 200,
@@ -25,6 +25,27 @@ test("counter sale requires the staff seat hold token", async () => {
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.success, false);
+});
+
+test("counter tickets cannot be printed a second time", async () => {
+  const originalBookingFindOne = Booking.findOne;
+  const originalTicketFind = Ticket.find;
+  const originalTicketUpdateMany = Ticket.updateMany;
+  let updateCalled = false;
+  Booking.findOne = async () => ({ _id: "booking-1", booking_code: "POS001", seat_items: [], total_price: 0 });
+  Ticket.find = () => ({ select: () => ({ sort: async () => [{ _id: "ticket-1", printedAt: new Date() }] }) });
+  Ticket.updateMany = async () => { updateCalled = true; return { modifiedCount: 1 }; };
+  const res = makeResponse();
+  try {
+    await printCounterSale({ params: { id: "booking-1" }, user: { id: "staff-1", role: "staff" } }, res);
+  } finally {
+    Booking.findOne = originalBookingFindOne;
+    Ticket.find = originalTicketFind;
+    Ticket.updateMany = originalTicketUpdateMany;
+  }
+  assert.equal(res.statusCode, 409);
+  assert.match(res.body.message, /đã được in trước đó/i);
+  assert.equal(updateCalled, false);
 });
 
 test("staff booking QR lookup returns every booked seat", async () => {

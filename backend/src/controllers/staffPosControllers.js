@@ -298,8 +298,12 @@ export const printCounterSale = async (req, res) => {
     if (req.user.role !== "admin") filter.sold_by = req.user.id;
     const booking = await Booking.findOne(filter);
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn bán tại quầy." });
+    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt").sort({ seatLabel: 1 });
+    if (!existingTickets.length) return res.status(404).json({ success: false, message: "Đơn chưa có vé để in." });
+    if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in trước đó và không thể in lại tại quầy." });
     const now = new Date();
-    await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
+    const printClaim = await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
+    if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in hoặc không còn đủ điều kiện in." });
     const tickets = await Ticket.find({ bookingId: booking._id }).sort({ seatLabel: 1 });
     return res.json({ success: true, data: { booking_code: booking.booking_code, movie: booking.movie_snapshot.title, showtime: booking.showtime_snapshot, seats: booking.seat_items.map((item) => item.seat_label), total_price: booking.total_price, tickets: tickets.map((item) => ({ code: item.ticketCode, seat: item.seatLabel })) } });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
