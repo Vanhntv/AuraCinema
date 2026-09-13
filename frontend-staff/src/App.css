@@ -188,6 +188,16 @@
 }
 
 /* Keep the counter-sale seat map visually identical to room management. */
+.seat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .seat-map,
 .maintenance-map {
   padding: 20px;
