@@ -169,6 +169,14 @@
 }
 .seat-legend .selected, .seat.selected, .maintenance-seat.vip, .type-legend .vip, .seat.sale-seat.vip { background: #7f56d9; }
 .maintenance-seat.couple, .type-legend .couple, .seat.sale-seat.couple { background: #f04438; }
+.maintenance-seat.is-maintenance,
+.maintenance-seat.is-maintenance.is-taken {
+  border-color: #f59e0b;
+  color: #422006;
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, .22);
+  opacity: 1;
+}
 .order-seats b { color: #3641f5; background: #ecf3ff; }
 .combo-info strong, .order-breakdown strong, .pos-date-tabs button.active { color: var(--primary); }
 .combo-actions button { color: #3641f5; background: #ecf3ff; }
