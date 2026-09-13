@@ -55,15 +55,13 @@ const restoreComboStock = async ({ combos = [], session }) => {
 
   if (!restorableCombos.length) return;
 
-  await Promise.all(
-    restorableCombos.map((item) =>
-      Combo.updateOne(
-        { _id: item.combo_id },
-        { $inc: { stock: item.quantity } },
-        { session },
-      ),
-    ),
-  );
+  for (const item of restorableCombos) {
+    await Combo.updateOne(
+      { _id: item.combo_id },
+      { $inc: { stock: item.quantity } },
+      { session },
+    );
+  }
 };
 
 const cancelUnpaidBookingAfterPaymentFailure = async ({
@@ -119,7 +117,6 @@ const isTransactionUnsupportedError = (error) => {
 
   return (
     message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
     message.includes("replica set member or mongos")
   );
 };

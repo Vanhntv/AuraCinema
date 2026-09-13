@@ -690,7 +690,7 @@ test("create booking refuses writes when MongoDB transactions are unsupported", 
   let createdPayload = null;
   const failingSession = {
     async withTransaction() {
-      throw new Error("Only servers in a sharded cluster can start a new transaction at the active transaction number");
+      throw new Error("Transaction numbers are only allowed on a replica set member or mongos");
     },
     async endSession() {},
   };

@@ -13,7 +13,6 @@ const isTransactionUnsupportedError = (error) => {
   const message = String(error?.message || "").toLowerCase();
   return (
     message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
     message.includes("replica set member or mongos")
   );
 };
