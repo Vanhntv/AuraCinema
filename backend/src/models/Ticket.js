@@ -25,7 +25,7 @@ const ticketSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     },
     movieId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -128,6 +128,7 @@ ticketSchema.index(
 ticketSchema.index({ bookingId: 1 });
 ticketSchema.index({ userId: 1, createdAt: -1 });
 ticketSchema.index({ status: 1 });
+ticketSchema.index({ checkedInBy: 1, checkedInAt: -1, status: 1 });
 
 const Ticket = mongoose.model("Ticket", ticketSchema);
 

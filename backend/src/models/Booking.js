@@ -15,7 +15,10 @@ const bookingSchema = new mongoose.Schema(
       token_encrypted: { type: String, default: "", trim: true, select: false },
       issued_at: { type: Date, default: null },
     },
-    user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    // Counter sales can belong to a walk-in customer without an online account.
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    sales_channel: { type: String, enum: ["online", "counter"], default: "online", index: true },
+    sold_by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
     seat_hold_id: { type: mongoose.Schema.Types.ObjectId, ref: "SeatHold", default: null },
     showtime_id: { type: mongoose.Schema.Types.ObjectId, ref: "Showtime", required: true },
     showtime_seat_ids: [{ type: mongoose.Schema.Types.ObjectId, ref: "ShowtimeSeat", required: true }],
@@ -86,7 +89,8 @@ const bookingSchema = new mongoose.Schema(
     cancelled_at: { type: Date, default: null },
     payment_status: {
       type: String,
-      enum: ["pending", "paid", "failed", "cancelled", "expired", "refund_pending", "refunded"],
+      // Old terminal states remain readable; no API can create or select them.
+      enum: ["pending", "paid", "failed", "cancelled", "expired", "review_required", "refund_pending", "refunded"],
       default: "pending",
     },
     payment_expires_at: { type: Date, default: null },

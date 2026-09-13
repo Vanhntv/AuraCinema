@@ -5,7 +5,7 @@ const LOCAL_MONGODB_URI = "mongodb://localhost:27017/nodejs";
 
 const DEFAULT_MONGODB_TARGET = "local";
 
-const getMongoUri = () => {
+export const getMongoUri = () => {
   if (process.env.MONGODB_URI) {
     return process.env.MONGODB_URI;
   }

@@ -2,7 +2,7 @@ import { randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } fro
 import { promisify } from "util";
 import User from "../models/User.js";
 import RewardPointLog from "../models/RewardPointLog.js";
-import { syncMissingRewardPointLogsForUser } from "../services/rewardPointService.js";
+import { membershipView } from "../services/loyaltyPolicy.js";
 import { signJwt } from "../utils/jwt.js";
 
 const scrypt = promisify(scryptCallback);
@@ -18,6 +18,8 @@ const loginAttempts = new Map();
 const resolveUserRole = (user) =>
   String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1
     ? "admin"
+    : String(user?.role || "").trim().toLowerCase() === "staff" || Number(user?.role_id) === 2
+      ? "staff"
     : DEFAULT_ROLE;
 
 const hashPassword = async (password) => {
@@ -507,7 +509,6 @@ export const profile = async (req, res) => {
       });
     }
 
-    await syncMissingRewardPointLogsForUser({ userId: user._id });
 
     const rewardPointLogs = await RewardPointLog.find({ user_id: req.user.id })
       .sort({ created_at: -1 })
@@ -518,6 +519,7 @@ export const profile = async (req, res) => {
       success: true,
       data: {
         ...sanitizeUser(user),
+        membership: membershipView(user),
         reward_point_logs: rewardPointLogs,
       },
     });

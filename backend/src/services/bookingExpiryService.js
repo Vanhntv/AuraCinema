@@ -4,7 +4,7 @@ import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import { PAYMENT_DURATION_MS, createPaymentExpiry, isExpired } from "./seatHoldPolicy.js";
-import { refundVoucherUsageForBooking } from "./voucherService.js";
+import { releaseReservedVoucherForBooking } from "./voucherService.js";
 
 const makeError = (message, statusCode) =>
   Object.assign(new Error(message), { statusCode });
@@ -13,7 +13,6 @@ const isTransactionUnsupportedError = (error) => {
   const message = String(error?.message || "").toLowerCase();
   return (
     message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
     message.includes("replica set member or mongos")
   );
 };
@@ -28,7 +27,7 @@ const runWithOptionalTransaction = async (work) => {
     return result;
   } catch (error) {
     if (isTransactionUnsupportedError(error) && process.env.NODE_ENV !== "production") {
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để giải phóng đơn và voucher an toàn."), { statusCode: 503 });
     }
     throw error;
   } finally {
@@ -127,10 +126,8 @@ export const expirePendingBooking = async ({
   }
 
   if (expiredBooking.voucher?.voucher_id) {
-    await refundVoucherUsageForBooking({
+    await releaseReservedVoucherForBooking({
       bookingId: expiredBooking._id,
-      refundUsage: true,
-      finalStatus: "cancelled",
       session,
     });
   }
@@ -186,7 +183,7 @@ export const markLatePaymentForReview = async ({
   session = null,
 }) => {
   booking.status = "cancelled";
-  booking.payment_status = "refund_pending";
+  booking.payment_status = "review_required";
   booking.payment_provider = provider;
   booking.payment_transaction_id = transactionId;
   await booking.save({ session });

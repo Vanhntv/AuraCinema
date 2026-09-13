@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const voucherUsageSchema = new mongoose.Schema(
   {
+    user_voucher_id: { type: mongoose.Schema.Types.ObjectId, ref: "UserVoucher", default: null },
     voucher_id: { type: mongoose.Schema.Types.ObjectId, ref: "Voucher", required: true },
     booking_id: { type: mongoose.Schema.Types.ObjectId, ref: "Booking", required: true },
     user_id: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },

@@ -5,6 +5,13 @@ const isAdminUser = (user) =>
   String(user?.role || "").trim().toLowerCase() === "admin" ||
   Number(user?.role_id) === 1;
 
+const resolveRole = (user) => {
+  if (isAdminUser(user)) return "admin";
+  return String(user?.role || "").trim().toLowerCase() === "staff" || Number(user?.role_id) === 2
+    ? "staff"
+    : "user";
+};
+
 export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -56,7 +63,7 @@ export const authMiddleware = async (req, res, next) => {
     req.user = {
       id: user._id.toString(),
       role_id: user.role_id,
-      role: isAdminUser(user) ? "admin" : "user",
+      role: resolveRole(user),
       iat: payload.iat,
       exp: payload.exp,
     };
@@ -95,7 +102,7 @@ export const optionalAuthMiddleware = async (req, res, next) => {
       req.user = {
         id: user._id.toString(),
         role_id: user.role_id,
-        role: isAdminUser(user) ? "admin" : "user",
+        role: resolveRole(user),
         iat: payload.iat,
         exp: payload.exp,
       };

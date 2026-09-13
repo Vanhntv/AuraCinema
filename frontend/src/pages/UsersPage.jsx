@@ -31,6 +31,7 @@ const tierLabels = {
 
 const roleLabels = {
   user: "User",
+  staff: "Nhân viên",
   admin: "Admin",
 };
 
@@ -490,6 +491,7 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
                 <label className="form-label">Vai trò</label>
                 <select className="form-input" name="role" value={formData.role} onChange={handleChange}>
                   <option value="user">User</option>
+                  <option value="staff">Nhân viên</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -813,6 +815,7 @@ const UsersPage = () => {
             <select className="user-filter-select" value={roleFilter} onChange={handleFilterChange(setRoleFilter, "role")}>
               <option value="">Tất cả vai trò</option>
               <option value="user">User</option>
+              <option value="staff">Nhân viên</option>
               <option value="admin">Admin</option>
             </select>
             <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "account_status")}>

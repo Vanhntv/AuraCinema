@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { requireTransaction } from "../services/transactionService.js";
 import { randomInt } from "crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
@@ -10,7 +11,7 @@ import Ticket from "../models/Ticket.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import {
   consumeReservedVoucherForBooking,
-  refundVoucherUsageForBooking,
+  releaseReservedVoucherForBooking,
   reserveVoucherForBooking,
   reserveVoucherUsageForPayment,
   verifyVoucherService,
@@ -18,6 +19,7 @@ import {
 import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { creditRewardPointsForBooking } from "../services/rewardPointService.js";
 import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
+import { isSeatInMaintenance } from "../utils/seatStatus.js";
 import { createPaymentExpiry } from "../services/seatHoldPolicy.js";
 import {
   assertBookingPayable,
@@ -107,7 +109,6 @@ const isTransactionUnsupportedError = (error) => {
 
   return (
     message.includes("transaction numbers are only allowed") ||
-    message.includes("only servers in a sharded cluster can start a new transaction") ||
     message.includes("replica set member or mongos")
   );
 };
@@ -123,6 +124,12 @@ const runWithOptionalTransaction = async (work) => {
     return result;
   } catch (error) {
     if (isTransactionUnsupportedError(error)) {
+      console.error("Booking transaction failed because MongoDB rejected transaction support", {
+        name: error?.name,
+        code: error?.code,
+        codeName: error?.codeName,
+        message: error?.message,
+      });
       if (process.env.NODE_ENV === "production") {
         throw Object.assign(
           new Error("MongoDB production cần replica set hoặc sharded cluster để xử lý booking an toàn"),
@@ -130,7 +137,7 @@ const runWithOptionalTransaction = async (work) => {
         );
       }
 
-      return work(null);
+      throw Object.assign(new Error("MongoDB cần replica set để xử lý đặt vé an toàn."), { statusCode: 503 });
     }
 
     throw error;
@@ -147,6 +154,7 @@ export const markBookingAsPaid = async ({
   transactionId = "",
   session = null,
 }) => {
+  requireTransaction(session);
   if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
     throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
   }
@@ -164,9 +172,14 @@ export const markBookingAsPaid = async ({
     throw Object.assign(new Error("Đơn vé không ở trạng thái chờ thanh toán"), { statusCode: 409 });
   }
 
-  const showtime = await Showtime.findOne({ _id: booking.showtime_id, deleted_at: null }).session(session);
+  // Serialize payment with showtime cancellation on the same document.
+  const showtime = await Showtime.findOneAndUpdate(
+    { _id: booking.showtime_id, deleted_at: null, status: { $ne: "cancelled" } },
+    { $inc: { __v: 1 } },
+    { session, returnDocument: "after" },
+  );
   if (!showtime) {
-    throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
+    throw Object.assign(new Error("Suất chiếu không còn khả dụng"), { statusCode: 409 });
   }
 
   const seatIds = booking.showtime_seat_ids.map((seatId) => seatId);
@@ -361,20 +374,19 @@ const reserveComboStock = async ({ combos, session }) => {
     }
   }
 
-  const updateResults = await Promise.all(
-    combos.map((item) =>
-      Combo.updateOne(
-        {
-          _id: item.combo_id,
-          deleted_at: null,
-          status: true,
-          stock: { $gte: item.quantity },
-        },
-        { $inc: { stock: -item.quantity } },
-        { session },
-      ),
-    ),
-  );
+  const updateResults = [];
+  for (const item of combos) {
+    updateResults.push(await Combo.updateOne(
+      {
+        _id: item.combo_id,
+        deleted_at: null,
+        status: true,
+        stock: { $gte: item.quantity },
+      },
+      { $inc: { stock: -item.quantity } },
+      { session },
+    ));
+  }
 
   const failedIndex = updateResults.findIndex((result) => result.modifiedCount !== 1);
   if (failedIndex !== -1) {
@@ -406,15 +418,13 @@ const restoreComboStock = async ({ combos = [], session }) => {
 
   if (!restorableCombos.length) return;
 
-  await Promise.all(
-    restorableCombos.map((item) =>
-      Combo.updateOne(
-        { _id: item.combo_id },
-        { $inc: { stock: item.quantity } },
-        { session },
-      ),
-    ),
-  );
+  for (const item of restorableCombos) {
+    await Combo.updateOne(
+      { _id: item.combo_id },
+      { $inc: { stock: item.quantity } },
+      { session },
+    );
+  }
 };
 
 export const createBooking = async (req, res) => {
@@ -422,6 +432,7 @@ export const createBooking = async (req, res) => {
     const { showtime_id, showtime_seat_ids } = req.body;
     const holdToken = String(req.body.hold_token || "").trim();
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
+    const userVoucherId = req.body.user_voucher_id;
     const combos = normalizeComboItems(req.body.combos);
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
@@ -435,24 +446,22 @@ export const createBooking = async (req, res) => {
 
     const createdBooking = await runWithOptionalTransaction(async (session) => {
       const now = new Date();
-      const [user, showtime, hold] = await Promise.all([
-        User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session),
-        Showtime.findOne({ _id: showtime_id, deleted_at: null })
-          .populate({ path: "movie_id", select: "title poster age_limit" })
-          .populate({
-            path: "room_id",
-            select: "name cinema_id",
-            populate: { path: "cinema_id", select: "name address" },
-          })
-          .session(session),
-        SeatHold.findOne({
-          token: holdToken,
-          user_id: req.user.id,
-          showtime_id,
-          status: "active",
-          expires_at: { $gt: now },
-        }).session(session),
-      ]);
+      const user = await User.findOne({ _id: req.user.id, deleted_at: null, status: true }).session(session);
+      const showtime = await Showtime.findOne({ _id: showtime_id, deleted_at: null })
+        .populate({ path: "movie_id", select: "title poster age_limit" })
+        .populate({
+          path: "room_id",
+          select: "name cinema_id",
+          populate: { path: "cinema_id", select: "name address" },
+        })
+        .session(session);
+      const hold = await SeatHold.findOne({
+        token: holdToken,
+        user_id: req.user.id,
+        showtime_id,
+        status: "active",
+        expires_at: { $gt: now },
+      }).session(session);
 
       if (!user) throw Object.assign(new Error("Không tìm thấy tài khoản"), { statusCode: 404 });
       if (!showtime) throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
@@ -483,6 +492,10 @@ export const createBooking = async (req, res) => {
 
       if (seats.some((seat) => isBrokenSeatType(seat.seat_id?.seat_type_id))) {
         throw Object.assign(new Error("Ghe hong khong the dat ve"), { statusCode: 409 });
+      }
+
+      if (seats.some((seat) => isSeatInMaintenance(seat.seat_id))) {
+        throw Object.assign(new Error("Ghế đang bảo trì không thể đặt vé"), { statusCode: 409 });
       }
 
       const reservedCombos = await reserveComboStock({ combos, session });
@@ -517,9 +530,10 @@ export const createBooking = async (req, res) => {
       let voucherSnapshot = undefined;
       let verifiedVoucherResult = null;
 
-      if (voucherCode) {
+      if (voucherCode || userVoucherId) {
         const voucherResult = await verifyVoucherService({
           code: voucherCode,
+          user_voucher_id: userVoucherId,
           order_amount: subtotalPrice,
           ticket_amount: seatTotalPrice,
           concession_amount: comboTotalPrice,
@@ -785,10 +799,8 @@ export const cancelBooking = async (req, res) => {
       booking.payment_status = "cancelled";
       await booking.save({ session });
 
-      await refundVoucherUsageForBooking({
+      await releaseReservedVoucherForBooking({
         bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: "cancelled",
         session,
       });
 
@@ -898,14 +910,6 @@ export const getBookingOrderQr = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé" });
     }
-    if (booking.status !== "confirmed" || booking.payment_status !== "paid") {
-      return res.status(409).json({
-        success: false,
-        code: "BOOKING_NOT_PAYABLE",
-        message: "QR đơn chỉ khả dụng sau khi thanh toán thành công",
-      });
-    }
-
     return res.json({
       success: true,
       data: {

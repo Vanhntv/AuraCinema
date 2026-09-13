@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { randomBytes } from "node:crypto";
 
 const userSchema = new mongoose.Schema(
   {
@@ -8,7 +9,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["user", "admin"],
+      enum: ["user", "staff", "admin"],
       default: "user",
     },
     full_name: {
@@ -50,6 +51,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    member_code: { type: String, default: () => `AMC${randomBytes(8).toString("hex").toUpperCase()}` },
+    member_activated_at: { type: Date, default: null },
+    loyalty_reconciled_at: { type: Date, default: null },
     member_tier: {
       type: String,
       enum: ["member", "vip", "vvip"],
@@ -58,7 +62,6 @@ const userSchema = new mongoose.Schema(
     reward_points: {
       type: Number,
       default: 0,
-      min: 0,
     },
     total_spent: {
       type: Number,
@@ -107,6 +110,11 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+userSchema.index({ member_code: 1 }, { unique: true, sparse: true });
+userSchema.pre("save", function () {
+  if (this.isNew && Number(this.reward_points || 0) === 0 && Number(this.total_spent || 0) === 0) this.loyalty_reconciled_at = new Date();
+  if (this.status && this.account_status === "active" && !this.member_activated_at) this.member_activated_at = new Date();
+});
 const User = mongoose.model("User", userSchema);
 
 export default User;

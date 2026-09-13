@@ -30,6 +30,12 @@ const seatSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    operational_status: {
+      type: String,
+      enum: ["active", "maintenance"],
+      default: "active",
+      trim: true,
+    },
     deleted_at: {
       type: Date,
       default: null,

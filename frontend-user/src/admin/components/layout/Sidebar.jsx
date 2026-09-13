@@ -114,7 +114,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
             <span className="sidebar-logo-text">AuraCinema</span>
           </div>
         </div>
-
         <nav className="sidebar-nav">
           {menuItems.map((section) => (
             <div key={section.section}>
@@ -135,7 +134,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
             </div>
           ))}
         </nav>
-
         <div className="sidebar-footer">
           <div className="sidebar-footer-kicker">
             <HiOutlineSparkles />

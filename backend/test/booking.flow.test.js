@@ -58,8 +58,9 @@ const withPatched = async (patches, callback) => {
 };
 
 const makeFakeSession = () => ({
+  inTransaction: () => true,
   async withTransaction(callback) {
-    await callback();
+    return await callback();
   },
   async endSession() {},
 });
@@ -494,7 +495,7 @@ test("confirm booking payment marks reserved seats as booked", async () => {
         }).then(resolve, reject);
       },
     })],
-    [Showtime, "findOne", () => sessionResult({
+    [Showtime, "findOneAndUpdate", async () => ({
       _id: showtimeId,
       movie_id: new mongoose.Types.ObjectId(),
       room_id: new mongoose.Types.ObjectId(),
@@ -503,7 +504,8 @@ test("confirm booking payment marks reserved seats as booked", async () => {
       bookedSeatUpdate = { filter, update };
       return { modifiedCount: 2 };
     }],
-    [User, "findOneAndUpdate", () => sessionResult({ reward_points: 10 })],
+    [Booking, "updateOne", async () => ({ modifiedCount: 1 })],
+    [User, "findOneAndUpdate", async () => ({ reward_points: 10 })],
     [RewardPointLog, "create", async () => []],
     [Ticket, "find", () => ({
       select() {
@@ -579,7 +581,9 @@ test("admin payment cannot confirm a booking whose seats are owned by another bo
   };
 
   await withPatched([
-    [Booking, "findById", () => booking],
+    [mongoose, "startSession", async () => makeFakeSession()],
+    [Booking, "findById", () => sessionResult(booking)],
+    [Showtime, "findOneAndUpdate", async () => ({ _id: showtimeId })],
     [ShowtimeSeat, "updateMany", async (filter) => {
       assert.equal(String(filter.reserved_by_booking_id), String(bookingId));
       return { modifiedCount: 0 };
@@ -678,7 +682,7 @@ test("create booking retries when generated booking_code collides", async () => 
   });
 });
 
-test("create booking falls back when MongoDB transactions are unsupported", async () => {
+test("create booking refuses writes when MongoDB transactions are unsupported", async () => {
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();
   const seatId = new mongoose.Types.ObjectId().toString();
@@ -686,7 +690,7 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
   let createdPayload = null;
   const failingSession = {
     async withTransaction() {
-      throw new Error("Only servers in a sharded cluster can start a new transaction at the active transaction number");
+      throw new Error("Transaction numbers are only allowed on a replica set member or mongos");
     },
     async endSession() {},
   };
@@ -754,11 +758,10 @@ test("create booking falls back when MongoDB transactions are unsupported", asyn
 
     await createBooking(req, res);
 
-    assert.equal(res.statusCode, 201);
-    assert.equal(res.body.success, true);
-    assert.equal(String(res.body.data._id), String(createdPayload._id));
-    assert.ok(sessionsUsed.length > 0);
-    assert.ok(sessionsUsed.every((session) => session === null));
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.success, false);
+    assert.equal(createdPayload, null);
+    assert.equal(sessionsUsed.length, 0);
   });
 });
 

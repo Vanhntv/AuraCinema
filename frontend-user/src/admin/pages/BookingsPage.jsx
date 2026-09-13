@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  HiOutlineChevronLeft,
+  HiOutlineChevronRight,
   HiOutlineEye,
   HiOutlineRefresh,
   HiOutlinePrinter,
@@ -23,11 +25,12 @@ const paymentStatusLabels = {
   failed: "Thanh toán lỗi",
   cancelled: "Đã hủy",
   expired: "Hết hạn TT",
-  refund_pending: "Chờ đối soát hoàn tiền",
-  refunded: "Đã hoàn tiền",
+  review_required: "Cần đối soát",
+  refund_pending: "Cần đối soát (dữ liệu cũ)",
+  refunded: "Đã hoàn tiền (dữ liệu cũ)",
 };
 
-const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled", "refunded"]);
+const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled"]);
 
 const bookingStatusLabels = {
   pending: "Chờ thanh toán",
@@ -56,7 +59,7 @@ const formatDateTime = (value) => {
 
 const statusBadgeClass = (status) => {
   if (status === "paid" || status === "confirmed") return "status-badge status-now-showing";
-  if (["pending", "failed", "refund_pending"].includes(status)) return "status-badge status-coming-soon";
+  if (["pending", "failed", "review_required", "refund_pending"].includes(status)) return "status-badge status-coming-soon";
   return "status-badge status-ended";
 };
 
@@ -363,8 +366,8 @@ const BookingsPage = () => {
                     <td>{currencyFormatter.format(Number(booking.total_price || 0))}</td>
                     <td><span className={statusBadgeClass(booking.payment_status)}>{paymentStatusLabels[booking.payment_status] || booking.payment_status}</span></td>
                     <td><span className={statusBadgeClass(booking.status)}>{bookingStatusLabels[booking.status] || booking.status}</span></td>
-                    <td>
-                      <button className="action-btn view" onClick={() => openDetail(booking)} title="Xem chi tiết" type="button">
+                    <td className="booking-actions-cell">
+                      <button aria-label="Xem chi tiết đơn vé" className="action-btn view" onClick={() => openDetail(booking)} title="Xem chi tiết" type="button">
                         <HiOutlineEye />
                       </button>
                     </td>
@@ -376,42 +379,72 @@ const BookingsPage = () => {
         </div>
       </div>
 
-      <div className="pagination">
-        <button className="pagination-btn" disabled={currentPage <= 1 || loading} onClick={() => fetchBookings(currentPage - 1)} type="button">
-          Trước
-        </button>
-        <span className="pagination-info">Trang {currentPage} / {totalPages}</span>
-        <button className="pagination-btn" disabled={currentPage >= totalPages || loading} onClick={() => fetchBookings(currentPage + 1)} type="button">
-          Sau
-        </button>
-        <form className="pagination-lookup" onSubmit={handlePageLookup}>
-          <label htmlFor="booking-page-lookup">Đến trang</label>
-          <input
-            id="booking-page-lookup"
-            aria-describedby={pageLookupError ? "booking-page-lookup-error" : undefined}
-            aria-invalid={Boolean(pageLookupError)}
-            inputMode="numeric"
-            maxLength={String(totalPages).length}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "" || /^\d+$/.test(value)) {
-                setPageLookup(value);
-                setPageLookupError("");
-              }
-            }}
-            pattern="[0-9]*"
-            value={pageLookup}
-          />
-          <button className="pagination-go-btn" disabled={loading || pageLookup === ""} type="submit">
-            Đi
-          </button>
-        </form>
-        {pageLookupError && (
-          <span className="pagination-lookup-error" id="booking-page-lookup-error" role="alert">
-            {pageLookupError}
-          </span>
-        )}
-      </div>
+      {totalPages > 1 && (
+        <nav aria-label="Phân trang đơn vé" className="booking-pagination">
+          <div className="booking-pagination-nav">
+            <button
+              aria-label="Trang trước"
+              className="pagination-btn"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => fetchBookings(currentPage - 1)}
+              type="button"
+            >
+              <HiOutlineChevronLeft />
+              <span>Trước</span>
+            </button>
+
+            <span aria-live="polite" className="pagination-info">
+              Trang <strong>{currentPage}</strong> / {totalPages}
+            </span>
+
+            <button
+              aria-label="Trang sau"
+              className="pagination-btn"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => fetchBookings(currentPage + 1)}
+              type="button"
+            >
+              <span>Sau</span>
+              <HiOutlineChevronRight />
+            </button>
+          </div>
+
+          <form className="pagination-lookup" onSubmit={handlePageLookup}>
+            <label htmlFor="booking-page-lookup">Đi tới</label>
+            <input
+              id="booking-page-lookup"
+              aria-describedby={pageLookupError ? "booking-page-lookup-error" : undefined}
+              aria-invalid={Boolean(pageLookupError)}
+              aria-label={`Số trang, từ 1 đến ${totalPages}`}
+              inputMode="numeric"
+              maxLength={String(totalPages).length}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "" || /^\d+$/.test(value)) {
+                  setPageLookup(value);
+                  setPageLookupError("");
+                }
+              }}
+              pattern="[0-9]*"
+              value={pageLookup}
+            />
+            <button
+              aria-label="Đi đến trang đã nhập"
+              className="pagination-go-btn"
+              disabled={loading || pageLookup === "" || Number(pageLookup) === currentPage}
+              type="submit"
+            >
+              Đi
+            </button>
+          </form>
+
+          {pageLookupError && (
+            <span className="pagination-lookup-error" id="booking-page-lookup-error" role="alert">
+              {pageLookupError}
+            </span>
+          )}
+        </nav>
+      )}
 
       {selectedBooking && (
         <BookingDetailModal
@@ -467,8 +500,8 @@ const BookingDetailModal = ({
   reprinting,
   submitting,
 }) => (
-  <div className="modal-overlay active">
-    <div className="booking-detail-modal">
+  <div className="modal-overlay active" onClick={onClose}>
+    <div className="booking-detail-modal" onClick={(event) => event.stopPropagation()}>
       <div className="modal-header">
         <div>
           <h2>Chi tiết đơn vé</h2>
@@ -500,12 +533,12 @@ const BookingDetailModal = ({
               <div>
                 <h3>Vé trong đơn và in lại</h3>
                 <p className="booking-admin-note">Chỉ vé còn hiệu lực mới được in lại. Lý do là bắt buộc và được lưu trong lịch sử đơn.</p>
-                <div style={{ display: "grid", gap: "8px", margin: "12px 0" }}>
+                <div className="booking-ticket-list">
                   {(booking.tickets || []).map((ticket) => {
                     const selectable = ticket.status === "VALID";
                     const selected = reprintTicketIds.includes(String(ticket.id));
                     return (
-                      <label className="booking-info-item" key={ticket.id} style={{ cursor: selectable ? "pointer" : "not-allowed" }}>
+                      <label className={`booking-ticket-item${selected ? " selected" : ""}${selectable ? "" : " disabled"}`} key={ticket.id}>
                         <input
                           type="checkbox"
                           disabled={!selectable || reprinting}
@@ -514,8 +547,10 @@ const BookingDetailModal = ({
                             ? [...current, String(ticket.id)]
                             : current.filter((id) => id !== String(ticket.id)))}
                         />
-                        <span>{ticket.seatLabel} · {ticket.seatType || "Loại ghế chưa cập nhật"}</span>
-                        <strong>{ticket.ticketCode} · {ticket.status}{ticket.printedAt ? " · Đã in" : " · Chưa in"}</strong>
+                        <span className="booking-ticket-copy">
+                          <strong>{ticket.seatLabel} · {ticket.seatType || "Loại ghế chưa cập nhật"}</strong>
+                          <small>{ticket.ticketCode} · {ticket.status}{ticket.printedAt ? " · Đã in" : " · Chưa in"}</small>
+                        </span>
                       </label>
                     );
                   })}
@@ -557,11 +592,12 @@ const BookingDetailModal = ({
                   className="form-input"
                   onChange={(event) => onPaymentChange((current) => ({ ...current, payment_status: event.target.value }))}
                   value={paymentForm.payment_status}
+                  disabled={!editablePaymentStatuses.has(booking.payment_status) || booking.status === "cancelled"}
                 >
                   {Object.entries(paymentStatusLabels)
                     .filter(([value]) =>
                       (editablePaymentStatuses.has(value) || value === booking.payment_status) &&
-                      (booking.payment_status !== "paid" || ["paid", "cancelled", "refunded"].includes(value)),
+                      (booking.payment_status !== "paid" || value === "paid"),
                     )
                     .map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
@@ -573,19 +609,16 @@ const BookingDetailModal = ({
                   placeholder="Mã giao dịch"
                   value={paymentForm.payment_transaction_id}
                 />
-                <button className="btn btn-primary" disabled={submitting} onClick={onUpdatePayment} type="button">
+                <button className="btn btn-primary" disabled={submitting || !editablePaymentStatuses.has(booking.payment_status) || booking.status === "cancelled"} onClick={onUpdatePayment} type="button">
                   Lưu thanh toán
                 </button>
               </div>
             </div>
 
-            <div>
+            {booking.payment_status !== "paid" && <div>
               <h3>Hủy đơn</h3>
-              {booking.payment_status === "paid" && (
-                <p className="booking-admin-note">Hủy đơn sẽ vô hiệu hóa toàn bộ Ticket. Hoàn tiền cần được xử lý và đối soát trong workflow thanh toán riêng.</p>
-              )}
-              {booking.payment_status === "refund_pending" && (
-                <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; hãy đối soát giao dịch và chuyển sang “Đã hoàn tiền” sau khi xử lý.</p>
+              {["review_required", "refund_pending"].includes(booking.payment_status) && (
+                <p className="booking-admin-note" role="status">Khách đã thanh toán sau khi đơn hết hạn. Không xác nhận lại ghế; giao dịch cần được đối soát.</p>
               )}
               <div className="booking-action-row">
                 <input
@@ -604,7 +637,7 @@ const BookingDetailModal = ({
                   Hủy đơn
                 </button>
               </div>
-            </div>
+            </div>}
           </div>
         </>
       )}

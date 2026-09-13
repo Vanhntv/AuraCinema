@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-export const BOOKING_ACTIONS = ["LOOKUP", "PRINT_INITIAL", "REPRINT"];
+export const BOOKING_ACTIONS = ["LOOKUP", "PRINT_INITIAL", "REPRINT", "COMPLAINT_NOTE"];
 export const BOOKING_ACTION_RESULTS = [
   "SUCCESS",
   "PARTIAL",

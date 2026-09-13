@@ -3,10 +3,10 @@ import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
 import Booking from "../models/Booking.js";
 import AuditLog from "../models/AuditLog.js";
+import { withTransaction } from "../services/transactionService.js";
 import {
   generateShowtimeSeatsForShowtimeService,
 } from "../services/showtimeSeatService.js";
-import { refundVoucherUsageForBooking } from "../services/voucherService.js";
 
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
@@ -768,6 +768,10 @@ export const updateShowtime = async (req, res) => {
     const { id } = req.params;
     const { movie_id, room_id, start_time, end_time, base_price, seat_prices, status } = req.body;
 
+    if (status !== undefined && parseShowtimeStatus(status) === "cancelled") {
+      return deleteShowtime(req, res);
+    }
+
     const showtime = await Showtime.findOne({
       _id: id,
       deleted_at: null,
@@ -1033,45 +1037,22 @@ export const updateShowtime = async (req, res) => {
 export const deleteShowtime = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const showtime = await Showtime.findOne({
-      _id: id,
-      deleted_at: null,
+    const { showtime, beforeSnapshot } = await withTransaction(async session => {
+      const showtime = await Showtime.findOneAndUpdate(
+        { _id: id, deleted_at: null }, { $inc: { __v: 1 } },
+        { session, returnDocument: "after" },
+      );
+      if (!showtime) throw Object.assign(new Error("Khong tim thay showtime"), { statusCode: 404 });
+      assertShowtimeHasNotStarted(showtime);
+      if (await Booking.exists({ showtime_id: showtime._id, payment_status: "paid" }).session(session)) {
+        throw Object.assign(new Error("Không thể hủy suất chiếu đã có đơn thanh toán"), { statusCode: 409 });
+      }
+      const beforeSnapshot = toAuditSnapshot(showtime);
+      showtime.status = "cancelled";
+      showtime.cancelled_at = new Date();
+      await showtime.save({ session });
+      return { showtime, beforeSnapshot };
     });
-
-    if (!showtime) {
-      return res.status(404).json({
-        success: false,
-        message: "Khong tim thay showtime",
-      });
-    }
-
-    assertShowtimeHasNotStarted(showtime);
-    const beforeSnapshot = toAuditSnapshot(showtime);
-
-    showtime.status = "cancelled";
-    showtime.cancelled_at = new Date();
-    await showtime.save();
-
-    const affectedBookings = await Booking.find({
-      showtime_id: showtime._id,
-      status: "confirmed",
-      payment_status: "paid",
-    });
-
-    for (const booking of affectedBookings) {
-      booking.status = "cancelled";
-      booking.payment_status = "refunded";
-      booking.cancelled_by = "cinema";
-      booking.cancellation_reason = "Rap huy suat chieu";
-      booking.cancelled_at = new Date();
-      await booking.save();
-      await refundVoucherUsageForBooking({
-        bookingId: booking._id,
-        refundUsage: true,
-        finalStatus: "refunded",
-      });
-    }
 
     await writeShowtimeAuditLog({
       req,

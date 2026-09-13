@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
+  HiOutlineChevronLeft,
+  HiOutlineChevronRight,
   HiOutlineClock,
   HiOutlineLocationMarker,
   HiOutlinePencil,
@@ -24,6 +26,7 @@ const emptyForm = {
   movie_id: "",
   room_id: "",
   start_date: "",
+  end_date: "",
   show_time: "",
   base_price: "",
   normal_price: "",
@@ -261,6 +264,11 @@ const toTimeInputValue = (value) => {
   return offsetDate.toISOString().slice(11, 16);
 };
 
+const toLocalDateValue = (date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+
 const buildStartDateTime = ({ start_date, show_time }) => {
   if (!start_date || !show_time) return null;
 
@@ -270,6 +278,101 @@ const buildStartDateTime = ({ start_date, show_time }) => {
 
 const formatTimeInputValue = (date) =>
   `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+
+const parseDateValue = (dateValue) => {
+  if (!dateValue) return null;
+  const date = new Date(`${dateValue}T00:00`);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateRangeValue = (dateValue) => {
+  const date = parseDateValue(dateValue);
+  if (!date) return "";
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+};
+
+const getDateRangeValues = (startDate, endDate = startDate) => {
+  const start = parseDateValue(startDate);
+  const end = parseDateValue(endDate || startDate);
+  if (!start || !end) return [];
+
+  const rangeStart = start <= end ? start : end;
+  const rangeEnd = start <= end ? end : start;
+  const dates = [];
+
+  for (
+    let current = new Date(rangeStart);
+    current <= rangeEnd;
+    current.setDate(current.getDate() + 1)
+  ) {
+    dates.push(toLocalDateValue(current));
+  }
+
+  return dates;
+};
+
+const getDateRangeLabel = (startDate, endDate) => {
+  if (!startDate) return "";
+  if (!endDate || startDate === endDate) return formatDateRangeValue(startDate);
+  return `${formatDateRangeValue(startDate)} - ${formatDateRangeValue(endDate)}`;
+};
+
+const getCalendarDays = (monthDate) => {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const calendarStart = new Date(firstDay);
+  calendarStart.setDate(firstDay.getDate() - ((firstDay.getDay() + 6) % 7));
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(calendarStart);
+    date.setDate(calendarStart.getDate() + index);
+    return {
+      date,
+      value: toLocalDateValue(date),
+      isCurrentMonth: date.getMonth() === month,
+    };
+  });
+};
+
+const formatCalendarMonthLabel = (date) =>
+  new Intl.DateTimeFormat("vi-VN", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+
+const formatSlotPreview = (slots, selectedDateCount) => {
+  if (!slots.length) return "";
+
+  const timeValues = [...new Set(slots.map(formatTimeInputValue))];
+  const slotDateValues = new Set(
+    slots
+      .map((slot) => {
+        const date = new Date(slot);
+        return Number.isNaN(date.getTime()) ? "" : toLocalDateValue(date);
+      })
+      .filter(Boolean),
+  );
+  const dateCount = slotDateValues.size || selectedDateCount;
+
+  if (dateCount > 1) {
+    const fullGridSlotCount = dateCount * timeValues.length;
+    return slots.length === fullGridSlotCount
+      ? `${dateCount} ngày × ${timeValues.length} khung giờ = ${slots.length} suất chiếu`
+      : `${slots.length} suất chiếu trống trong ${dateCount} ngày`;
+  }
+
+  const visibleTimes = timeValues.slice(0, 8);
+  const hiddenCount = Math.max(timeValues.length - visibleTimes.length, 0);
+  return hiddenCount
+    ? `${visibleTimes.join(", ")} +${hiddenCount} khung giờ`
+    : visibleTimes.join(", ");
+};
 
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
 const parseTicketPrice = (value) => {
@@ -346,6 +449,27 @@ const mergeSlotTimes = (slots = []) =>
     }, new Map()).values(),
   ).sort((first, second) => first.getTime() - second.getTime());
 
+const groupSlotsByDate = (slots = []) =>
+  Array.from(
+    slots.reduce((dateMap, slot) => {
+      const date = new Date(slot);
+      if (Number.isNaN(date.getTime())) return dateMap;
+
+      const dateValue = toLocalDateValue(date);
+      dateMap.set(dateValue, [...(dateMap.get(dateValue) || []), date]);
+      return dateMap;
+    }, new Map()),
+  )
+    .map(([dateValue, dateSlots]) => ({
+      dateValue,
+      slots: mergeSlotTimes(dateSlots),
+    }))
+    .sort(
+      (first, second) =>
+        parseDateValue(first.dateValue).getTime() -
+        parseDateValue(second.dateValue).getTime(),
+    );
+
 const ShowtimesPage = () => {
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
@@ -371,6 +495,9 @@ const ShowtimesPage = () => {
   const [conflictShowtimes, setConflictShowtimes] = useState([]);
   const [autoScheduleSlots, setAutoScheduleSlots] = useState([]);
   const [priceMode, setPriceMode] = useState("auto");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [dateRangeAnchor, setDateRangeAnchor] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
 
   const isEditing = Boolean(editingShowtime);
 
@@ -465,6 +592,11 @@ const ShowtimesPage = () => {
   const selectedRoom = useMemo(
     () => rooms.find((room) => room._id === formData.room_id),
     [formData.room_id, rooms],
+  );
+
+  const selectedDateValues = useMemo(
+    () => getDateRangeValues(formData.start_date, formData.end_date),
+    [formData.end_date, formData.start_date],
   );
 
   const standardPricing = useMemo(() => {
@@ -597,13 +729,74 @@ const ShowtimesPage = () => {
     return () => window.clearTimeout(timer);
   }, [currentPage, resolvedCurrentPage]);
 
+  const applyDateRange = (startDate, endDate = startDate) => {
+    const normalizedStart = startDate && endDate && startDate > endDate ? endDate : startDate;
+    const normalizedEnd = startDate && endDate && startDate > endDate ? startDate : endDate;
+
+    setFormData((prev) => ({
+      ...prev,
+      start_date: normalizedStart,
+      end_date: normalizedEnd || normalizedStart,
+    }));
+    setFormErrors((prev) => ({ ...prev, start_date: "" }));
+
+    if (!isEditing) {
+      setAutoScheduleSlots([]);
+      setConflictShowtimes([]);
+    }
+
+    if (isEditing) {
+      setAutoScheduleSlots((currentSlots) =>
+        mergeSlotTimes(currentSlots.map((slot) => {
+          const timeValue = formatTimeInputValue(slot);
+          const nextSlot = new Date(`${normalizedStart}T${timeValue}`);
+          return Number.isNaN(nextSlot.getTime()) ? slot : nextSlot;
+        })),
+      );
+      setConflictShowtimes([]);
+    }
+  };
+
+  const handleDateRangeDayClick = (dateValue) => {
+    if (isEditing) {
+      applyDateRange(dateValue, dateValue);
+      setDateRangeAnchor("");
+      setDatePickerOpen(false);
+      return;
+    }
+
+    const hasCompletedRange =
+      formData.start_date && formData.end_date && formData.start_date !== formData.end_date;
+
+    if (!dateRangeAnchor || hasCompletedRange) {
+      applyDateRange(dateValue, dateValue);
+      setDateRangeAnchor(dateValue);
+      return;
+    }
+
+    applyDateRange(dateRangeAnchor, dateValue);
+    setDateRangeAnchor("");
+  };
+
+  const clearDateRange = () => {
+    setFormData((prev) => ({ ...prev, start_date: "", end_date: "" }));
+    setFormErrors((prev) => ({ ...prev, start_date: "" }));
+    setDateRangeAnchor("");
+    setAutoScheduleSlots([]);
+    setConflictShowtimes([]);
+  };
+
   const updateField = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [field]: value,
+      ...(field === "start_date" ? { end_date: value } : {}),
+    }));
     setFormErrors((prev) => ({ ...prev, [field]: "" }));
     if (["base_price", "normal_price", "vip_price", "couple_price"].includes(field)) {
       setPriceMode("custom");
     }
-    if (!isEditing && ["movie_id", "room_id", "start_date"].includes(field)) {
+    if (!isEditing && ["movie_id", "room_id", "start_date", "end_date"].includes(field)) {
       setAutoScheduleSlots([]);
       setConflictShowtimes([]);
     }
@@ -638,6 +831,8 @@ const ShowtimesPage = () => {
     setAutoScheduleSlots([]);
     setPriceMode("auto");
     setEditingGroupShowtimes([]);
+    setDatePickerOpen(false);
+    setDateRangeAnchor("");
   };
 
   const closeForm = () => {
@@ -684,6 +879,7 @@ const ShowtimesPage = () => {
       movie_id: showtime.movie_id ? String(showtime.movie_id) : "",
       room_id: showtime.room_id ? String(showtime.room_id) : "",
       start_date: toDateInputValue(showtime.start_time),
+      end_date: toDateInputValue(showtime.start_time),
       show_time: toTimeInputValue(showtime.start_time),
       base_price:
         showtime.base_price !== undefined && showtime.base_price !== null
@@ -696,6 +892,11 @@ const ShowtimesPage = () => {
     setFormErrors({});
     setFeedback({ type: "", message: "" });
     setConflictShowtimes([]);
+    setDatePickerOpen(false);
+    setDateRangeAnchor("");
+    setCalendarMonth(
+      Number.isNaN(currentStartTime.getTime()) ? new Date() : currentStartTime,
+    );
     const relatedStartTimes = Array.from(
       relatedShowtimes.reduce((timeMap, item) => {
         const date = new Date(item.start_time);
@@ -722,13 +923,13 @@ const ShowtimesPage = () => {
     if (!formData.movie_id) errors.movie_id = text.requiredMovie;
     if (!formData.room_id) errors.room_id = text.requiredRoom;
     if (!formData.start_date) errors.start_date = text.requiredStart;
-    if (!formData.show_time) errors.show_time = text.requiredShowTime;
+    if (!formData.show_time && !autoScheduleSlots.length) errors.show_time = text.requiredShowTime;
 
-    const startDateTime = buildStartDateTime(formData);
-    if (!errors.start_date && !errors.show_time && !startDateTime) {
+    const slotTimes = getFormSlotTimes();
+    if (!errors.start_date && !errors.show_time && !slotTimes.length) {
       errors.start_date = "Ngày chiếu hoặc khung giờ chiếu không hợp lệ.";
     }
-    if (startDateTime && startDateTime.getTime() <= Date.now()) {
+    if (slotTimes.length && slotTimes.every((slot) => slot.getTime() <= Date.now())) {
       errors.start_date = "Không thể tạo hoặc đổi suất chiếu về thời điểm đã qua.";
     }
 
@@ -758,12 +959,21 @@ const ShowtimesPage = () => {
   });
 
   const getFormSlotTimes = () => {
-    const manualStartTime = buildStartDateTime(formData);
-    const slots = autoScheduleSlots.length ? [...autoScheduleSlots] : [];
-
-    if (manualStartTime) {
-      slots.push(manualStartTime);
+    if (autoScheduleSlots.length) {
+      return mergeSlotTimes(autoScheduleSlots);
     }
+
+    const dates = selectedDateValues.length
+      ? selectedDateValues
+      : formData.start_date
+        ? [formData.start_date]
+        : [];
+    const timeValues = formData.show_time ? [formData.show_time] : [];
+    const slots = dates.flatMap((dateValue) =>
+      timeValues
+        .map((timeValue) => new Date(`${dateValue}T${timeValue}`))
+        .filter((slot) => !Number.isNaN(slot.getTime())),
+    );
 
     return mergeSlotTimes(slots);
   };
@@ -861,11 +1071,7 @@ const ShowtimesPage = () => {
       setFeedback({ type: "", message: "" });
       setConflictShowtimes([]);
 
-      const startTimes = isEditing
-        ? getFormSlotTimes()
-        : autoScheduleSlots.length > 0
-          ? autoScheduleSlots
-          : [buildStartDateTime(formData)];
+      const startTimes = getFormSlotTimes();
 
       if (isEditing) {
         const { updatedSlots, createdSlots, skippedSlots } =
@@ -946,7 +1152,7 @@ const ShowtimesPage = () => {
           type: skippedSlots.length ? "error" : "success",
           message: skippedSlots.length
             ? `Đã tạo ${createdSlots.length} suất chiếu, bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc không hợp lệ.`
-            : autoScheduleSlots.length
+            : startTimes.length > 1
               ? `Đã tạo ${createdSlots.length} suất chiếu theo danh sách đã chọn.`
               : text.successCreate,
         });
@@ -999,29 +1205,36 @@ const ShowtimesPage = () => {
     }
 
     const durationMinutes = Number(selectedMovie.duration);
-    const openingTime = new Date(`${formData.start_date}T08:00`);
-    const closingTime = new Date(`${formData.start_date}T00:00`);
-    closingTime.setDate(closingTime.getDate() + 1);
+    const dateValues = selectedDateValues.length
+      ? selectedDateValues
+      : [formData.start_date];
     const now = new Date();
     const slots = [];
 
-    for (
-      let slotStart = new Date(openingTime);
-      slotStart.getTime() + durationMinutes * 60 * 1000 <= closingTime.getTime();
-      slotStart = addMinutes(
-        slotStart,
-        durationMinutes + SHOWTIME_CLEANUP_BUFFER_MINUTES,
-      )
-    ) {
-      if (slotStart > now) {
-        slots.push(new Date(slotStart));
+    dateValues.forEach((dateValue) => {
+      const openingTime = new Date(`${dateValue}T08:00`);
+      const closingTime = new Date(`${dateValue}T00:00`);
+      closingTime.setDate(closingTime.getDate() + 1);
+
+      for (
+        let slotStart = new Date(openingTime);
+        slotStart.getTime() + durationMinutes * 60 * 1000 <= closingTime.getTime();
+        slotStart = addMinutes(
+          slotStart,
+          durationMinutes + SHOWTIME_CLEANUP_BUFFER_MINUTES,
+        )
+      ) {
+        if (slotStart > now) {
+          slots.push(new Date(slotStart));
+        }
       }
-    }
+    });
 
     if (!slots.length) {
       setFeedback({
         type: "error",
-        message: "Không có khung giờ hợp lệ trong khoảng 08:00 - 24:00.",
+        message:
+          "Không có khung giờ hợp lệ trong khoảng 08:00 - 24:00 cho các ngày đã chọn.",
       });
       return;
     }
@@ -1102,7 +1315,8 @@ const ShowtimesPage = () => {
         );
         setFeedback({
           type: "error",
-          message: "Tất cả khung giờ đề xuất đã trùng lịch hoặc không hợp lệ, không có khung giờ trống để hiển thị.",
+          message:
+            "Tất cả khung giờ đề xuất trong các ngày đã chọn đã trùng lịch hoặc không hợp lệ.",
         });
         return;
       }
@@ -1123,8 +1337,8 @@ const ShowtimesPage = () => {
       setFeedback({
         type: skippedSlots.length ? "error" : "success",
         message: skippedSlots.length
-          ? `Đã tìm thấy ${availableSlots.length} khung giờ trống, bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc chưa đủ 30 phút dọn phòng.`
-          : `Đã tạo danh sách ${availableSlots.length} khung giờ đề xuất. Admin có thể xóa khung không dùng rồi bấm Lưu suất chiếu để tạo lịch.`,
+          ? `Đã tìm thấy ${availableSlots.length} khung giờ trống cho ${dateValues.length} ngày, bỏ qua ${skippedSlots.length} khung giờ bị trùng hoặc chưa đủ 30 phút dọn phòng.`
+          : `Đã tạo danh sách ${availableSlots.length} khung giờ đề xuất cho ${dateValues.length} ngày. Admin có thể xóa khung không dùng rồi bấm Lưu suất chiếu để tạo lịch.`,
       });
     } catch (error) {
       setFeedback({
@@ -1242,12 +1456,120 @@ const ShowtimesPage = () => {
   const conflictPanelTitle = hasRealScheduleConflicts
     ? "Suất chiếu bị trùng lịch"
     : "Khung giờ không hợp lệ";
-  const formSlotTimes = isEditing ? getFormSlotTimes() : autoScheduleSlots;
+  const formSlotTimes = getFormSlotTimes();
+  const autoScheduleSlotGroups = useMemo(
+    () => groupSlotsByDate(autoScheduleSlots),
+    [autoScheduleSlots],
+  );
+  const autoScheduleSlotDateCount = autoScheduleSlotGroups.length;
+  const selectedDateRangeLabel = getDateRangeLabel(formData.start_date, formData.end_date);
+  const selectedDateCount = selectedDateValues.length;
+  const slotPreviewLabel = formatSlotPreview(formSlotTimes, selectedDateCount);
   const submitButtonLabel = isEditing
     ? formSlotTimes.length > 1
       ? `Cập nhật ${formSlotTimes.length} khung giờ`
       : text.updateShowtime
-    : text.saveShowtime;
+    : formSlotTimes.length > 1
+      ? `Tạo ${formSlotTimes.length} suất chiếu`
+      : text.saveShowtime;
+  const renderShowtimeDateRangePicker = () => {
+    const calendarDays = getCalendarDays(calendarMonth);
+    const todayValue = toLocalDateValue(new Date());
+    const weekLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+
+    return (
+      <div className="showtime-date-field">
+        <button
+          className={`form-input showtime-date-trigger ${formErrors.start_date ? "error" : ""}`}
+          type="button"
+          onClick={() => {
+            const monthSource = parseDateValue(formData.start_date) || new Date();
+            setCalendarMonth(monthSource);
+            setDatePickerOpen((current) => !current);
+          }}
+          aria-expanded={datePickerOpen}
+        >
+          <span>{selectedDateRangeLabel || "Chọn ngày chiếu"}</span>
+          <HiOutlineCalendar />
+        </button>
+
+        {datePickerOpen ? (
+          <div className="showtime-date-picker">
+            <div className="showtime-date-picker-header">
+              <button
+                type="button"
+                className="showtime-date-nav"
+                onClick={() =>
+                  setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))
+                }
+                aria-label="Tháng trước"
+              >
+                <HiOutlineChevronLeft />
+              </button>
+              <strong>{formatCalendarMonthLabel(calendarMonth)}</strong>
+              <button
+                type="button"
+                className="showtime-date-nav"
+                onClick={() =>
+                  setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))
+                }
+                aria-label="Tháng sau"
+              >
+                <HiOutlineChevronRight />
+              </button>
+            </div>
+
+            <div className="showtime-date-weekdays" aria-hidden="true">
+              {weekLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+
+            <div className="showtime-date-days">
+              {calendarDays.map((day) => {
+                const isSelectedStart = day.value === formData.start_date;
+                const isSelectedEnd = day.value === formData.end_date && formData.end_date !== formData.start_date;
+                const isInRange =
+                  formData.start_date &&
+                  formData.end_date &&
+                  day.value >= formData.start_date &&
+                  day.value <= formData.end_date;
+                const isPast = day.value < todayValue;
+
+                return (
+                  <button
+                    className={[
+                      "showtime-date-day",
+                      day.isCurrentMonth ? "" : "outside-month",
+                      isInRange ? "in-range" : "",
+                      isSelectedStart || isSelectedEnd ? "selected" : "",
+                    ].filter(Boolean).join(" ")}
+                    type="button"
+                    key={day.value}
+                    disabled={isPast}
+                    onClick={() => handleDateRangeDayClick(day.value)}
+                    aria-pressed={Boolean(isInRange)}
+                  >
+                    {day.date.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="showtime-date-picker-footer">
+              <button type="button" onClick={clearDateRange}>Xóa</button>
+              <span>
+                {selectedDateCount
+                  ? `${selectedDateCount} ngày đã chọn`
+                  : "Click 1 ngày hoặc click ngày bắt đầu và kết thúc"}
+              </span>
+              <button type="button" onClick={() => setDatePickerOpen(false)}>Xong</button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
     <div className="page-container">
@@ -1539,23 +1861,21 @@ const ShowtimesPage = () => {
                 ) : null}
               </label>
 
-              <label className="form-group">
+              <div className="form-group">
                 <span className="form-label">
                   {text.startDate} <span className="required">*</span>
                 </span>
-                <input
-                  className={`form-input ${formErrors.start_date ? "error" : ""}`}
-                  type="date"
-                  value={formData.start_date}
-                  onChange={(event) =>
-                    updateField("start_date", event.target.value)
-                  }
-                  required
-                />
+                {renderShowtimeDateRangePicker()}
                 {formErrors.start_date ? (
                   <span className="form-error">{formErrors.start_date}</span>
-                ) : null}
-              </label>
+                ) : (
+                  <span className="form-hint">
+                    {isEditing
+                      ? "Chỉnh sửa chỉ áp dụng một ngày cho nhóm suất đang chọn."
+                      : "Click một ngày để tạo trong ngày đó, hoặc click thêm ngày kết thúc để tạo theo khoảng."}
+                  </span>
+                )}
+              </div>
 
               <label className="form-group">
                 <span className="form-label">
@@ -1589,7 +1909,9 @@ const ShowtimesPage = () => {
                       {autoScheduleSlots.length
                         ? isEditing
                           ? `${autoScheduleSlots.length} khung giờ sẽ cập nhật`
-                          : `${autoScheduleSlots.length} khung giờ đề xuất`
+                          : autoScheduleSlotDateCount > 1
+                            ? `${autoScheduleSlots.length} khung giờ đề xuất cho ${autoScheduleSlotDateCount} ngày`
+                            : `${autoScheduleSlots.length} khung giờ đề xuất`
                         : isEditing
                           ? "Khung giờ sẽ cập nhật"
                           : "Khung giờ đề xuất"}
@@ -1611,48 +1933,58 @@ const ShowtimesPage = () => {
                     ) : null}
                   </div>
                   {autoScheduleSlots.length > 0 ? (
-                    <div className="showtime-auto-slot-list">
-                      {autoScheduleSlots.map((slot) => (
-                        <span
-                          className={`showtime-auto-slot ${
-                            formData.show_time === formatTimeInputValue(slot)
-                              ? "selected"
-                              : ""
-                          }`}
-                          key={slot.toISOString()}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() =>
-                            setFormData((current) => ({
-                              ...current,
-                              show_time: formatTimeInputValue(slot),
-                            }))
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter" || event.key === " ") {
-                              event.preventDefault();
-                              setFormData((current) => ({
-                                ...current,
-                                show_time: formatTimeInputValue(slot),
-                              }));
-                            }
-                          }}
-                          title={`Chọn khung ${formatTimeInputValue(slot)}`}
-                        >
-                          {formatTimeInputValue(slot)}
-                          <button
-                            type="button"
-                            className="showtime-auto-slot-remove"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              removeAutoScheduleSlot(slot);
-                            }}
-                            aria-label={`Xóa khung ${formatTimeInputValue(slot)}`}
-                            title={`Xóa khung ${formatTimeInputValue(slot)}`}
-                          >
-                            <HiOutlineX />
-                          </button>
-                        </span>
+                    <div className="showtime-auto-slot-groups">
+                      {autoScheduleSlotGroups.map((group) => (
+                        <div className="showtime-auto-slot-group" key={group.dateValue}>
+                          <div className="showtime-auto-slot-date">
+                            <span>{formatDateRangeValue(group.dateValue)}</span>
+                            <small>{group.slots.length} khung giờ</small>
+                          </div>
+                          <div className="showtime-auto-slot-list">
+                            {group.slots.map((slot) => (
+                              <span
+                                className={`showtime-auto-slot ${
+                                  formData.show_time === formatTimeInputValue(slot)
+                                    ? "selected"
+                                    : ""
+                                }`}
+                                key={slot.toISOString()}
+                                role="button"
+                                tabIndex={0}
+                                onClick={() =>
+                                  setFormData((current) => ({
+                                    ...current,
+                                    show_time: formatTimeInputValue(slot),
+                                  }))
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter" || event.key === " ") {
+                                    event.preventDefault();
+                                    setFormData((current) => ({
+                                      ...current,
+                                      show_time: formatTimeInputValue(slot),
+                                    }));
+                                  }
+                                }}
+                                title={`Chọn khung ${formatTimeInputValue(slot)} ngày ${formatDateRangeValue(group.dateValue)}`}
+                              >
+                                {formatTimeInputValue(slot)}
+                                <button
+                                  type="button"
+                                  className="showtime-auto-slot-remove"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    removeAutoScheduleSlot(slot);
+                                  }}
+                                  aria-label={`Xóa khung ${formatTimeInputValue(slot)} ngày ${formatDateRangeValue(group.dateValue)}`}
+                                  title={`Xóa khung ${formatTimeInputValue(slot)}`}
+                                >
+                                  <HiOutlineX />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (
@@ -1697,10 +2029,12 @@ const ShowtimesPage = () => {
                   {selectedRoom ? getRoomLabel(selectedRoom) : text.noRoom}
                 </span>
                 <span>
+                  <HiOutlineCalendar />
+                  {selectedDateRangeLabel || text.notSelected}
+                </span>
+                <span>
                   <HiOutlineClock />
-                  {formSlotTimes.length
-                    ? formSlotTimes.map(formatTimeInputValue).join(", ")
-                    : formatDateTime(buildStartDateTime(formData))}
+                  {slotPreviewLabel || formatDateTime(buildStartDateTime(formData))}
                 </span>
                 <span>
                   <HiOutlineCash />

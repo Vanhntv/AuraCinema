@@ -1,4 +1,5 @@
 const isEmptyValue = (value) => value === undefined || value === null || value === "";
+const COMBO_PRICE_STEP = 1000;
 
 export const normalizeComboPayload = (payload, defaults = {}) => {
   return {
@@ -111,12 +112,16 @@ const validateComboPrice = (price, prefix, required = true) => {
 
   const value = Number(price);
 
-  if (Number.isNaN(value)) {
+  if (!Number.isFinite(value)) {
     return `${prefix}price khong hop le`;
   }
 
   if (value <= 0) {
     return `${prefix}price phai lon hon 0`;
+  }
+
+  if (!Number.isInteger(value) || value % COMBO_PRICE_STEP !== 0) {
+    return `${prefix}price phai la boi so cua ${COMBO_PRICE_STEP}`;
   }
 
   return null;
