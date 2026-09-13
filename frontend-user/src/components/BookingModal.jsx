@@ -790,7 +790,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       }
     };
 
-    const timer = window.setInterval(syncSeats, 3000);
+    const timer = window.setInterval(syncSeats, 1500);
     return () => {
       isActive = false;
       window.clearInterval(timer);

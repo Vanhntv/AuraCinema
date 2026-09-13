@@ -5,10 +5,12 @@ import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";
 import Showtime from "../models/Showtime.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
+import SeatHold from "../models/SeatHold.js";
 import Ticket from "../models/Ticket.js";
+import TicketScanLog, { createTicketScanLogSafe } from "../models/TicketScanLog.js";
 import User from "../models/User.js";
-import { createTicketsForPaidBooking } from "../services/ticketService.js";
-import { issueBookingOrderQr } from "../services/bookingOrderService.js";
+import { createTicketsForPaidBooking, hashQrToken } from "../services/ticketService.js";
+import { issueBookingOrderQr, parseBookingQrPayload } from "../services/bookingOrderService.js";
 import { validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
 import { isSeatInMaintenance } from "../utils/seatStatus.js";
@@ -78,6 +80,62 @@ const getVietnamDateRange = (date) => {
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 };
 const getVietnamDay = (date = new Date()) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+
+export const lookupStaffBookingOrder = async (req, res) => {
+  const token = parseBookingQrPayload(req.body?.qrToken);
+  if (!token) return res.status(400).json({ success: false, message: "QR đơn vé không hợp lệ." });
+
+  try {
+    const booking = await Booking.findOne({
+      ticketing_version: 2,
+      "order_qr.token_hash": hashQrToken(token),
+    }).select("booking_code status payment_status movie_snapshot showtime_snapshot seat_items combos").lean();
+
+    if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé từ mã QR." });
+    if (booking.status !== "confirmed" || booking.payment_status !== "paid") {
+      return res.status(409).json({ success: false, message: "Đơn vé chưa thanh toán hoặc đã bị hủy." });
+    }
+
+    const bookingTickets = await Ticket.find({ bookingId: booking._id }).select("_id").lean();
+    await Promise.all(bookingTickets.map((ticket) => createTicketScanLogSafe({
+      ticketId: ticket._id,
+      adminId: req.user.id,
+      action: "VERIFY",
+      result: "SUCCESS",
+      scannedAt: new Date(),
+    })));
+
+    const seats = Array.isArray(booking.seat_items) ? booking.seat_items : [];
+    const seatLabels = seats.map((item) => item.seat_label || item.seat_code).filter(Boolean);
+    const seatTypes = [...new Set(seats.map((item) => item.seat_type).filter(Boolean))];
+
+    return res.json({
+      success: true,
+      message: `Đã tải đơn vé ${booking.booking_code}.`,
+      data: {
+        qrType: "BOOKING",
+        ticketCode: booking.booking_code,
+        status: "ORDER",
+        movie: { title: booking.movie_snapshot?.title || "" },
+        showtime: { startTime: booking.showtime_snapshot?.start_time || null },
+        room: { name: booking.showtime_snapshot?.room_name || "" },
+        seat: {
+          label: seatLabels.join(", "),
+          type: seatTypes.join(", "),
+        },
+        booking: {
+          bookingCode: booking.booking_code,
+          combos: Array.isArray(booking.combos)
+            ? booking.combos.map((item) => ({ name: item.name, quantity: item.quantity }))
+            : [],
+        },
+      },
+    });
+  } catch {
+    return res.status(500).json({ success: false, message: "Không thể tra cứu đơn vé." });
+  }
+};
+
 const runWithTransaction = async (work) => {
   const session = await mongoose.startSession();
   try {
@@ -125,7 +183,7 @@ export const getShiftReport = async (req, res) => {
     const dateRange = getVietnamDateRange(selectedDate);
     if (!dateRange) return res.status(400).json({ success: false, message: "Ngày báo cáo không hợp lệ." });
 
-    const [staff, bookings] = await Promise.all([
+    const [staff, bookings, scannedTicketIds] = await Promise.all([
       User.findOne({ _id: req.user.id, deleted_at: null }).select("full_name").lean(),
       Booking.find({
         sales_channel: "counter",
@@ -134,7 +192,17 @@ export const getShiftReport = async (req, res) => {
         payment_status: "paid",
         paid_at: { $gte: dateRange.start, $lt: dateRange.end },
       }).select("total_price showtime_seat_ids").lean(),
+      TicketScanLog.distinct("ticketId", {
+        adminId: req.user.id,
+        action: { $in: ["VERIFY", "CHECK_IN"] },
+        result: "SUCCESS",
+        scannedAt: { $gte: dateRange.start, $lt: dateRange.end },
+        ticketId: { $ne: null },
+      }),
     ]);
+    const onlineScannedCount = scannedTicketIds.length
+      ? await Ticket.countDocuments({ _id: { $in: scannedTicketIds }, userId: { $ne: null } })
+      : 0;
 
     const cashTotal = bookings.reduce((sum, booking) => sum + Number(booking.total_price || 0), 0);
     const posTicketCount = bookings.reduce((sum, booking) => sum + (booking.showtime_seat_ids?.length || 0), 0);
@@ -145,7 +213,7 @@ export const getShiftReport = async (req, res) => {
         date: selectedDate,
         cash_total: cashTotal,
         pos_ticket_count: posTicketCount,
-        online_scanned_count: null,
+        online_scanned_count: onlineScannedCount,
       },
     });
   } catch (error) {
@@ -155,30 +223,37 @@ export const getShiftReport = async (req, res) => {
 
 export const createCounterSale = async (req, res) => {
   const showtimeId = String(req.body?.showtime_id || "").trim();
+  const holdToken = String(req.body?.hold_token || "").trim();
   const requestedSeatIds = Array.isArray(req.body?.showtime_seat_ids) ? req.body.showtime_seat_ids.map(String) : [];
-  if (!mongoose.Types.ObjectId.isValid(showtimeId) || !requestedSeatIds.length || new Set(requestedSeatIds).size !== requestedSeatIds.length || requestedSeatIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+  if (!mongoose.Types.ObjectId.isValid(showtimeId) || !holdToken || !requestedSeatIds.length || new Set(requestedSeatIds).size !== requestedSeatIds.length || requestedSeatIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
     return res.status(400).json({ success: false, message: "Suất chiếu hoặc danh sách ghế không hợp lệ." });
   }
 
   try {
     const requestedCombos = normalizeComboItems(req.body?.combos || []);
     const sale = await runWithTransaction(async (session) => {
+      const now = new Date();
       const showtime = await Showtime.findOne({ _id: showtimeId, deleted_at: null, status: { $in: ["scheduled", "now_showing"] }, end_time: { $gt: new Date() } })
         .populate("movie_id", "title poster age_limit")
         .populate({ path: "room_id", select: "name cinema_id", populate: { path: "cinema_id", select: "name address" } })
         .session(session);
       if (!showtime || !showtime.movie_id || !showtime.room_id) throw Object.assign(new Error("Suất chiếu không còn khả dụng."), { statusCode: 404 });
 
-      const seats = await ShowtimeSeat.find({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null })
+      const hold = await SeatHold.findOne({ token: holdToken, user_id: req.user.id, showtime_id: showtime._id, status: "active", expires_at: { $gt: now } }).session(session);
+      if (!hold) throw Object.assign(new Error("Phiên giữ ghế tại quầy đã hết hạn hoặc không còn hợp lệ."), { statusCode: 410 });
+      const heldSeatIds = new Set((hold.showtime_seat_ids || []).map(String));
+      if (heldSeatIds.size !== requestedSeatIds.length || requestedSeatIds.some((seatId) => !heldSeatIds.has(seatId))) throw Object.assign(new Error("Danh sách ghế không khớp phiên giữ ghế tại quầy."), { statusCode: 409 });
+
+      const seats = await ShowtimeSeat.find({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "held", held_by: req.user.id, hold_id: hold._id, hold_expires_at: { $gt: now } })
         .populate({ path: "seat_id", select: "seat_row seat_number seat_code seat_type_id status operational_status", populate: { path: "seat_type_id", select: "name" } })
         .session(session);
       if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id) || isSeatInMaintenance(item.seat_id))) throw Object.assign(new Error("Có ghế không hợp lệ hoặc đang bảo trì trong đơn."), { statusCode: 409 });
       validateCoupleSeatSelection(seats);
 
       const bookingId = new mongoose.Types.ObjectId();
-      const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "available" }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
+      const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "held", held_by: req.user.id, hold_id: hold._id }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
       if (reserved.modifiedCount !== requestedSeatIds.length) {
-        await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, reserved_by_booking_id: bookingId, status: "booked" }, { $set: { status: "available", reserved_by_booking_id: null } }, { session });
+        await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, reserved_by_booking_id: bookingId, status: "booked" }, { $set: { status: "held", held_by: req.user.id, hold_id: hold._id, hold_expires_at: hold.expires_at, reserved_by_booking_id: null } }, { session });
         throw Object.assign(new Error("Một hoặc nhiều ghế vừa được khách khác giữ hoặc đặt. Vui lòng chọn lại."), { statusCode: 409 });
       }
 
@@ -189,10 +264,9 @@ export const createCounterSale = async (req, res) => {
         const ticketTotal = calculateSeatTotal(seats);
         const comboTotal = reservedCombos.reduce((sum, item) => sum + item.subtotal, 0);
         const total = ticketTotal + comboTotal;
-        const now = new Date();
         const [booking] = await Booking.create([{
           _id: bookingId, booking_code: counterCode(), ticketing_version: 2, order_qr: issueBookingOrderQr(now),
-          sales_channel: "counter", sold_by: req.user.id, user_id: null, showtime_id: showtime._id, showtime_seat_ids: seats.map((item) => item._id),
+          sales_channel: "counter", sold_by: req.user.id, user_id: null, seat_hold_id: hold._id, showtime_id: showtime._id, showtime_seat_ids: seats.map((item) => item._id),
           customer_name: String(req.body?.customer_name || "Khách vãng lai").trim() || "Khách vãng lai",
           customer_email: String(req.body?.customer_email || `walkin-${bookingId}@auracinema.local`).trim().toLowerCase(), customer_phone: String(req.body?.customer_phone || "").trim() || null,
           movie_snapshot: { movie_id: showtime.movie_id._id, title: showtime.movie_id.title, poster: showtime.movie_id.poster || "", age_classification: Number(showtime.movie_id.age_limit || 0) ? `T${showtime.movie_id.age_limit}` : "P" },
@@ -202,13 +276,15 @@ export const createCounterSale = async (req, res) => {
         }], { session });
         await Payment.create([{ booking_id: booking._id, payment_code: `CASH-${booking.booking_code}`, provider: "cash", amount: total, status: "paid", transaction_ref: booking.payment_transaction_id, transaction_id: booking.payment_transaction_id, paid_at: now }], { session });
         const issued = await createTicketsForPaidBooking(booking._id, { session, includeQrPayloads: true });
+        const convertedHold = await SeatHold.updateOne({ _id: hold._id, status: "active", expires_at: { $gt: now } }, { $set: { status: "converted", converted_booking_id: booking._id } }, { session });
+        if (convertedHold.modifiedCount !== 1) throw Object.assign(new Error("Phiên giữ ghế tại quầy vừa hết hạn."), { statusCode: 410 });
         return { booking, tickets: issued.tickets, qrPayloads: issued.qrPayloads };
       } catch (error) {
         await restoreComboStock(reservedCombos, session);
         await Ticket.deleteMany({ bookingId }, { session });
         await Payment.deleteMany({ booking_id: bookingId }, { session });
         await Booking.deleteOne({ _id: bookingId }, { session });
-        await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, reserved_by_booking_id: bookingId, status: "booked" }, { $set: { status: "available", reserved_by_booking_id: null } }, { session });
+        await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, reserved_by_booking_id: bookingId, status: "booked" }, { $set: { status: "held", held_by: req.user.id, hold_id: hold._id, hold_expires_at: hold.expires_at, reserved_by_booking_id: null } }, { session });
         throw error;
       }
     });
@@ -222,8 +298,12 @@ export const printCounterSale = async (req, res) => {
     if (req.user.role !== "admin") filter.sold_by = req.user.id;
     const booking = await Booking.findOne(filter);
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn bán tại quầy." });
+    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt").sort({ seatLabel: 1 });
+    if (!existingTickets.length) return res.status(404).json({ success: false, message: "Đơn chưa có vé để in." });
+    if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in trước đó và không thể in lại tại quầy." });
     const now = new Date();
-    await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
+    const printClaim = await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
+    if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in hoặc không còn đủ điều kiện in." });
     const tickets = await Ticket.find({ bookingId: booking._id }).sort({ seatLabel: 1 });
     return res.json({ success: true, data: { booking_code: booking.booking_code, movie: booking.movie_snapshot.title, showtime: booking.showtime_snapshot, seats: booking.seat_items.map((item) => item.seat_label), total_price: booking.total_price, tickets: tickets.map((item) => ({ code: item.ticketCode, seat: item.seatLabel })) } });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
