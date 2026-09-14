@@ -40,7 +40,7 @@ export const authMiddleware = async (req, res, next) => {
         { account_status: "active" },
         { account_status: { $exists: false }, status: true },
       ],
-    }).select("_id role role_id password_changed_at account_status status");
+    }).select("_id full_name email role role_id password_changed_at account_status status");
 
     if (!user) {
       return res.status(401).json({
@@ -64,6 +64,8 @@ export const authMiddleware = async (req, res, next) => {
       id: user._id.toString(),
       role_id: user.role_id,
       role: resolveRole(user),
+      full_name: user.full_name,
+      email: user.email,
       iat: payload.iat,
       exp: payload.exp,
     };
@@ -96,13 +98,15 @@ export const optionalAuthMiddleware = async (req, res, next) => {
         { account_status: "active" },
         { account_status: { $exists: false }, status: true },
       ],
-    }).select("_id role role_id password_changed_at account_status status");
+    }).select("_id full_name email role role_id password_changed_at account_status status");
 
     if (user) {
       req.user = {
         id: user._id.toString(),
         role_id: user.role_id,
         role: resolveRole(user),
+        full_name: user.full_name,
+        email: user.email,
         iat: payload.iat,
         exp: payload.exp,
       };

@@ -46,6 +46,11 @@ const getRequestMeta = (req) => ({
   userAgent: String(req.headers?.["user-agent"] || "").slice(0, 512),
 });
 
+const getPrintOperator = (req) => ({
+  id: req.user?.id || null,
+  accountName: String(req.user?.full_name || req.user?.email || req.user?.id || "").trim(),
+});
+
 const getSkipReason = (ticket) => {
   if (ticket.status === "CHECKED_IN") return "CHECKED_IN";
   if (ticket.status === "CANCELLED") return "CANCELLED";
@@ -91,12 +96,13 @@ export const validateReprintRequest = ({ bookingId, ticketIds, reason }) => {
 
 const toPlain = (value) => typeof value?.toObject === "function" ? value.toObject() : { ...value };
 
-export const buildBookingPrintPayload = ({ booking, tickets, qrPayloadByTicketId, skippedTickets = [] }) => {
+export const buildBookingPrintPayload = ({ booking, tickets, qrPayloadByTicketId, skippedTickets = [], printedBy = null }) => {
   const source = toPlain(booking);
   return {
     booking: {
       id: source._id,
       bookingCode: source.booking_code,
+      createdAt: source.created_at,
       customer: {
         name: source.customer_name,
         email: source.customer_email,
@@ -118,6 +124,7 @@ export const buildBookingPrintPayload = ({ booking, tickets, qrPayloadByTicketId
         paidAt: source.paid_at,
       },
     },
+    printedBy,
     tickets: tickets.map((ticketValue) => {
       const ticket = toPlain(ticketValue);
       return {
@@ -248,6 +255,7 @@ export const scanPrintBookingOrder = async (req, res) => {
       tickets: result.claimedTickets,
       qrPayloadByTicketId: createQrPayloadMap(result.claimedTickets),
       skippedTickets: result.skippedTickets,
+      printedBy: getPrintOperator(req),
     });
     await createBookingActionLogSafe({
       bookingId: result.booking._id,
@@ -313,6 +321,7 @@ export const lookupAdminBookingOrderPrint = async (req, res) => {
       tickets: eligible,
       qrPayloadByTicketId: createQrPayloadMap(eligible),
       skippedTickets: skipped,
+      printedBy: getPrintOperator(req),
     });
 
     await createBookingActionLogSafe({
@@ -406,6 +415,7 @@ export const reprintBookingTickets = async (req, res) => {
       booking,
       tickets,
       qrPayloadByTicketId: createQrPayloadMap(tickets),
+      printedBy: getPrintOperator(req),
     });
     await createBookingActionLogSafe({
       bookingId: booking._id,

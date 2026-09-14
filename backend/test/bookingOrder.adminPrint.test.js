@@ -52,6 +52,7 @@ test("booking print payload contains summary and ticket QR payloads", () => {
     booking: {
       _id: "booking-1",
       booking_code: "AURA000000000001",
+      created_at: new Date("2026-08-18T08:00:00.000Z"),
       movie_snapshot: { title: "Phim" },
       seat_items: [{ seat_label: "A1" }],
       combos: [{ name: "Combo", quantity: 1, subtotal: 100000 }],
@@ -59,9 +60,12 @@ test("booking print payload contains summary and ticket QR payloads", () => {
     },
     tickets: [makeTicket({ seatLabel: "A1" })],
     qrPayloadByTicketId: new Map([["ticket-A1", "AURA_TICKET:token-a1"]]),
+    printedBy: { id: "staff-1", accountName: "staff.nguyenvana" },
   });
 
   assert.equal(payload.booking.bookingCode, "AURA000000000001");
+  assert.equal(payload.booking.createdAt.toISOString(), "2026-08-18T08:00:00.000Z");
+  assert.equal(payload.printedBy.accountName, "staff.nguyenvana");
   assert.equal(payload.tickets.length, 1);
   assert.equal(payload.tickets[0].qrPayload, "AURA_TICKET:token-a1");
 });

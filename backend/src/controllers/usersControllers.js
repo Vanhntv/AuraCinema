@@ -14,6 +14,7 @@ const ALLOWED_GENDERS = ["male", "female", "other", null, ""];
 const ALLOWED_TIERS = ["member", "vip", "vvip"];
 const ALLOWED_ROLES = ["user", "staff", "admin"];
 const ALLOWED_ACCOUNT_STATUSES = ["active", "banned", "unverified"];
+const ADMIN_EDITABLE_PROFILE_FIELDS = new Set(["full_name", "phone", "birth_date", "gender"]);
 const RESET_OTP_TTL_MS = 10 * 60 * 1000;
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
@@ -31,6 +32,9 @@ const resolveAccountStatus = (user) => {
 };
 
 const statusToLegacyBoolean = (accountStatus) => accountStatus === "active";
+
+export const getForbiddenAdminProfileFields = (payload = {}) =>
+  Object.keys(payload).filter((field) => field !== "reason" && !ADMIN_EDITABLE_PROFILE_FIELDS.has(field));
 
 const sanitizeUser = (user) => {
   const data = user.toObject ? user.toObject() : { ...user };
@@ -292,6 +296,17 @@ export const updateUserBasicInfo = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
     }
 
+    if (currentUser.role === "admin") {
+      const forbiddenFields = getForbiddenAdminProfileFields(req.body);
+      if (forbiddenFields.length) {
+        return res.status(403).json({
+          success: false,
+          message: "Tài khoản admin chỉ được sửa họ tên, số điện thoại, ngày sinh và giới tính",
+          fields: forbiddenFields,
+        });
+      }
+    }
+
     const { data, errors } = await validateProfilePayload(req.body, req.params.id);
     if (errors.length) {
       return res.status(400).json({ success: false, message: errors[0], errors });
@@ -352,6 +367,9 @@ export const updateUserStatus = async (req, res) => {
     if (!currentUser) {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
     }
+    if (currentUser.role === "admin") {
+      return res.status(403).json({ success: false, message: "Không được thay đổi trạng thái tài khoản admin" });
+    }
 
     const before = pickAuditFields(currentUser);
     const user = await User.findOneAndUpdate(
@@ -404,6 +422,7 @@ export const adjustRewardPoints = async (req, res) => {
     const { user, rewardLog } = await withTransaction(async session => {
     const user = await User.findOne({ _id: req.params.id, deleted_at: null }).session(session);
     if (!user) throw Object.assign(new Error("Không tìm thấy người dùng"), { statusCode: 404 });
+    if (user.role === "admin") throw Object.assign(new Error("Không được điều chỉnh điểm của tài khoản admin"), { statusCode: 403 });
     const before = pickAuditFields(user);
     const currentPoints = Number(user.reward_points || 0);
     const nextPoints = type === "add" ? currentPoints + points : currentPoints - points;
@@ -440,7 +459,7 @@ export const adjustRewardPoints = async (req, res) => {
       reward_log: rewardLog,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
@@ -453,6 +472,9 @@ export const forceResetPassword = async (req, res) => {
     const user = await User.findOne({ _id: req.params.id, deleted_at: null });
     if (!user) {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
+    }
+    if (user.role === "admin") {
+      return res.status(403).json({ success: false, message: "Không được đặt lại mật khẩu của tài khoản admin từ trang quản lý người dùng" });
     }
 
     const otp = String(randomInt(100000, 1000000));
