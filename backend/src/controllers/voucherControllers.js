@@ -100,7 +100,7 @@ const sendError = (res, error) => {
 
 export const getMyVoucherWallet = async (req, res) => {
   try {
-    return res.json({ success: true, data: await getWallet(req.user.id) });
+    return res.json({ success: true, data: await getWallet(req.user.id, { usableOnly: true }) });
   } catch (error) {
     sendError(res, error);
   }

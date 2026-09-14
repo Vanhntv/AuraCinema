@@ -19,6 +19,7 @@ const rewardPointLogSchema = new mongoose.Schema(
     },
     event_key: { type: String },
     user_voucher_id: { type: mongoose.Schema.Types.ObjectId, ref: "UserVoucher", default: null },
+    user_gift_id: { type: mongoose.Schema.Types.ObjectId, ref: "UserGift", default: null },
     reconstructed: { type: Boolean, default: false },
     occurred_at: { type: Date, default: Date.now },
     type: {

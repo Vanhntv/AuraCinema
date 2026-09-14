@@ -32,6 +32,13 @@ import {
   formatBookingOrder,
   populateBookingOrderTickets,
 } from "../services/bookingViewService.js";
+import {
+  consumeGiftForBooking,
+  appendGiftComboToOrder,
+  getGiftBookingQuote,
+  issueAutomaticGiftsForBooking,
+  reserveGiftForBooking,
+} from "../services/giftEntitlementService.js";
 
 const seatTypeName = (seat) => normalizeSeatTypeName(seat.seat_id?.seat_type_id?.name);
 
@@ -262,8 +269,11 @@ export const markBookingAsPaid = async ({
   booking.payment_transaction_id = transactionId;
   booking.paid_at = new Date();
   await creditRewardPointsForBooking({ booking, session });
+  if (booking.gift?.user_gift_id) await consumeGiftForBooking({ bookingId: booking._id, session });
   await booking.save({ session });
   await createTicketsForPaidBooking(booking._id, { session });
+  const paidUser = booking.user_id ? await User.findById(booking.user_id).session(session) : null;
+  if (paidUser) await issueAutomaticGiftsForBooking({ booking, user: paidUser, session });
 
   return booking;
 };
@@ -433,7 +443,11 @@ export const createBooking = async (req, res) => {
     const holdToken = String(req.body.hold_token || "").trim();
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
     const userVoucherId = req.body.user_voucher_id;
-    const combos = normalizeComboItems(req.body.combos);
+    const userGiftId = req.body.user_gift_id;
+    const requestedCombos = normalizeComboItems(req.body.combos);
+    if (userGiftId && (voucherCode || userVoucherId)) {
+      return res.status(400).json({ success: false, message: "Mỗi đơn chỉ được dùng quà tặng hoặc voucher." });
+    }
     if (!showtime_id || !Array.isArray(showtime_seat_ids) || !showtime_seat_ids.length) {
       return res.status(400).json({ success: false, message: "Vui lòng chọn suất chiếu và ghế" });
     }
@@ -498,6 +512,7 @@ export const createBooking = async (req, res) => {
         throw Object.assign(new Error("Ghế đang bảo trì không thể đặt vé"), { statusCode: 409 });
       }
 
+      const combos = await appendGiftComboToOrder({ userGiftId, userId: user._id, combos: requestedCombos, session });
       const reservedCombos = await reserveComboStock({ combos, session });
       const bookingId = new mongoose.Types.ObjectId();
 
@@ -528,6 +543,7 @@ export const createBooking = async (req, res) => {
       const subtotalPrice = seatTotalPrice + comboTotalPrice;
       let discountAmount = 0;
       let voucherSnapshot = undefined;
+      let giftSnapshot = undefined;
       let verifiedVoucherResult = null;
 
       if (voucherCode || userVoucherId) {
@@ -559,6 +575,21 @@ export const createBooking = async (req, res) => {
         };
       }
 
+      if (userGiftId) {
+        const giftQuote = await getGiftBookingQuote({
+          userGiftId,
+          userId: user._id,
+          user,
+          seats,
+          combos: reservedCombos,
+          movieId: documentId(showtime.movie_id),
+          orderAmount: subtotalPrice,
+          session,
+        });
+        discountAmount = giftQuote.discount;
+        giftSnapshot = giftQuote.snapshot;
+      }
+
       const totalPrice = Math.max(subtotalPrice - discountAmount, 0);
       const bookingSnapshots = buildBookingSnapshots({
         showtime,
@@ -588,6 +619,7 @@ export const createBooking = async (req, res) => {
             ...bookingSnapshots,
             combos: reservedCombos,
             voucher: voucherSnapshot,
+            gift: giftSnapshot,
             subtotal_price: subtotalPrice,
             discount_amount: discountAmount,
             total_price: totalPrice,
@@ -612,6 +644,9 @@ export const createBooking = async (req, res) => {
           subtotalPrice,
           session,
         });
+      }
+      if (giftSnapshot) {
+        await reserveGiftForBooking({ userGiftId, userId: user._id, bookingId: booking._id, session });
       }
 
       const convertedHold = await SeatHold.updateOne(

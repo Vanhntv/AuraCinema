@@ -5,6 +5,9 @@ const isMissing = (value) => value === undefined || value === null || value === 
 
 const GIFT_TYPES = ["ticket", "combo", "voucher", "point", "physical"];
 const GIFT_STATUSES = ["draft", "active", "paused", "cancelled"];
+const ACQUISITION_MODES = ["automatic", "points", "manual"];
+const GIFT_TRIGGERS = ["none", "new_member", "birthday", "tier_reached", "paid_booking"];
+const REDEMPTION_CHANNELS = ["online", "counter", "both", "instant"];
 const IMAGE_URL_PATTERN = /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i;
 const ISSUED_GIFT_EDITABLE_FIELDS = new Set([
   "name",
@@ -147,6 +150,23 @@ const normalizeGiftCondition = (condition = {}) => {
   };
 };
 
+const normalizeModes = (value) => [...new Set((Array.isArray(value) ? value : [value])
+  .map((item) => String(item || "").trim().toLowerCase())
+  .filter((item) => ACQUISITION_MODES.includes(item)))];
+
+const normalizeBenefit = (type, benefit = {}, value = 0) => {
+  const source = benefit && typeof benefit === "object" ? benefit : {};
+  if (type === "ticket") return {
+    quantity: Math.max(Number(source.quantity || 1), 1),
+    max_unit_price: Math.max(Number(source.max_unit_price ?? value ?? 0), 0),
+    seat_types: parseConditionIdList(source.seat_types).map((item) => item.toLowerCase()),
+  };
+  if (type === "combo") return { combo_id: String(source.combo_id || "").trim() || null, quantity: Math.max(Number(source.quantity || 1), 1) };
+  if (type === "voucher") return { voucher_id: String(source.voucher_id || "").trim() || null };
+  if (type === "point") return { points: Math.max(Number(source.points ?? value ?? 0), 0) };
+  return { label: String(source.label || "").trim() };
+};
+
 export const validateGiftPayload = async (
   payload,
   { isCodeTaken = async (code) => Boolean(await Gift.findOne({ code, deleted_at: null })) } = {},
@@ -157,6 +177,12 @@ export const validateGiftPayload = async (
     return "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự.";
   }
   if (!payload.type || !GIFT_TYPES.includes(payload.type)) return "Loại quà không hợp lệ.";
+  if (!payload.acquisition_modes?.length) return "Chọn ít nhất một hình thức nhận quà.";
+  if (!GIFT_TRIGGERS.includes(payload.trigger)) return "Sự kiện phát quà không hợp lệ.";
+  if (!REDEMPTION_CHANNELS.includes(payload.redemption_channel)) return "Kênh sử dụng quà không hợp lệ.";
+  if (payload.acquisition_modes.includes("automatic") && payload.trigger === "none") return "Quà tự động phải chọn sự kiện phát.";
+  if (!Number.isInteger(payload.max_per_user) || payload.max_per_user < 1) return "Giới hạn nhận phải là số nguyên dương.";
+  if (payload.validity_days !== null && (!Number.isInteger(payload.validity_days) || payload.validity_days < 1)) return "Số ngày sử dụng phải là số nguyên dương.";
 
   if (await isCodeTaken(payload.code)) return "Mã quà đã tồn tại.";
 
@@ -197,6 +223,10 @@ export const validateGiftPayload = async (
       return "Điểm đổi quà phải là số nguyên lớn hơn 0.";
     }
   }
+  if (payload.acquisition_modes.includes("points") && (!Number.isSafeInteger(payload.condition.point_required) || payload.condition.point_required < 1)) return "Điểm đổi quà phải là số nguyên lớn hơn 0.";
+  if (payload.type === "combo" && !mongoose.Types.ObjectId.isValid(payload.benefit?.combo_id)) return "Quà combo phải liên kết một combo.";
+  if (payload.type === "voucher" && !mongoose.Types.ObjectId.isValid(payload.benefit?.voucher_id)) return "Quà voucher phải liên kết một voucher.";
+  if (payload.type === "point" && (!Number.isSafeInteger(payload.benefit?.points) || payload.benefit.points < 1)) return "Quà điểm thưởng phải có số điểm lớn hơn 0.";
 
   if (!payload.start_date || Number.isNaN(payload.start_date.getTime())) {
     return "Ngày bắt đầu không hợp lệ.";
@@ -221,18 +251,29 @@ export const prepareGiftCreatePayload = (payload = {}, user = null) => {
   const quantity = Number(payload.quantity);
   const value = isMissing(payload.value) ? 0 : Number(payload.value);
 
+  const type = parseGiftType(payload.type) || "";
+  const condition = normalizeGiftCondition(payload.condition);
+  const acquisitionModes = normalizeModes(payload.acquisition_modes?.length ? payload.acquisition_modes : (condition.point_required ? ["points"] : ["manual"]));
   return {
     code: normalizeGiftCode(payload.code),
     name: String(payload.name || "").trim(),
     description: String(payload.description || "").trim(),
     image_url: String(payload.image_url || "").trim(),
-    type: parseGiftType(payload.type) || "",
+    type,
+    acquisition_modes: acquisitionModes,
+    trigger: GIFT_TRIGGERS.includes(payload.trigger) ? payload.trigger : "none",
+    redemption_channel: REDEMPTION_CHANNELS.includes(payload.redemption_channel)
+      ? payload.redemption_channel
+      : (["combo", "physical"].includes(type) ? "counter" : ["voucher", "point"].includes(type) ? "instant" : "online"),
+    max_per_user: Math.max(Number(payload.max_per_user || 1), 1),
+    validity_days: isMissing(payload.validity_days) ? null : Number(payload.validity_days),
+    benefit: normalizeBenefit(type, payload.benefit, value),
     value,
     value_label: String(payload.value_label || "").trim(),
     quantity,
     issued_quantity: 0,
     remaining_quantity: quantity,
-    condition: normalizeGiftCondition(payload.condition),
+    condition,
     start_date: new Date(payload.start_date),
     end_date: new Date(payload.end_date),
     status: parseGiftStatus(payload.status),
@@ -259,6 +300,12 @@ const prepareGiftUpdatePayload = (payload = {}, user = null) => {
   if (Object.prototype.hasOwnProperty.call(payload, "type")) {
     updatePayload.type = parseGiftType(payload.type) || "";
   }
+  if (Object.prototype.hasOwnProperty.call(payload, "acquisition_modes")) updatePayload.acquisition_modes = normalizeModes(payload.acquisition_modes);
+  if (Object.prototype.hasOwnProperty.call(payload, "trigger")) updatePayload.trigger = GIFT_TRIGGERS.includes(payload.trigger) ? payload.trigger : "none";
+  if (Object.prototype.hasOwnProperty.call(payload, "redemption_channel")) updatePayload.redemption_channel = REDEMPTION_CHANNELS.includes(payload.redemption_channel) ? payload.redemption_channel : "online";
+  if (Object.prototype.hasOwnProperty.call(payload, "max_per_user")) updatePayload.max_per_user = Number(payload.max_per_user);
+  if (Object.prototype.hasOwnProperty.call(payload, "validity_days")) updatePayload.validity_days = isMissing(payload.validity_days) ? null : Number(payload.validity_days);
+  if (Object.prototype.hasOwnProperty.call(payload, "benefit")) updatePayload.benefit = normalizeBenefit(payload.type, payload.benefit, payload.value);
   if (Object.prototype.hasOwnProperty.call(payload, "value")) {
     updatePayload.value = isMissing(payload.value) ? 0 : Number(payload.value);
   }

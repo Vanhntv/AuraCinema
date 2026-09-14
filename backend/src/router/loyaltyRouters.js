@@ -10,7 +10,7 @@ const respond = (work) => async (req, res, next) => {
 };
 router.get("/membership", customer, respond(async req => ({ data: await getMembership(req.user.id) })));
 router.get("/points", customer, respond(req => getPointHistory(req.user.id, req.query)));
-router.get("/rewards", customer, respond(async () => ({ data: await listRewardOffers() })));
+router.get("/rewards", customer, respond(async req => ({ data: await listRewardOffers(false, req.user.id) })));
 router.post("/rewards/:id/redeem", customer, respond(async req => ({ data: await redeemReward(req.user.id, req.params.id, req.body.key) })));
 router.get("/admin/rewards", admin, respond(async () => ({ data: await listRewardOffers(true) })));
 router.put("/admin/rewards", admin, respond(async req => ({ data: await saveRewardOffer(req.body) })));

@@ -3,6 +3,7 @@ import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import {
   HiOutlineCamera,
   HiOutlineCheckCircle,
+  HiOutlineGift,
   HiOutlinePhotograph,
   HiOutlinePrinter,
   HiOutlineRefresh,
@@ -19,9 +20,11 @@ import {
 } from "../services/ticketAdminService";
 import { showToast } from "../../utils/toast";
 import { lookupBookingOrderPrint, scanPrintBookingOrder } from "../services/bookingAdminService";
+import { lookupGiftQr, redeemGiftQr } from "../services/giftStaffService";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
 const BOOKING_QR_PREFIX = "AURA_BOOKING_V2:";
+const GIFT_QR_PREFIX = "AURA_GIFT:";
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
@@ -159,6 +162,8 @@ const TicketScannerPage = () => {
   const [verifyResult, setVerifyResult] = useState(null);
   const [checkInResult, setCheckInResult] = useState(null);
   const [bookingPrintResult, setBookingPrintResult] = useState(null);
+  const [giftResult, setGiftResult] = useState(null);
+  const [redeemingGift, setRedeemingGift] = useState(false);
 
   const ticket = checkInResult?.data || verifyResult?.data || null;
 
@@ -208,13 +213,19 @@ const TicketScannerPage = () => {
       setCheckInResult(null);
       setVerifyResult(null);
       setBookingPrintResult(null);
+      setGiftResult(null);
       setCameraMessage("Đã đọc QR. Đang xử lý...");
     }
 
     await stopScanner();
 
     try {
-      if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
+      if (qrToken.startsWith(GIFT_QR_PREFIX)) {
+        const response = await lookupGiftQr(qrToken);
+        if (!mountedRef.current) return;
+        setGiftResult(response);
+        setCameraMessage("Đã tải thông tin quà tặng. Hãy kiểm tra trước khi xác nhận trao quà.");
+      } else if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
         const response = await lookupBookingOrderPrint({ qrToken });
         if (!mountedRef.current) return;
         setBookingPrintResult({ ...response, action: "lookup" });
@@ -236,7 +247,9 @@ const TicketScannerPage = () => {
     } catch (error) {
       const message = getApiMessage(error, "Không thể đọc thông tin từ mã QR.");
       if (!mountedRef.current) return;
-      if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
+      if (qrToken.startsWith(GIFT_QR_PREFIX)) {
+        setGiftResult({ success: false, message, data: null });
+      } else if (qrToken.startsWith(BOOKING_QR_PREFIX)) {
         setBookingPrintResult({ success: false, message, data: error?.response?.data?.data || null, action: "lookup" });
       } else {
         setVerifyResult({
@@ -324,6 +337,7 @@ const TicketScannerPage = () => {
     setVerifyResult(null);
     setCheckInResult(null);
     setBookingPrintResult(null);
+    setGiftResult(null);
     setCurrentQrToken("");
     setTicketCodeQuery("");
     lastQrTokenRef.current = "";
@@ -499,7 +513,17 @@ const TicketScannerPage = () => {
     };
   }, []);
 
-  const activeResult = bookingPrintResult || verifyResult;
+  const handleRedeemGift = async () => {
+    if (!currentQrToken.startsWith(GIFT_QR_PREFIX) || redeemingGift) return;
+    try {
+      setRedeemingGift(true);
+      const response = await redeemGiftQr(currentQrToken);
+      setGiftResult(response);
+      showToast("success", response.message || "Đã xác nhận trao quà.");
+    } catch (error) { showToast("error", getApiMessage(error, "Không thể xác nhận trao quà.")); } finally { setRedeemingGift(false); }
+  };
+
+  const activeResult = giftResult || bookingPrintResult || verifyResult;
   const verificationTone = getVerificationTone(activeResult);
 
   return (
@@ -594,7 +618,7 @@ const TicketScannerPage = () => {
           <div className="ticket-scanner-panel-header">
             <div>
               <h2>Kết quả quét</h2>
-              <p>QR đơn chỉ tải thông tin đơn; QR vé dùng để in hoặc check-in từng vé.</p>
+              <p>Hệ thống nhận biết riêng QR đơn, QR vé và QR quà tặng.</p>
             </div>
             <HiOutlineTicket />
           </div>
@@ -655,6 +679,7 @@ const TicketScannerPage = () => {
                   <InfoItem label="Bỏ qua" value={`${bookingPrintResult.data.skippedTickets?.length || 0} vé`} />
                 </div>
               )}
+              {giftResult?.data && <div className="ticket-info-grid"><InfoItem label="Mã quà" value={giftResult.data.code} /><InfoItem label="Tên quà" value={giftResult.data.snapshot?.name || "-"} /><InfoItem label="Chủ sở hữu" value={giftResult.data.user_id?.full_name || "-"} /><InfoItem label="Trạng thái" value={{ available: "Có thể nhận", used: "Đã nhận", expired: "Đã hết hạn" }[giftResult.data.status] || giftResult.data.status} /><InfoItem label="Hạn sử dụng" value={formatDateTime(giftResult.data.expires_at)} /><InfoItem className="full" label="Nội dung" value={giftResult.data.snapshot?.value_label || giftResult.data.snapshot?.description || "-"} /></div>}
             </>
           )}
         </section>
@@ -667,7 +692,7 @@ const TicketScannerPage = () => {
             </div>
           </div>
 
-          {!bookingPrintResult && <button
+          {!bookingPrintResult && !giftResult && <button
             className="btn btn-primary ticket-print-btn"
             disabled={!ticket || !currentQrToken || processing || lookingUpTicket || checkingIn || printingTicket || ticket?.canPrint === false || Boolean(ticket?.printedAt)}
             title={ticket?.printedAt ? "Vé này đã được in và không thể in lại." : "In vé điện tử"}
@@ -695,7 +720,7 @@ const TicketScannerPage = () => {
             {printingBookingOrder ? "Đang chuẩn bị..." : bookingPrintResult.action === "printed" ? "Đã chuẩn bị in" : "In đơn vé"}
           </button>}
 
-          {!bookingPrintResult && <button
+          {!bookingPrintResult && !giftResult && <button
             className="btn btn-success ticket-checkin-btn"
             disabled={!ticket || !currentQrToken || processing || lookingUpTicket || printingTicket || checkingIn || ticket.status !== "VALID"}
             onClick={handleCheckIn}
@@ -704,6 +729,8 @@ const TicketScannerPage = () => {
             <HiOutlineCheckCircle />
             {checkingIn ? "Đang check-in..." : ticket?.status === "CHECKED_IN" ? "Đã check-in" : "Check-in vé"}
           </button>}
+
+          {giftResult && <button className="btn btn-success ticket-checkin-btn" disabled={!giftResult.success || giftResult.data?.status !== "available" || redeemingGift} onClick={handleRedeemGift} type="button"><HiOutlineGift />{redeemingGift ? "Đang xác nhận..." : giftResult.data?.status === "used" ? "Đã trao quà" : "Xác nhận trao quà"}</button>}
 
           {bookingPrintResult?.success && (
             <div className="ticket-checkin-feedback success">

@@ -1,5 +1,5 @@
 import express from "express";
-import { createCounterSale, getCounterShowtimes, getShiftReport, lookupStaffBookingOrder, printCounterSale } from "../controllers/staffPosControllers.js";
+import { createCounterSale, getCounterShowtimes, getShiftReport, lookupStaffGift, printCounterSale, redeemStaffGift } from "../controllers/staffPosControllers.js";
 import { getStaffRooms, getStaffRoomSeats, updateStaffSeatStatus } from "../controllers/staffRoomsControllers.js";
 import { addStaffTransactionNote, getStaffTransactionById, getStaffTransactions } from "../controllers/staffTransactionControllers.js";
 import { checkInAdminTicketQr, lookupAdminTicketCode, verifyAdminTicketQr } from "../controllers/adminTicketControllers.js";
@@ -22,7 +22,8 @@ router.post("/transactions/:id/notes", addStaffTransactionNote);
 router.post("/tickets/lookup", ticketScanRateLimit, lookupAdminTicketCode);
 router.post("/tickets/verify", ticketScanRateLimit, verifyAdminTicketQr);
 router.post("/tickets/check-in", ticketScanRateLimit, checkInAdminTicketQr);
-router.post("/bookings/verify", ticketScanRateLimit, lookupStaffBookingOrder);
+router.post("/gifts/lookup", ticketScanRateLimit, lookupStaffGift);
+router.post("/gifts/redeem", ticketScanRateLimit, redeemStaffGift);
 router.get("/rooms", getStaffRooms);
 router.get("/rooms/:roomId/seats", getStaffRoomSeats);
 router.patch("/rooms/:roomId/seats/:seatId/status", updateStaffSeatStatus);

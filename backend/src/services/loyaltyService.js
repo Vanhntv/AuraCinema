@@ -42,35 +42,42 @@ export const walletState = (item, template, now = new Date()) => {
   return "available";
 };
 
-export const getWallet = async (userId) => {
+export const getWallet = async (userId, { usableOnly = false } = {}) => {
   const items = await UserVoucher.find({ user_id: userId }).populate("voucher_id").sort({ created_at: -1 }).lean();
-  return items.map((item) => ({
+  const wallet = items.map((item) => ({
     id: item._id, status: walletState(item, item.voucher_id), source: item.source,
     used_at: item.used_at, expires_at: item.expires_at, received_at: item.created_at,
     booking_id: item.booking_id,
     voucher: { ...(item.snapshot || item.voucher_id || {}), id: item.voucher_id?._id, code: item.code || "" },
   }));
+  return usableOnly ? wallet.filter((item) => !["used", "expired"].includes(item.status)) : wallet;
 };
 
 export const getPointHistory = async (userId, query = {}) => {
   const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+  const pageSize = 5;
   const filter = { user_id: userId };
   if (query.type && !["earn", "redeem", "add", "subtract"].includes(query.type)) throw loyaltyError("Loại giao dịch không hợp lệ.");
   if (query.type) filter.type = query.type;
   const [data, total] = await Promise.all([
-    RewardPointLog.find(filter).sort({ occurred_at: -1, _id: -1 }).skip((page - 1) * 10).limit(10)
+    RewardPointLog.find(filter).sort({ occurred_at: -1, _id: -1 }).skip((page - 1) * pageSize).limit(pageSize)
       .populate("booking_id", "booking_code").populate("user_voucher_id", "code").lean(),
     RewardPointLog.countDocuments(filter),
   ]);
-  return { data, pagination: { page, total, totalPages: Math.max(1, Math.ceil(total / 10)) } };
+  return { data, pagination: { page, limit: pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
 };
 
-export const listRewardOffers = async (admin = false) => {
+export const listRewardOffers = async (admin = false, userId = null) => {
   const offers = await RewardOffer.find(admin ? {} : { active: true }).populate("voucher_id").sort({ created_at: -1 }).lean();
-  return offers.filter((offer) => offer.voucher_id).map((offer) => ({
+  const redeemedVoucherIds = !admin && userId
+    ? await UserVoucher.distinct("voucher_id", { user_id: userId, source: "redeem" })
+    : [];
+  const redeemed = new Set(redeemedVoucherIds.map(String));
+  const result = offers.filter((offer) => offer.voucher_id && !redeemed.has(String(offer.voucher_id._id))).map((offer) => ({
     ...offer, remaining: Math.max(0, Number(offer.voucher_id.quantity || 0)),
     available: offer.active && offer.voucher_id.status && !offer.voucher_id.deleted_at && new Date(offer.voucher_id.end_date) > new Date() && offer.voucher_id.quantity > 0,
   }));
+  return admin ? result : result.filter((offer) => offer.available);
 };
 
 export const saveRewardOffer = async (body) => {
@@ -85,7 +92,7 @@ export const saveRewardOffer = async (body) => {
   });
 };
 
-const allocateVoucher = async ({ voucherId, userId, source, issueKey, adminId, session }) => {
+export const allocateVoucher = async ({ voucherId, userId, source, issueKey, adminId, session }) => {
   // Stock is allocated at issuance; checkout only consumes the owned entitlement.
   const template = await Voucher.findOneAndUpdate({
     _id: voucherId, deleted_at: null, status: true, quantity: { $gt: 0 }, end_date: { $gt: new Date() },
@@ -113,6 +120,9 @@ export const redeemReward = async (userId, offerId, key) => {
       return existing;
     }
     if (!offer?.active) throw loyaltyError("Phần thưởng không còn khả dụng.", 409);
+    if (await UserVoucher.exists({ user_id: userId, voucher_id: offer.voucher_id, source: "redeem" }).session(session)) {
+      throw loyaltyError("Bạn đã đổi voucher này rồi.", 409);
+    }
     const user = await User.findOneAndUpdate({
       _id: userId, ...activeUsers, loyalty_reconciled_at: { $ne: null }, reward_points: { $gte: offer.points_cost },
     }, { $inc: { reward_points: -offer.points_cost } }, { new: true, session });

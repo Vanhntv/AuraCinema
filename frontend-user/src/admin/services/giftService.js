@@ -31,3 +31,7 @@ export const toggleGiftStatus = async (id) => {
   const response = await axiosClient.patch(`${API_URL}/${id}/status`);
   return response.data;
 };
+
+export const previewGiftGrant = async (data) => (await axiosClient.post(`${API_URL}/admin/grants/preview`, data)).data;
+export const confirmGiftGrant = async (id) => (await axiosClient.post(`${API_URL}/admin/grants/${id}/confirm`)).data;
+export const getGiftGrantHistory = async (params = {}) => (await axiosClient.get(`${API_URL}/admin/grants`, { params })).data;
