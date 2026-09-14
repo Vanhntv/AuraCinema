@@ -375,6 +375,28 @@ test("admin scanned ticket includes cinema details required by the shared print 
   assert.equal(response.cinema.address, "87 Láng Hạ, Hà Nội");
 });
 
+test("admin scanned ticket includes booked combo services", () => {
+  const response = formatTicketForAdmin({
+    _id: new mongoose.Types.ObjectId(),
+    ticketCode: "AURA000000000001-A1",
+    bookingId: {
+      _id: new mongoose.Types.ObjectId(),
+      booking_code: "AURA000000000001",
+      combos: [
+        { name: "Combo Couple", quantity: 2, price: 120000, subtotal: 240000 },
+      ],
+    },
+    seatId: new mongoose.Types.ObjectId(),
+    seatLabel: "A1",
+    price: 75000,
+    status: "VALID",
+  });
+
+  assert.deepEqual(response.booking.combos, [
+    { name: "Combo Couple", quantity: 2 },
+  ]);
+});
+
 test("ticket print claim is atomic and permits only an unprinted ticket", async () => {
   const adminId = new mongoose.Types.ObjectId();
   const now = new Date("2030-01-01T10:00:00.000Z");

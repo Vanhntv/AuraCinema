@@ -128,6 +128,7 @@ ticketSchema.index(
 ticketSchema.index({ bookingId: 1 });
 ticketSchema.index({ userId: 1, createdAt: -1 });
 ticketSchema.index({ status: 1 });
+ticketSchema.index({ checkedInBy: 1, checkedInAt: -1, status: 1 });
 
 const Ticket = mongoose.model("Ticket", ticketSchema);
 

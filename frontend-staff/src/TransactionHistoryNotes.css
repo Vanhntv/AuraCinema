@@ -1,0 +1,3 @@
+.transaction-note-form{display:grid;gap:8px}.transaction-note-form textarea{min-height:82px;resize:vertical;padding:10px;border:1px solid var(--border);border-radius:8px;color:var(--primary);background:#1e293b;outline:none}.transaction-note-form textarea:focus{border-color:#8b5cf6}.transaction-note-form button{justify-self:end;padding:9px 13px;border-radius:8px;color:#fff;background:#6d28d9;font-size:12px;font-weight:700}.transaction-note-form button:disabled{cursor:not-allowed;opacity:.45}
+
+.transaction-note-form textarea{border-color:var(--border);color:var(--primary);background:#f9fafb}.transaction-note-form textarea:focus{border-color:#9cb9ff;box-shadow:0 0 0 4px rgba(70,95,255,.1)}.transaction-note-form button{background:#465fff}

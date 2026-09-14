@@ -1,0 +1,380 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.9.3
+2 info using node@v22.19.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Acer\AuraCinema\frontend-staff\.npmrc
+5 silly config load:file:C:\Users\Acer\.npmrc
+6 silly config load:file:C:\Users\Acer\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm ci
+8 verbose argv "ci" "--cache" ".npm-cache"
+9 verbose logfile logs-max:10 dir:C:\Users\Acer\AuraCinema\frontend-staff\.npm-cache\_logs\2026-09-13T09_18_34_745Z-
+10 verbose logfile C:\Users\Acer\AuraCinema\frontend-staff\.npm-cache\_logs\2026-09-13T09_18_34_745Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+13 silly idealTree buildDeps
+14 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with EACCES
+15 silly reify moves {}
+16 silly audit bulk request {
+16 silly audit   '@oxc-project/types': [ '0.148.0' ],
+16 silly audit   '@oxlint/binding-android-arm-eabi': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-android-arm64': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-darwin-arm64': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-darwin-x64': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-freebsd-x64': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-arm-gnueabihf': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-arm-musleabihf': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-arm64-gnu': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-arm64-musl': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-ppc64-gnu': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-riscv64-gnu': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-riscv64-musl': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-s390x-gnu': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-x64-gnu': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-linux-x64-musl': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-openharmony-arm64': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-win32-arm64-msvc': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-win32-ia32-msvc': [ '1.82.0' ],
+16 silly audit   '@oxlint/binding-win32-x64-msvc': [ '1.82.0' ],
+16 silly audit   '@rolldown/binding-android-arm-eabi': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-android-arm64': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-darwin-arm64': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-darwin-x64': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-freebsd-x64': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-arm-gnueabihf': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-arm64-gnu': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-arm64-musl': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-ppc64-gnu': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-s390x-gnu': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-x64-gnu': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-linux-x64-musl': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-openharmony-arm64': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-win32-arm64-msvc': [ '1.2.7' ],
+16 silly audit   '@rolldown/binding-win32-x64-msvc': [ '1.2.7' ],
+16 silly audit   '@rolldown/pluginutils': [ '1.0.1' ],
+16 silly audit   '@types/react': [ '19.2.18' ],
+16 silly audit   '@types/react-dom': [ '19.2.7' ],
+16 silly audit   '@vitejs/plugin-react': [ '6.1.1' ],
+16 silly audit   csstype: [ '3.2.3' ],
+16 silly audit   'detect-libc': [ '2.1.2' ],
+16 silly audit   fdir: [ '6.5.0' ],
+16 silly audit   fsevents: [ '2.3.3' ],
+16 silly audit   'html5-qrcode': [ '2.3.8' ],
+16 silly audit   lightningcss: [ '1.33.0' ],
+16 silly audit   'lightningcss-android-arm64': [ '1.33.0' ],
+16 silly audit   'lightningcss-darwin-arm64': [ '1.33.0' ],
+16 silly audit   'lightningcss-darwin-x64': [ '1.33.0' ],
+16 silly audit   'lightningcss-freebsd-x64': [ '1.33.0' ],
+16 silly audit   'lightningcss-linux-arm-gnueabihf': [ '1.33.0' ],
+16 silly audit   'lightningcss-linux-arm64-gnu': [ '1.33.0' ],
+16 silly audit   'lightningcss-linux-arm64-musl': [ '1.33.0' ],
+16 silly audit   'lightningcss-linux-x64-gnu': [ '1.33.0' ],
+16 silly audit   'lightningcss-linux-x64-musl': [ '1.33.0' ],
+16 silly audit   'lightningcss-win32-arm64-msvc': [ '1.33.0' ],
+16 silly audit   'lightningcss-win32-x64-msvc': [ '1.33.0' ],
+16 silly audit   nanoid: [ '3.3.18' ],
+16 silly audit   oxlint: [ '1.82.0' ],
+16 silly audit   picocolors: [ '1.1.1' ],
+16 silly audit   picomatch: [ '4.0.7' ],
+16 silly audit   postcss: [ '8.5.28' ],
+16 silly audit   react: [ '19.2.8' ],
+16 silly audit   'react-dom': [ '19.2.8' ],
+16 silly audit   rolldown: [ '1.2.7' ],
+16 silly audit   scheduler: [ '0.27.0' ],
+16 silly audit   'source-map-js': [ '1.2.1' ],
+16 silly audit   tinyglobby: [ '0.2.17' ],
+16 silly audit   vite: [ '8.2.2' ]
+16 silly audit }
+17 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-win32-arm64-msvc
+18 silly reify mark deleted [
+18 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-win32-arm64-msvc'
+18 silly reify ]
+19 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-linux-x64-musl
+20 silly reify mark deleted [
+20 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-linux-x64-musl'
+20 silly reify ]
+21 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-linux-x64-gnu
+22 silly reify mark deleted [
+22 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-linux-x64-gnu'
+22 silly reify ]
+23 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-linux-arm64-musl
+24 silly reify mark deleted [
+24 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-linux-arm64-musl'
+24 silly reify ]
+25 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-linux-arm64-gnu
+26 silly reify mark deleted [
+26 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-linux-arm64-gnu'
+26 silly reify ]
+27 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-linux-arm-gnueabihf
+28 silly reify mark deleted [
+28 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-linux-arm-gnueabihf'
+28 silly reify ]
+29 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-freebsd-x64
+30 silly reify mark deleted [
+30 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-freebsd-x64'
+30 silly reify ]
+31 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-darwin-x64
+32 silly reify mark deleted [
+32 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-darwin-x64'
+32 silly reify ]
+33 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-darwin-arm64
+34 silly reify mark deleted [
+34 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-darwin-arm64'
+34 silly reify ]
+35 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-android-arm64
+36 silly reify mark deleted [
+36 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-android-arm64'
+36 silly reify ]
+37 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\fsevents
+38 silly reify mark deleted [
+38 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\fsevents'
+38 silly reify ]
+39 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-win32-arm64-msvc
+40 silly reify mark deleted [
+40 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-win32-arm64-msvc'
+40 silly reify ]
+41 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-openharmony-arm64
+42 silly reify mark deleted [
+42 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-openharmony-arm64'
+42 silly reify ]
+43 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-x64-musl
+44 silly reify mark deleted [
+44 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-x64-musl'
+44 silly reify ]
+45 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-x64-gnu
+46 silly reify mark deleted [
+46 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-x64-gnu'
+46 silly reify ]
+47 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-s390x-gnu
+48 silly reify mark deleted [
+48 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-s390x-gnu'
+48 silly reify ]
+49 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-ppc64-gnu
+50 silly reify mark deleted [
+50 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-ppc64-gnu'
+50 silly reify ]
+51 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-arm64-musl
+52 silly reify mark deleted [
+52 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-arm64-musl'
+52 silly reify ]
+53 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-arm64-gnu
+54 silly reify mark deleted [
+54 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-arm64-gnu'
+54 silly reify ]
+55 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-linux-arm-gnueabihf
+56 silly reify mark deleted [
+56 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-linux-arm-gnueabihf'
+56 silly reify ]
+57 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-freebsd-x64
+58 silly reify mark deleted [
+58 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-freebsd-x64'
+58 silly reify ]
+59 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-darwin-x64
+60 silly reify mark deleted [
+60 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-darwin-x64'
+60 silly reify ]
+61 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-darwin-arm64
+62 silly reify mark deleted [
+62 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-darwin-arm64'
+62 silly reify ]
+63 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-android-arm64
+64 silly reify mark deleted [
+64 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-android-arm64'
+64 silly reify ]
+65 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@rolldown\binding-android-arm-eabi
+66 silly reify mark deleted [
+66 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@rolldown\\binding-android-arm-eabi'
+66 silly reify ]
+67 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-win32-ia32-msvc
+68 silly reify mark deleted [
+68 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-win32-ia32-msvc'
+68 silly reify ]
+69 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-win32-arm64-msvc
+70 silly reify mark deleted [
+70 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-win32-arm64-msvc'
+70 silly reify ]
+71 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-openharmony-arm64
+72 silly reify mark deleted [
+72 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-openharmony-arm64'
+72 silly reify ]
+73 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-x64-musl
+74 silly reify mark deleted [
+74 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-x64-musl'
+74 silly reify ]
+75 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-x64-gnu
+76 silly reify mark deleted [
+76 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-x64-gnu'
+76 silly reify ]
+77 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-s390x-gnu
+78 silly reify mark deleted [
+78 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-s390x-gnu'
+78 silly reify ]
+79 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-riscv64-musl
+80 silly reify mark deleted [
+80 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-riscv64-musl'
+80 silly reify ]
+81 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-riscv64-gnu
+82 silly reify mark deleted [
+82 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-riscv64-gnu'
+82 silly reify ]
+83 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-ppc64-gnu
+84 silly reify mark deleted [
+84 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-ppc64-gnu'
+84 silly reify ]
+85 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-arm64-musl
+86 silly reify mark deleted [
+86 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-arm64-musl'
+86 silly reify ]
+87 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-arm64-gnu
+88 silly reify mark deleted [
+88 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-arm64-gnu'
+88 silly reify ]
+89 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-arm-musleabihf
+90 silly reify mark deleted [
+90 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-arm-musleabihf'
+90 silly reify ]
+91 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-linux-arm-gnueabihf
+92 silly reify mark deleted [
+92 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-linux-arm-gnueabihf'
+92 silly reify ]
+93 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-freebsd-x64
+94 silly reify mark deleted [
+94 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-freebsd-x64'
+94 silly reify ]
+95 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-darwin-x64
+96 silly reify mark deleted [
+96 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-darwin-x64'
+96 silly reify ]
+97 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-darwin-arm64
+98 silly reify mark deleted [
+98 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-darwin-arm64'
+98 silly reify ]
+99 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-android-arm64
+100 silly reify mark deleted [
+100 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-android-arm64'
+100 silly reify ]
+101 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\@oxlint\binding-android-arm-eabi
+102 silly reify mark deleted [
+102 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\@oxlint\\binding-android-arm-eabi'
+102 silly reify ]
+103 http cache vite@https://registry.npmjs.org/vite/-/vite-8.2.2.tgz 0ms (cache hit)
+104 http cache tinyglobby@https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz 0ms (cache hit)
+105 http cache rolldown@https://registry.npmjs.org/rolldown/-/rolldown-1.2.7.tgz 0ms (cache hit)
+106 http cache source-map-js@https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz 0ms (cache hit)
+107 http cache react-dom@https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz 0ms (cache hit)
+108 http cache postcss@https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz 0ms (cache hit)
+109 http cache react@https://registry.npmjs.org/react/-/react-19.2.8.tgz 0ms (cache hit)
+110 http cache scheduler@https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz 0ms (cache hit)
+111 http cache picomatch@https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz 0ms (cache hit)
+112 http cache picocolors@https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz 0ms (cache hit)
+113 http cache oxlint@https://registry.npmjs.org/oxlint/-/oxlint-1.82.0.tgz 0ms (cache hit)
+114 http cache nanoid@https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz 0ms (cache hit)
+115 http cache lightningcss@https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz 0ms (cache hit)
+116 http cache lightningcss-win32-x64-msvc@https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz 0ms (cache hit)
+117 http cache html5-qrcode@https://registry.npmjs.org/html5-qrcode/-/html5-qrcode-2.3.8.tgz 0ms (cache hit)
+118 http cache @vitejs/plugin-react@https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-6.1.1.tgz 0ms (cache hit)
+119 http cache fdir@https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz 0ms (cache hit)
+120 http cache detect-libc@https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz 0ms (cache hit)
+121 http cache csstype@https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz 0ms (cache hit)
+122 http cache @types/react-dom@https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.7.tgz 0ms (cache hit)
+123 http cache @types/react@https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz 0ms (cache hit)
+124 http cache @oxlint/binding-win32-x64-msvc@https://registry.npmjs.org/@oxlint/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.82.0.tgz 0ms (cache hit)
+125 http cache @rolldown/pluginutils@https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz 0ms (cache hit)
+126 http cache @rolldown/binding-win32-x64-msvc@https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.2.7.tgz 0ms (cache hit)
+127 silly tarball no local data for vite@https://registry.npmjs.org/vite/-/vite-8.2.2.tgz. Extracting by manifest.
+128 silly tarball no local data for tinyglobby@https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz. Extracting by manifest.
+129 silly tarball no local data for rolldown@https://registry.npmjs.org/rolldown/-/rolldown-1.2.7.tgz. Extracting by manifest.
+130 silly tarball no local data for source-map-js@https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz. Extracting by manifest.
+131 silly tarball no local data for react-dom@https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz. Extracting by manifest.
+132 silly tarball no local data for postcss@https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz. Extracting by manifest.
+133 silly tarball no local data for react@https://registry.npmjs.org/react/-/react-19.2.8.tgz. Extracting by manifest.
+134 silly tarball no local data for scheduler@https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz. Extracting by manifest.
+135 silly tarball no local data for picomatch@https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz. Extracting by manifest.
+136 silly tarball no local data for picocolors@https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz. Extracting by manifest.
+137 silly tarball no local data for oxlint@https://registry.npmjs.org/oxlint/-/oxlint-1.82.0.tgz. Extracting by manifest.
+138 silly tarball no local data for nanoid@https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz. Extracting by manifest.
+139 silly tarball no local data for lightningcss@https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz. Extracting by manifest.
+140 silly tarball no local data for lightningcss-win32-x64-msvc@https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz. Extracting by manifest.
+141 silly tarball no local data for html5-qrcode@https://registry.npmjs.org/html5-qrcode/-/html5-qrcode-2.3.8.tgz. Extracting by manifest.
+142 silly tarball no local data for @vitejs/plugin-react@https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-6.1.1.tgz. Extracting by manifest.
+143 silly tarball no local data for fdir@https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz. Extracting by manifest.
+144 http cache @oxc-project/types@https://registry.npmjs.org/@oxc-project/types/-/types-0.148.0.tgz 0ms (cache hit)
+145 silly tarball no local data for detect-libc@https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz. Extracting by manifest.
+146 silly tarball no local data for csstype@https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz. Extracting by manifest.
+147 silly tarball no local data for @types/react-dom@https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.7.tgz. Extracting by manifest.
+148 silly tarball no local data for @types/react@https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz. Extracting by manifest.
+149 silly tarball no local data for @oxlint/binding-win32-x64-msvc@https://registry.npmjs.org/@oxlint/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.82.0.tgz. Extracting by manifest.
+150 silly tarball no local data for @rolldown/pluginutils@https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.1.tgz. Extracting by manifest.
+151 silly tarball no local data for @rolldown/binding-win32-x64-msvc@https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.2.7.tgz. Extracting by manifest.
+152 silly tarball no local data for @oxc-project/types@https://registry.npmjs.org/@oxc-project/types/-/types-0.148.0.tgz. Extracting by manifest.
+153 silly audit bulk request failed undefined
+154 http fetch GET https://registry.npmjs.org/vite/-/vite-8.2.2.tgz attempt 1 failed with EACCES
+155 http fetch GET https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz attempt 1 failed with EACCES
+156 http fetch GET https://registry.npmjs.org/rolldown/-/rolldown-1.2.7.tgz attempt 1 failed with EACCES
+157 http fetch GET https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz attempt 1 failed with EACCES
+158 http fetch GET https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz attempt 1 failed with EACCES
+159 http fetch GET https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz attempt 1 failed with EACCES
+160 http fetch GET https://registry.npmjs.org/react/-/react-19.2.8.tgz attempt 1 failed with EACCES
+161 http fetch GET https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz attempt 1 failed with EACCES
+162 http fetch GET https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz attempt 1 failed with EACCES
+163 http fetch GET https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz attempt 1 failed with EACCES
+164 http fetch GET https://registry.npmjs.org/oxlint/-/oxlint-1.82.0.tgz attempt 1 failed with EACCES
+165 http fetch GET https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz attempt 1 failed with EACCES
+166 http fetch GET https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz attempt 1 failed with EACCES
+167 http fetch GET https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz attempt 1 failed with EACCES
+168 verbose audit error FetchError: request to https://registry.npmjs.org/-/npm/v1/security/audits/quick failed, reason: 
+168 verbose audit error     at ClientRequest.<anonymous> (C:\Program Files\nodejs\node_modules\npm\node_modules\minipass-fetch\lib\index.js:130:14)
+168 verbose audit error     at ClientRequest.emit (node:events:519:28)
+168 verbose audit error     at emitErrorEvent (node:_http_client:105:11)
+168 verbose audit error     at _destroy (node:_http_client:898:9)
+168 verbose audit error     at onSocketNT (node:_http_client:918:5)
+168 verbose audit error     at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+168 verbose audit error   code: 'EACCES',
+168 verbose audit error   errno: 'EACCES',
+168 verbose audit error   type: 'system'
+168 verbose audit error }
+169 silly audit error undefined
+170 silly audit report null
+171 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with EACCES
+172 http fetch GET https://registry.npmjs.org/vite/-/vite-8.2.2.tgz attempt 2 failed with EACCES
+173 http fetch GET https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz attempt 2 failed with EACCES
+174 http fetch GET https://registry.npmjs.org/rolldown/-/rolldown-1.2.7.tgz attempt 2 failed with EACCES
+175 http fetch GET https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz attempt 2 failed with EACCES
+176 http fetch GET https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz attempt 2 failed with EACCES
+177 http fetch GET https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz attempt 2 failed with EACCES
+178 http fetch GET https://registry.npmjs.org/react/-/react-19.2.8.tgz attempt 2 failed with EACCES
+179 http fetch GET https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz attempt 2 failed with EACCES
+180 http fetch GET https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz attempt 2 failed with EACCES
+181 http fetch GET https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz attempt 2 failed with EACCES
+182 http fetch GET https://registry.npmjs.org/oxlint/-/oxlint-1.82.0.tgz attempt 2 failed with EACCES
+183 http fetch GET https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz attempt 2 failed with EACCES
+184 http fetch GET https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz attempt 2 failed with EACCES
+185 http fetch GET https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz attempt 2 failed with EACCES
+186 http fetch GET https://registry.npmjs.org/npm attempt 3 failed with EACCES
+187 http fetch GET https://registry.npmjs.org/vite/-/vite-8.2.2.tgz attempt 3 failed with EACCES
+188 http fetch GET https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz attempt 3 failed with EACCES
+189 http fetch GET https://registry.npmjs.org/rolldown/-/rolldown-1.2.7.tgz attempt 3 failed with EACCES
+190 http fetch GET https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz attempt 3 failed with EACCES
+191 http fetch GET https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz attempt 3 failed with EACCES
+192 http fetch GET https://registry.npmjs.org/postcss/-/postcss-8.5.28.tgz attempt 3 failed with EACCES
+193 http fetch GET https://registry.npmjs.org/react/-/react-19.2.8.tgz attempt 3 failed with EACCES
+194 http fetch GET https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz attempt 3 failed with EACCES
+195 http fetch GET https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz attempt 3 failed with EACCES
+196 http fetch GET https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz attempt 3 failed with EACCES
+197 http fetch GET https://registry.npmjs.org/oxlint/-/oxlint-1.82.0.tgz attempt 3 failed with EACCES
+198 http fetch GET https://registry.npmjs.org/nanoid/-/nanoid-3.3.18.tgz attempt 3 failed with EACCES
+199 http fetch GET https://registry.npmjs.org/lightningcss/-/lightningcss-1.33.0.tgz attempt 3 failed with EACCES
+200 http fetch GET https://registry.npmjs.org/lightningcss-win32-x64-msvc/-/lightningcss-win32-x64-msvc-1.33.0.tgz attempt 3 failed with EACCES
+201 verbose reify failed optional dependency C:\Users\Acer\AuraCinema\frontend-staff\node_modules\lightningcss-win32-x64-msvc
+202 silly reify mark deleted [
+202 silly reify   'C:\\Users\\Acer\\AuraCinema\\frontend-staff\\node_modules\\lightningcss-win32-x64-msvc'
+202 silly reify ]
+203 verbose cwd C:\Users\Acer\AuraCinema\frontend-staff
+204 verbose os Windows_NT 10.0.26200
+205 verbose node v22.19.0
+206 verbose npm  v10.9.3
+207 error Exit handler never called!
+208 error This is an error with npm itself. Please report this error at:
+209 error   <https://github.com/npm/cli/issues>
+210 verbose exit 1
+211 verbose code 1
+212 error A complete log of this run can be found in: C:\Users\Acer\AuraCinema\frontend-staff\.npm-cache\_logs\2026-09-13T09_18_34_745Z-debug-0.log

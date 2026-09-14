@@ -282,7 +282,7 @@ const populateTicketForAdmin = (query, { includeQrToken = false } = {}) => {
   );
 
   return selectedQuery
-    .populate("bookingId", "booking_code status payment_status paid_at total_price customer_name customer_email customer_phone")
+    .populate("bookingId", "booking_code status payment_status paid_at total_price customer_name customer_email customer_phone combos")
     .populate("movieId", "title poster duration age_limit")
     .populate("showtimeId", "start_time end_time status")
     .populate({
@@ -329,6 +329,12 @@ export const formatTicketForAdmin = (ticket, verification = {}) => {
         customerName: booking.customer_name,
         customerEmail: booking.customer_email,
         customerPhone: booking.customer_phone,
+        combos: Array.isArray(booking.combos)
+          ? booking.combos.map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+          }))
+          : [],
       }
       : null,
     movie: movie?._id
