@@ -65,9 +65,13 @@ export const getPointHistory = async (userId, query = {}) => {
   return { data, pagination: { page, total, totalPages: Math.max(1, Math.ceil(total / 10)) } };
 };
 
-export const listRewardOffers = async (admin = false) => {
+export const listRewardOffers = async (admin = false, userId = null) => {
   const offers = await RewardOffer.find(admin ? {} : { active: true }).populate("voucher_id").sort({ created_at: -1 }).lean();
-  return offers.filter((offer) => offer.voucher_id).map((offer) => ({
+  const redeemedVoucherIds = !admin && userId
+    ? await UserVoucher.distinct("voucher_id", { user_id: userId, source: "redeem" })
+    : [];
+  const redeemed = new Set(redeemedVoucherIds.map(String));
+  return offers.filter((offer) => offer.voucher_id && !redeemed.has(String(offer.voucher_id._id))).map((offer) => ({
     ...offer, remaining: Math.max(0, Number(offer.voucher_id.quantity || 0)),
     available: offer.active && offer.voucher_id.status && !offer.voucher_id.deleted_at && new Date(offer.voucher_id.end_date) > new Date() && offer.voucher_id.quantity > 0,
   }));
@@ -113,6 +117,9 @@ export const redeemReward = async (userId, offerId, key) => {
       return existing;
     }
     if (!offer?.active) throw loyaltyError("Phần thưởng không còn khả dụng.", 409);
+    if (await UserVoucher.exists({ user_id: userId, voucher_id: offer.voucher_id, source: "redeem" }).session(session)) {
+      throw loyaltyError("Bạn đã đổi voucher này rồi.", 409);
+    }
     const user = await User.findOneAndUpdate({
       _id: userId, ...activeUsers, loyalty_reconciled_at: { $ne: null }, reward_points: { $gte: offer.points_cost },
     }, { $inc: { reward_points: -offer.points_cost } }, { new: true, session });

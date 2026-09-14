@@ -18,10 +18,10 @@ import Gift from "../src/models/Gift.js";
 import UserGift from "../src/models/UserGift.js";
 import { creditRewardPointsForBooking, calculateEarnedRewardPoints } from "../src/services/rewardPointService.js";
 import { tierForSpend, membershipView } from "../src/services/loyaltyPolicy.js";
-import { redeemReward, getWallet, getPointHistory, previewGrant, confirmGrant, walletState, saveRewardOffer } from "../src/services/loyaltyService.js";
+import { redeemReward, getWallet, getPointHistory, listRewardOffers, previewGrant, confirmGrant, walletState, saveRewardOffer } from "../src/services/loyaltyService.js";
 import { verifyVoucherService, reserveVoucherForBooking, consumeReservedVoucherForBooking, releaseReservedVoucherForBooking } from "../src/services/voucherService.js";
 import { withTransaction } from "../src/services/transactionService.js";
-import { redeemGift } from "../src/services/giftEntitlementService.js";
+import { consumeGiftForBooking, listGiftCatalog, redeemGift, reserveGiftForBooking } from "../src/services/giftEntitlementService.js";
 
 test("loyalty thresholds, rounding and debt are explicit", () => {
   assert.equal(tierForSpend(2999999), "member");
@@ -102,6 +102,7 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   const verified = await verifyVoucherService({ user_voucher_id: item._id, user_id: user._id, order_amount: 100000 });
   assert.equal(verified.valid, true);
   assert.equal(verified.discount_amount, 20000);
+  assert.equal((await listRewardOffers(false, user._id)).length, 0, "redeemed voucher offers are hidden for that user");
   const reservationId = new mongoose.Types.ObjectId();
   await withTransaction(session => reserveVoucherForBooking({ bookingId: reservationId, userId: user._id, voucherResult: verified, subtotalPrice: 100000, session }));
   await assert.rejects(withTransaction(session => reserveVoucherForBooking({ bookingId: new mongoose.Types.ObjectId(), userId: user._id, voucherResult: verified, subtotalPrice: 100000, session })), /giữ/);
@@ -110,7 +111,7 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   await withTransaction(session => releaseReservedVoucherForBooking({ bookingId: reservationId, session }));
   assert.equal((await getWallet(user._id))[0].status, "used", "used vouchers cannot be released");
   assert.equal((await Voucher.findById(voucher._id)).quantity, 9);
-  await assert.rejects(redeemReward(user._id, offer._id, "redemption-request-0003"), /điểm/);
+  await assert.rejects(redeemReward(user._id, offer._id, "redemption-request-0003"), /đã đổi/);
   const history = await getPointHistory(user._id, { type: "redeem" });
   assert.equal(history.data.length, 1);
   assert.equal(history.data[0].user_voucher_id.code, item.code);
@@ -122,6 +123,7 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
     acquisition_modes: ["points"],
     redemption_channel: "counter",
     value_label: "Một phần quà tại quầy",
+    max_per_user: 3,
     quantity: 1,
     remaining_quantity: 1,
     condition: { point_required: 50 },
@@ -140,6 +142,41 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   const ownedGift = giftResults.find(result => result.status === "fulfilled").value;
   const giftReplay = await redeemGift(user._id, gift._id, ownedGift.issue_key.split(":").at(-1));
   assert.equal(String(giftReplay._id), String(ownedGift._id));
+  await Gift.updateOne({ _id: gift._id }, { $set: { quantity: 2, remaining_quantity: 1 } });
+  await User.updateOne({ _id: user._id }, { $set: { reward_points: 100 } });
+  assert.equal((await listGiftCatalog(user._id)).some(item => String(item._id) === String(gift._id)), false);
+  await assert.rejects(redeemGift(user._id, gift._id, "gift-redemption-request-0003"), /đã đổi/);
+  await User.updateOne({ _id: user._id }, { $set: { reward_points: 0 } });
+
+  const giftBookingId = new mongoose.Types.ObjectId();
+  await withTransaction(session => reserveGiftForBooking({ userGiftId: ownedGift._id, userId: user._id, bookingId: giftBookingId, session }));
+  const consumedGift = await withTransaction(session => consumeGiftForBooking({ bookingId: giftBookingId, session }));
+  assert.equal(consumedGift.status, "used");
+  await assert.rejects(
+    withTransaction(session => reserveGiftForBooking({ userGiftId: ownedGift._id, userId: user._id, bookingId: new mongoose.Types.ObjectId(), session })),
+    /không còn khả dụng/,
+  );
+
+  const vipGift = await Gift.create({
+    code: "VIP-ONLY-GIFT",
+    name: "Quà chỉ dành cho VIP",
+    type: "physical",
+    acquisition_modes: ["points"],
+    redemption_channel: "counter",
+    value_label: "Quà VIP",
+    quantity: 2,
+    condition: { point_required: 100, member_tiers: ["vip", "vvip"] },
+    start_date: new Date(Date.now() - 60000),
+    end_date: new Date(Date.now() + 86400000),
+    status: "active",
+  });
+  await User.updateOne({ _id: stranger._id }, { $set: { reward_points: 500, loyalty_reconciled_at: new Date() } });
+  await assert.rejects(
+    redeemGift(stranger._id, vipGift._id, "gift-redemption-vip-rejected"),
+    /Hạng thành viên/,
+  );
+  assert.equal((await User.findById(stranger._id)).reward_points, 500);
+  assert.equal(await UserGift.countDocuments({ user_id: stranger._id, gift_id: vipGift._id }), 0);
 
   const admin = new mongoose.Types.ObjectId();
   const preview = await previewGrant(admin, { voucher_id: String(voucher._id), key: "grant-request-00001", email: stranger.email });

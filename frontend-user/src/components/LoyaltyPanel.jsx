@@ -3,13 +3,14 @@ import { HiOutlineChevronLeft, HiOutlineChevronRight, HiOutlineX, HiOutlineClipb
 import { loyaltyRequest } from "../services/loyaltyService";
 import { getMyVoucherWallet } from "../services/voucherService";
 import { getGiftCatalog, getMyGiftQr, getMyGiftWallet, redeemGift } from "../services/giftService";
+import { GIFT_WALLET_FILTERS, giftMatchesWalletFilter, giftRedemptionDestination } from "../utils/giftWallet";
 import QRCode from "qrcode";
 import "./loyalty.css";
 
 const money = (n) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(n || 0));
 const date = (value) => value ? new Date(value).toLocaleDateString("vi-VN") : "Chưa xác định";
 const dateTime = (value) => value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "Chưa xác định";
-const labels = { available: "Có thể sử dụng", reserved: "Đang giữ cho đơn", paused: "Tạm ngừng", upcoming: "Chưa bắt đầu", used: "Đã sử dụng", fulfilled: "Đã chuyển vào tài khoản", expired: "Đã hết hạn" };
+const labels = { available: "Có thể sử dụng", reserved: "Đang giữ cho đơn", paused: "Tạm ngừng", upcoming: "Chưa bắt đầu", used: "Đã sử dụng", fulfilled: "Đã nhận", expired: "Đã hết hạn" };
 const types = { earn: "Tích điểm", redeem: "Đổi ưu đãi", subtract: "Thu hồi điểm", add: "Điều chỉnh điểm" };
 const giftTypes = { ticket: "Vé xem phim", combo: "Combo bắp nước", voucher: "Voucher", point: "Điểm thưởng", physical: "Quà vật phẩm" };
 const giftBenefit = (gift = {}) => gift.value_label || ({ ticket: "Vé xem phim", combo: "Combo bắp nước", voucher: "Voucher", point: `${gift.benefit?.points || gift.value || 0} điểm`, physical: "Quà tại rạp" }[gift.type]) || "Quà tặng";
@@ -95,9 +96,11 @@ export default function LoyaltyPanel({ tab, user, onTabChange, refreshProfile })
   const redeemOwnedGift = async () => {
     setRedeeming(true); setDialogError("");
     try {
+      const giftType = selected.giftOffer.type;
       await redeemGift(selected.giftOffer._id, selected.key);
-      setNotice("Đổi quà thành công. Quà đã được thêm vào Ví ưu đãi.");
-      setSelected(null); setWalletKind("gift"); onTabChange("vouchers"); reload();
+      const destination = giftRedemptionDestination(giftType);
+      setNotice(destination.notice); setFilter(destination.filter); setWalletKind(destination.walletKind);
+      setSelected(null); onTabChange("vouchers"); reload();
       refreshProfile().catch(() => {});
     } catch (e) { setDialogError(errorText(e)); } finally { setRedeeming(false); }
   };
@@ -112,10 +115,7 @@ export default function LoyaltyPanel({ tab, user, onTabChange, refreshProfile })
   };
   const openWallet = (item) => { setSelected({ wallet: item }); setCopied(false); setDialogError(""); };
   const filtered = wallet.filter(item => filter === "available" ? !["used", "expired"].includes(item.status) : item.status === filter);
-  const filteredGifts = giftWallet.filter(item => filter === "available"
-    ? ["available", "reserved"].includes(item.status)
-    : filter === "used" ? ["used", "fulfilled"].includes(item.status) : item.status === filter);
-  const count = (status) => wallet.filter(item => status === "available" ? !["used", "expired"].includes(item.status) : item.status === status).length;
+  const filteredGifts = giftWallet.filter(item => giftMatchesWalletFilter(item, filter));
   const voucher = selected?.wallet?.voucher || selected?.offer?.voucher_id;
   const selectedGift = selected?.giftOffer || selected?.giftWallet?.snapshot;
 
@@ -154,14 +154,16 @@ export default function LoyaltyPanel({ tab, user, onTabChange, refreshProfile })
         <LoyaltyPagination page={page} totalPages={history.pagination.totalPages} onChange={setPage} disabled={loading} />
         <h3>Đổi ưu đãi</h3>
         {!membership.redemption_enabled && <p>Đổi thưởng chưa được mở cho tài khoản này.</p>}
-        <div className="loyalty-items">{offers.map(offer => <article key={offer._id} className="loyalty-item"><h4>{offer.voucher_id.name || offer.voucher_id.code}</h4><strong>{benefit(offer.voucher_id)}</strong><p>{offer.points_cost} điểm · Còn {offer.remaining}</p><p>Đơn tối thiểu {money(offer.voucher_id.min_order)}</p><p>Hết hạn {date(offer.voucher_id.end_date)}</p><button disabled={!membership.redemption_enabled || !offer.available || membership.available_points < offer.points_cost || membership.points_debt > 0} onClick={() => { setDialogError(""); setSelected({ offer, key: crypto.randomUUID() }); }}>Đổi voucher</button></article>)}</div>
-        <div className="loyalty-items">{giftOffers.map(gift => <article key={gift._id} className="loyalty-item loyalty-gift-item">{gift.image_url && <img src={gift.image_url} alt="" />}<span className="loyalty-gift-type">{giftTypes[gift.type]}</span><h4>{gift.name}</h4><strong>{giftBenefit(gift)}</strong><p>{gift.points_cost} điểm · Còn {gift.remaining_quantity}</p><p>Hết hạn {date(gift.end_date)}</p><button disabled={!membership.redemption_enabled || !gift.available || membership.available_points < gift.points_cost || membership.points_debt > 0} onClick={() => { setDialogError(""); setSelected({ giftOffer: gift, key: crypto.randomUUID() }); }}>Đổi quà</button></article>)}</div>
+        <div className="loyalty-redemption-grid">
+          {offers.map(offer => <article key={offer._id} className="loyalty-redemption-item"><div className="loyalty-redemption-copy"><span className="loyalty-gift-type">Voucher</span><h4>{offer.voucher_id.name || offer.voucher_id.code}</h4><strong>{benefit(offer.voucher_id)}</strong><p>{offer.points_cost} điểm · Hết hạn {date(offer.voucher_id.end_date)}</p></div><button disabled={!membership.redemption_enabled || !offer.available || membership.available_points < offer.points_cost || membership.points_debt > 0} onClick={() => { setDialogError(""); setSelected({ offer, key: crypto.randomUUID() }); }}>Đổi voucher</button></article>)}
+          {giftOffers.map(gift => <article key={gift._id} className="loyalty-redemption-item">{gift.image_url && <img src={gift.image_url} alt="" />}<div className="loyalty-redemption-copy"><span className="loyalty-gift-type">{giftTypes[gift.type]}</span><h4>{gift.name}</h4><strong>{giftBenefit(gift)}</strong><p>{gift.points_cost} điểm · Hết hạn {date(gift.end_date)}</p>{gift.availability_reason && <p className="loyalty-negative">{gift.availability_reason}</p>}</div><button disabled={!membership.redemption_enabled || !gift.available || membership.available_points < gift.points_cost || membership.points_debt > 0} onClick={() => { setDialogError(""); setSelected({ giftOffer: gift, key: crypto.randomUUID() }); }}>Đổi quà</button></article>)}
+        </div>
         {!offers.length && !giftOffers.length && <p>Chưa có phần thưởng để đổi.</p>}
       </>}
       {tab === "vouchers" && <>
         <header className="loyalty-toolbar"><h2>Ví ưu đãi</h2><button onClick={() => onTabChange("points")}>Đổi điểm</button></header>
-        <div className="loyalty-wallet-switch" role="group" aria-label="Loại ưu đãi"><button aria-pressed={walletKind === "voucher"} onClick={() => setWalletKind("voucher")}>Voucher ({wallet.length})</button><button aria-pressed={walletKind === "gift"} onClick={() => setWalletKind("gift")}>Quà tặng ({giftWallet.length})</button></div>
-        <div className="loyalty-tabs" role="group" aria-label="Trạng thái ưu đãi">{["available", "used", "expired"].map(status => <button aria-pressed={filter === status} key={status} onClick={() => setFilter(status)}>{labels[status]}</button>)}</div>
+        <div className="loyalty-wallet-switch" role="group" aria-label="Loại ưu đãi"><button aria-pressed={walletKind === "voucher"} onClick={() => { setWalletKind("voucher"); if (filter === "fulfilled") setFilter("available"); }}>Voucher ({wallet.length})</button><button aria-pressed={walletKind === "gift"} onClick={() => setWalletKind("gift")}>Quà tặng ({giftWallet.length})</button></div>
+        <div className="loyalty-tabs" role="group" aria-label="Trạng thái ưu đãi">{(walletKind === "gift" ? GIFT_WALLET_FILTERS : ["available", "used", "expired"]).map(status => <button aria-pressed={filter === status} key={status} onClick={() => setFilter(status)}>{labels[status]}</button>)}</div>
         {walletKind === "voucher" ? <><div className="loyalty-items">{filtered.map(item => <button className="loyalty-item" key={item.id} onClick={() => openWallet(item)}><h3>{item.voucher.name || item.voucher.code || "Voucher cá nhân"}</h3><strong>{benefit(item.voucher)}</strong><p>{labels[item.status]}</p><p>Hết hạn {date(item.expires_at)}</p></button>)}</div>{!filtered.length && <p className="loyalty-empty">Chưa có voucher ở trạng thái này.</p>}</> : <><div className="loyalty-items">{filteredGifts.map(item => <button className="loyalty-item loyalty-gift-item" key={item.id || item._id} onClick={() => void openGiftWallet(item)}>{item.snapshot?.image_url && <img src={item.snapshot.image_url} alt="" />}<span className="loyalty-gift-type">{giftTypes[item.snapshot?.type]}</span><h3>{item.snapshot?.name || "Quà tặng"}</h3><strong>{giftBenefit(item.snapshot)}</strong><p>{labels[item.status] || item.status}</p><p>Hết hạn {date(item.expires_at)}</p></button>)}</div>{!filteredGifts.length && <p className="loyalty-empty">Chưa có quà tặng ở trạng thái này.</p>}</>}
       </>}
     </>}

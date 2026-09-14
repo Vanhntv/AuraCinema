@@ -59,6 +59,17 @@ const snapshotOf = (gift) => {
   };
 };
 
+const recipientConditionsMatch = (gift, user, now = new Date()) => {
+  const condition = gift.condition || {};
+  if (condition.member_tiers?.length && !condition.member_tiers.includes(user.member_tier)) return false;
+  if (condition.birthday) {
+    if (!user.birth_date) return false;
+    const birthday = new Date(user.birth_date);
+    if (birthday.getMonth() !== now.getMonth()) return false;
+  }
+  return true;
+};
+
 export const buildGiftQrPayload = (token) => `${GIFT_QR_PREFIX}${String(token || "").trim()}`;
 export const parseGiftQrPayload = (payload) => {
   const value = String(payload || "").trim();
@@ -154,8 +165,16 @@ export const redeemGift = (userId, giftId, key) => {
     if (existing) return existing;
     const gift = await Gift.findOne({ _id: giftId, ...activeWindow(), acquisition_modes: "points" }).session(session);
     if (!gift) throw loyaltyError("Phần thưởng không còn khả dụng.", 409);
+    if (await UserGift.exists({ user_id: userId, gift_id: giftId, source: "points" }).session(session)) {
+      throw loyaltyError("Bạn đã đổi quà này rồi.", 409);
+    }
     const cost = Number(gift.condition?.point_required || 0);
     if (!Number.isSafeInteger(cost) || cost < 1) throw loyaltyError("Giá điểm của quà chưa hợp lệ.", 409);
+    const account = await User.findOne({ _id: userId, ...ACTIVE_USER }).session(session);
+    if (!account) throw loyaltyError("Không tìm thấy tài khoản hợp lệ.", 404);
+    if (!recipientConditionsMatch(gift, account)) {
+      throw loyaltyError("Hạng thành viên hoặc thông tin tài khoản chưa đáp ứng điều kiện nhận quà.", 403);
+    }
     const user = await User.findOneAndUpdate(
       { _id: userId, ...ACTIVE_USER, loyalty_reconciled_at: { $ne: null }, reward_points: { $gte: cost } },
       { $inc: { reward_points: -cost } },
@@ -177,19 +196,31 @@ export const redeemGift = (userId, giftId, key) => {
 };
 
 export const listGiftCatalog = async (userId) => {
-  const gifts = await Gift.find({ ...activeWindow(), acquisition_modes: "points" }).sort({ created_at: -1 }).lean();
+  const [gifts, user] = await Promise.all([
+    Gift.find({ ...activeWindow(), acquisition_modes: "points" }).sort({ created_at: -1 }).lean(),
+    User.findOne({ _id: userId, ...ACTIVE_USER }).lean(),
+  ]);
+  if (!user) throw loyaltyError("Không tìm thấy tài khoản hợp lệ.", 404);
   const counts = await UserGift.aggregate([
     { $match: { user_id: new mongoose.Types.ObjectId(userId), gift_id: { $in: gifts.map((item) => item._id) } } },
     { $group: { _id: "$gift_id", count: { $sum: 1 } } },
   ]);
   const countMap = new Map(counts.map((item) => [String(item._id), item.count]));
-  return gifts.map((gift) => ({
-    ...gift,
-    benefit: benefitOf(gift),
-    points_cost: Number(gift.condition?.point_required || 0),
-    received_count: countMap.get(String(gift._id)) || 0,
-    available: (countMap.get(String(gift._id)) || 0) < Number(gift.max_per_user || 1),
-  }));
+  return gifts.map((gift) => {
+    const receivedCount = countMap.get(String(gift._id)) || 0;
+    const eligible = recipientConditionsMatch(gift, user);
+    return {
+      ...gift,
+      benefit: benefitOf(gift),
+      points_cost: Number(gift.condition?.point_required || 0),
+      received_count: receivedCount,
+      eligible,
+      available: eligible && receivedCount < Number(gift.max_per_user || 1),
+      availability_reason: !eligible
+        ? "Không thuộc hạng thành viên áp dụng"
+        : receivedCount >= Number(gift.max_per_user || 1) ? "Đã nhận đủ số lượt" : "",
+    };
+  }).filter((gift) => gift.received_count === 0);
 };
 
 const walletStatus = (item, now = new Date()) => item.status === "available" && new Date(item.expires_at) <= now
@@ -217,8 +248,8 @@ export const getGiftWallet = async (userId, query = {}) => {
 
 const conditionsMatch = ({ gift, user, movieId, orderAmount, comboIds = [] }) => {
   const condition = gift.condition || {};
+  if (!recipientConditionsMatch(gift, user)) return false;
   if (Number(condition.min_order || 0) > Number(orderAmount || 0)) return false;
-  if (condition.member_tiers?.length && !condition.member_tiers.includes(user.member_tier)) return false;
   if (condition.movie_ids?.length && !condition.movie_ids.map(String).includes(String(movieId || ""))) return false;
   if (condition.combo_required && !comboIds.length) return false;
   if (condition.combo_ids?.length && !condition.combo_ids.some((id) => comboIds.map(String).includes(String(id)))) return false;
