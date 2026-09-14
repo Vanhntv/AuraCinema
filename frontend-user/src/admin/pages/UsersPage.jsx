@@ -199,7 +199,9 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
                 <UserInfoField label="Lần đăng nhập cuối" value={formatDateTime(user.last_login_at)} />
               </div>
 
-              <div className="table-container" style={{ marginTop: 24 }}>
+              {user.role !== "admin" && (
+                <>
+                  <div className="table-container" style={{ marginTop: 24 }}>
                 <div className="table-toolbar">
                   <div className="table-toolbar-left">
                     <span className="table-toolbar-title">Lịch sử đặt vé</span>
@@ -293,7 +295,7 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
                     </tbody>
                   </table>
                 </div>
-              </div>
+                </div>
 
               <div className="table-container" style={{ marginTop: 24 }}>
                 <div className="table-toolbar">
@@ -336,7 +338,9 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
                     </tbody>
                   </table>
                 </div>
-              </div>
+                  </div>
+                </>
+              )}
 
               <div className="table-container" style={{ marginTop: 24 }}>
                 <div className="table-toolbar">
@@ -407,35 +411,20 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
   );
 };
 
-const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
-  const [formData, setFormData] = useState({
-    full_name: "",
-    email: "",
-    phone: "",
-    birth_date: "",
-    gender: "",
-    role: "user",
-    member_tier: "member",
-    account_status: "active",
+const createUserEditForm = (user) => ({
+    full_name: user.full_name || "",
+    email: user.email || "",
+    phone: user.phone || "",
+    birth_date: toDateInputValue(user.birth_date),
+    gender: user.gender || "",
+    role: user.role || "user",
+    member_tier: user.member_tier || "member",
+    account_status: resolveAccountStatus(user),
     reason: "",
-  });
+});
 
-  useEffect(() => {
-    if (!user) return;
-    setFormData({
-      full_name: user.full_name || "",
-      email: user.email || "",
-      phone: user.phone || "",
-      birth_date: toDateInputValue(user.birth_date),
-      gender: user.gender || "",
-      role: user.role || "user",
-      member_tier: user.member_tier || "member",
-      account_status: resolveAccountStatus(user),
-      reason: "",
-    });
-  }, [user]);
-
-  if (!user) return null;
+const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
+  const [formData, setFormData] = useState(() => createUserEditForm(user));
   const isAdminAccount = user.role === "admin";
 
   const handleChange = (event) => {
@@ -450,7 +439,6 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
       phone: formData.phone,
       birth_date: formData.birth_date,
       gender: formData.gender,
-      reason: formData.reason,
     } : formData);
   };
 
@@ -524,11 +512,11 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
               </div>
             </div>
             </>}
-            <div className="form-group">
+            {!isAdminAccount && <div className="form-group">
               <label className="form-label">Lý do thay đổi</label>
               <textarea className="form-input form-textarea" name="reason" value={formData.reason} onChange={handleChange} rows={3} />
               <span className="form-hint">Lý do sẽ được lưu vào audit log.</span>
-            </div>
+            </div>}
           </div>
           <div className="modal-footer">
             <button className="btn btn-secondary" type="button" onClick={onClose}>
@@ -546,12 +534,6 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
 
 const RewardPointModal = ({ user, isLoading, onClose, onSubmit }) => {
   const [formData, setFormData] = useState({ type: "add", points: "", reason: "" });
-
-  useEffect(() => {
-    if (user) setFormData({ type: "add", points: "", reason: "" });
-  }, [user]);
-
-  if (!user) return null;
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -970,19 +952,21 @@ const UsersPage = () => {
         onForceReset={(user) => setResetTarget(user)}
       />
 
-      <UserEditModal
+      {editingUser && <UserEditModal
+        key={editingUser._id}
         user={editingUser}
         isLoading={submitting}
         onClose={() => setEditingUser(null)}
         onSubmit={handleSubmitEdit}
-      />
+      />}
 
-      <RewardPointModal
+      {rewardUser && <RewardPointModal
+        key={rewardUser._id}
         user={rewardUser}
         isLoading={submitting}
         onClose={() => setRewardUser(null)}
         onSubmit={handleSubmitReward}
-      />
+      />}
 
       <ConfirmDialog
         isOpen={Boolean(statusTarget)}
