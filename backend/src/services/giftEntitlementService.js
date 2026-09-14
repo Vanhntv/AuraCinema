@@ -235,7 +235,8 @@ export const getGiftWallet = async (userId, query = {}) => {
     { $set: { status: "expired" } },
   );
   const filter = { user_id: userId };
-  if (["available", "reserved", "used", "fulfilled", "expired"].includes(query.status)) filter.status = query.status;
+  if (query.active_only === "true") filter.status = { $in: ["available", "reserved"] };
+  else if (["available", "reserved", "used", "fulfilled", "expired"].includes(query.status)) filter.status = query.status;
   const [items, total] = await Promise.all([
     UserGift.find(filter).sort({ created_at: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     UserGift.countDocuments(filter),

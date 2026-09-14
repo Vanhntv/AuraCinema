@@ -23,6 +23,7 @@ const tabs = [
   { id: "member", label: "Thông tin thẻ thành viên" },
   { id: "tickets", label: "Hành trình điện ảnh" },
   { id: "points", label: "Lịch sử điểm thưởng" },
+  { id: "rewards", label: "Kho ưu đãi" },
   { id: "vouchers", label: "Ví ưu đãi" },
 ];
 
@@ -1102,7 +1103,7 @@ function AccountPage() {
   };
 
   const renderActiveTab = () => {
-    if (["member", "points", "vouchers"].includes(activeTab)) return <LoyaltyPanel tab={activeTab} user={user} refreshProfile={refreshProfile} onTabChange={tab => setSearchParams({ tab })} />;
+    if (["member", "points", "rewards", "vouchers"].includes(activeTab)) return <LoyaltyPanel tab={activeTab} user={user} refreshProfile={refreshProfile} onTabChange={tab => setSearchParams({ tab })} />;
     if (activeTab === "tickets") return renderTicketsTab();
     return renderAccountTab();
   };

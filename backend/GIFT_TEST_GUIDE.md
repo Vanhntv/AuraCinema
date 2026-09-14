@@ -14,12 +14,12 @@ Lệnh seed có thể chạy lại. Nó chỉ xóa và tạo lại dữ liệu c
 
 Mật khẩu chung: `AuraGift9!`
 
-| Tài khoản | Điểm | Mục đích |
-| --- | ---: | --- |
-| `gift.ready@example.test` | 2.000 | Ví có đủ trạng thái, QR, quà điểm và voucher đã chuyển giao |
-| `gift.member@example.test` | 250 | Đổi quà hợp lệ và kiểm tra chặn quà VIP |
-| `gift.maxed@example.test` | 1.000 | Đã nhận đủ lượt của quà giới hạn |
-| `gift.empty@example.test` | 0 | Kiểm tra không đủ điểm |
+| Tài khoản                  |  Điểm | Mục đích                                                    |
+| -------------------------- | ----: | ----------------------------------------------------------- |
+| `gift.ready@example.test`  | 2.000 | Ví có đủ trạng thái, QR, quà điểm và voucher đã chuyển giao |
+| `gift.member@example.test` |   250 | Đổi quà hợp lệ và kiểm tra chặn quà VIP                     |
+| `gift.maxed@example.test`  | 1.000 | Đã nhận đủ lượt của quà giới hạn                            |
+| `gift.empty@example.test`  |     0 | Kiểm tra không đủ điểm                                      |
 
 ## 1. Danh mục đổi quà
 
@@ -66,7 +66,7 @@ Số liệu ban đầu của tài khoản này: 10 mục ví, gồm 5 `available
 1. Với `gift.ready@example.test`, chọn phim, suất chiếu và ghế phù hợp.
 2. Ở tóm tắt đơn, chọn một quà vé hoặc combo trong **Quà dùng được**.
 3. Kiểm tra ô voucher bị khóa vì một đơn không được dùng đồng thời quà và voucher.
-4. Quà combo phải tự thêm đúng combo và giảm toàn bộ giá combo cấu hình.
+4. Quà combo phải tự thêm đúng combo và giảm toàn bộ giávới combo cấu hình.
 5. Sau khi tạo đơn, quà chuyển sang **Đang giữ cho đơn**; thanh toán thành công chuyển sang **Đã sử dụng**.
 6. Với QR vật phẩm/combo, mở trang quét của nhân viên, quét QR, kiểm tra thông tin rồi mới chọn **Xác nhận trao quà**.
 7. Quét lại QR đã dùng phải bị từ chối.

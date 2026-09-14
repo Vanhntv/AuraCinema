@@ -85,6 +85,9 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
 
   const voucher = await Voucher.create({ code: "TESTREWARD", name: "Test reward", discount_type: "fixed", discount_value: 20000, quantity: 10, usage_limit: 10, start_date: new Date(Date.now() - 60000), end_date: new Date(Date.now() + 86400000) });
   const offer = await saveRewardOffer({ voucher_id: voucher._id, points_cost: 250, active: true });
+  await Voucher.updateOne({ _id: voucher._id }, { $set: { quantity: 0 } });
+  assert.equal((await listRewardOffers(false, stranger._id)).length, 0, "out-of-stock voucher offers are hidden from customers");
+  await Voucher.updateOne({ _id: voucher._id }, { $set: { quantity: 10 } });
   assert.equal((await verifyVoucherService({ code: voucher.code, user_id: user._id, order_amount: 100000 })).valid, false, "template code cannot bypass point redemption");
   const results = await Promise.allSettled([
     redeemReward(user._id, offer._id, "redemption-request-0001"),
@@ -108,6 +111,7 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   await assert.rejects(withTransaction(session => reserveVoucherForBooking({ bookingId: new mongoose.Types.ObjectId(), userId: user._id, voucherResult: verified, subtotalPrice: 100000, session })), /giữ/);
   await withTransaction(session => consumeReservedVoucherForBooking({ bookingId: reservationId, session }));
   assert.equal((await getWallet(user._id))[0].status, "used");
+  assert.equal((await getWallet(user._id, { usableOnly: true })).length, 0, "used vouchers are hidden from the customer wallet");
   await withTransaction(session => releaseReservedVoucherForBooking({ bookingId: reservationId, session }));
   assert.equal((await getWallet(user._id))[0].status, "used", "used vouchers cannot be released");
   assert.equal((await Voucher.findById(voucher._id)).quantity, 9);
@@ -115,6 +119,18 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   const history = await getPointHistory(user._id, { type: "redeem" });
   assert.equal(history.data.length, 1);
   assert.equal(history.data[0].user_voucher_id.code, item.code);
+  await RewardPointLog.create(Array.from({ length: 6 }, (_, index) => ({
+    user_id: user._id,
+    event_key: `point-history-page-${index}`,
+    type: "add",
+    points: 1,
+    balance_after: index + 1,
+    reason: `Kiểm thử phân trang ${index + 1}`,
+  })));
+  const pointPage = await getPointHistory(user._id, { type: "add" });
+  assert.equal(pointPage.data.length, 5);
+  assert.equal(pointPage.pagination.limit, 5);
+  assert.equal(pointPage.pagination.totalPages, 2);
 
   const gift = await Gift.create({
     code: "ONE-GIFT",
@@ -139,6 +155,7 @@ test("loyalty transactions on an isolated MongoDB replica set", { timeout: 90000
   assert.equal((await User.findById(user._id)).reward_points, 0);
   assert.equal(await UserGift.countDocuments({ user_id: user._id, gift_id: gift._id }), 1);
   assert.equal((await Gift.findById(gift._id)).remaining_quantity, 0);
+  assert.equal((await listGiftCatalog(stranger._id)).some(item => String(item._id) === String(gift._id)), false, "out-of-stock gifts are hidden from customers");
   const ownedGift = giftResults.find(result => result.status === "fulfilled").value;
   const giftReplay = await redeemGift(user._id, gift._id, ownedGift.issue_key.split(":").at(-1));
   assert.equal(String(giftReplay._id), String(ownedGift._id));
