@@ -385,14 +385,16 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
           </button>
           {user ? (
             <>
-              <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
-                <HiOutlineKey />
-                Reset mật khẩu
-              </button>
-              <button className="btn btn-secondary" type="button" onClick={() => onReward(user)}>
-                <HiOutlinePlus />
-                Điểm thưởng
-              </button>
+              {user.role !== "admin" && <>
+                <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
+                  <HiOutlineKey />
+                  Reset mật khẩu
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => onReward(user)}>
+                  <HiOutlinePlus />
+                  Điểm thưởng
+                </button>
+              </>}
               <button className="btn btn-primary" type="button" onClick={() => onEdit(user)}>
                 <HiOutlinePencil />
                 Cập nhật
@@ -434,6 +436,7 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
   }, [user]);
 
   if (!user) return null;
+  const isAdminAccount = user.role === "admin";
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -442,7 +445,13 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onSubmit(formData);
+    onSubmit(isAdminAccount ? {
+      full_name: formData.full_name,
+      phone: formData.phone,
+      birth_date: formData.birth_date,
+      gender: formData.gender,
+      reason: formData.reason,
+    } : formData);
   };
 
   return (
@@ -458,8 +467,8 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
           <div className="modal-body">
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Email đăng nhập</label>
-                <input className="form-input" name="email" type="email" value={formData.email} onChange={handleChange} required />
+                <label className="form-label">Họ tên</label>
+                <input className="form-input" name="full_name" value={formData.full_name} onChange={handleChange} required minLength={2} />
               </div>
               <div className="form-group">
                 <label className="form-label">Số điện thoại</label>
@@ -468,15 +477,9 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label className="form-label">Họ tên</label>
-                <input className="form-input" name="full_name" value={formData.full_name} onChange={handleChange} required minLength={2} />
-              </div>
-              <div className="form-group">
                 <label className="form-label">Ngày sinh</label>
                 <input className="form-input" name="birth_date" type="date" value={formData.birth_date} onChange={handleChange} />
               </div>
-            </div>
-            <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Giới tính</label>
                 <select className="form-input" name="gender" value={formData.gender} onChange={handleChange}>
@@ -485,6 +488,13 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
                   <option value="female">Nữ</option>
                   <option value="other">Khác</option>
                 </select>
+              </div>
+            </div>
+            {!isAdminAccount && <>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Email đăng nhập</label>
+                <input className="form-input" name="email" type="email" value={formData.email} onChange={handleChange} required />
               </div>
               <div className="form-group">
                 <label className="form-label">Vai trò</label>
@@ -513,6 +523,7 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
                 </select>
               </div>
             </div>
+            </>}
             <div className="form-group">
               <label className="form-label">Lý do thay đổi</label>
               <textarea className="form-input form-textarea" name="reason" value={formData.reason} onChange={handleChange} rows={3} />
@@ -910,19 +921,21 @@ const UsersPage = () => {
                               <button className="btn btn-icon btn-ghost" title="Cập nhật" onClick={() => setEditingUser(user)}>
                                 <HiOutlinePencil />
                               </button>
-                              <button className="btn btn-icon btn-ghost" title="Điểm thưởng" onClick={() => setRewardUser(user)}>
-                                <HiOutlinePlus />
-                              </button>
-                              <button
-                                className="btn btn-icon btn-ghost"
-                                title={isActiveUser(user) ? "Khóa tài khoản" : "Mở khóa tài khoản"}
-                                onClick={() => setStatusTarget(user)}
-                              >
-                                {isActiveUser(user) ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
-                              </button>
-                              <button className="btn btn-icon btn-ghost" title="Force reset password" onClick={() => setResetTarget(user)}>
-                                <HiOutlineKey />
-                              </button>
+                              {user.role !== "admin" && <>
+                                <button className="btn btn-icon btn-ghost" title="Điểm thưởng" onClick={() => setRewardUser(user)}>
+                                  <HiOutlinePlus />
+                                </button>
+                                <button
+                                  className="btn btn-icon btn-ghost"
+                                  title={isActiveUser(user) ? "Khóa tài khoản" : "Mở khóa tài khoản"}
+                                  onClick={() => setStatusTarget(user)}
+                                >
+                                  {isActiveUser(user) ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
+                                </button>
+                                <button className="btn btn-icon btn-ghost" title="Force reset password" onClick={() => setResetTarget(user)}>
+                                  <HiOutlineKey />
+                                </button>
+                              </>}
                             </div>
                           </td>
                         </tr>
