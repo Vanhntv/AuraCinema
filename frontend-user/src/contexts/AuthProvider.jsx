@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login as loginApi, register as registerApi, getProfile } from "../api/authApi";
 import { ACCESS_TOKEN_KEY, AUTH_FORBIDDEN_EVENT } from "../api/axiosClient";
+import { LOGIN_PATH } from "../utils/authRoutes";
 import { AuthContext } from "./AuthContext";
 
 const isAdminUser = (user) =>
@@ -34,7 +35,7 @@ function AuthProvider({ children }) {
   useEffect(() => {
     const handleForbidden = (event) => {
       logout();
-      navigate("/dang-nhap", {
+      navigate(LOGIN_PATH, {
         replace: true,
         state: {
           from: "/admin/dashboard",

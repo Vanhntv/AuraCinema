@@ -7,6 +7,7 @@ import {
   HiOutlineSearch,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
+import { LOGIN_PATH } from "../../../utils/authRoutes";
 
 const pageTitles = {
   "/": "Dashboard",
@@ -35,7 +36,7 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
 
   const handleLogout = () => {
     logout();
-    navigate("/dang-nhap", { replace: true });
+    navigate(LOGIN_PATH, { replace: true });
   };
 
   return (

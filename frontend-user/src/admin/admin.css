@@ -5405,7 +5405,7 @@
 /* ============================================
    Admin Authentication
    ============================================ */
-.auth-page {
+.admin-auth-page {
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -5419,7 +5419,7 @@
     var(--color-bg-primary);
 }
 
-.auth-card {
+.admin-auth-card {
   width: min(100%, 460px);
   padding: 32px;
   border: 1px solid var(--color-border);
@@ -5428,11 +5428,11 @@
   box-shadow: var(--shadow-xl);
 }
 
-.auth-card-header {
+.admin-auth-card-header {
   margin-bottom: 28px;
 }
 
-.auth-card-header span {
+.admin-auth-card-header span {
   display: block;
   margin-bottom: 12px;
   color: var(--color-accent-light);
@@ -5442,26 +5442,26 @@
   text-transform: uppercase;
 }
 
-.auth-card-header h1 {
+.admin-auth-card-header h1 {
   margin: 0 0 10px;
   color: var(--color-text-primary);
   font-size: 28px;
   line-height: 1.15;
 }
 
-.auth-card-header p,
-.auth-switch,
-.auth-loading {
+.admin-auth-card-header p,
+.admin-auth-switch,
+.admin-auth-loading {
   color: var(--color-text-secondary);
   font-size: 14px;
 }
 
-.auth-form {
+.admin-auth-form {
   display: grid;
   gap: 18px;
 }
 
-.auth-form label {
+.admin-auth-form label {
   display: grid;
   gap: 8px;
   color: var(--color-text-secondary);
@@ -5469,7 +5469,7 @@
   font-weight: 600;
 }
 
-.auth-form input {
+.admin-auth-form input {
   width: 100%;
   padding: 11px 14px;
   border: 1px solid var(--color-border);
@@ -5480,12 +5480,12 @@
   transition: all var(--transition-fast);
 }
 
-.auth-form input:focus {
+.admin-auth-form input:focus {
   border-color: var(--color-accent);
   box-shadow: none;
 }
 
-.auth-submit {
+.admin-auth-submit {
   min-height: 44px;
   border-radius: var(--radius-md);
   background: var(--gradient-primary);
@@ -5495,33 +5495,33 @@
   box-shadow: 0 2px 12px rgba(139, 92, 246, 0.3);
 }
 
-.auth-submit:disabled {
+.admin-auth-submit:disabled {
   cursor: not-allowed;
   opacity: 0.65;
 }
 
-.auth-alert {
+.admin-auth-alert {
   border-radius: var(--radius-md);
   font-size: 13px;
   padding: 12px 14px;
 }
 
-.auth-alert.error {
+.admin-auth-alert.error {
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
 
-.auth-alert.success {
+.admin-auth-alert.success {
   background: var(--color-success-bg);
   color: var(--color-success);
 }
 
-.auth-switch {
+.admin-auth-switch {
   margin-top: 22px;
   text-align: center;
 }
 
-.auth-switch a {
+.admin-auth-switch a {
   color: var(--color-accent-light);
   font-weight: 700;
 }

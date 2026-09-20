@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { navItems } from "../data/homeData";
 import { useAuth } from "../hooks/useAuth";
+import { LOGIN_PATH } from "../utils/authRoutes";
 import Logo from "./Logo";
 
 function Header() {
@@ -74,7 +75,7 @@ function Header() {
 
             <button
               type="button"
-              onClick={() => navigate("/dang-nhap")}
+              onClick={() => navigate(LOGIN_PATH)}
               className="h-[54px] min-w-fit whitespace-nowrap rounded-full bg-[var(--aura-coral)] px-7 font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-base font-extrabold text-[var(--aura-coral-ink)] transition-colors hover:bg-[var(--aura-coral-hover)]"
             >
               Đăng nhập
