@@ -2468,6 +2468,18 @@
   white-space: nowrap;
 }
 
+.showtime-pricing-actions {
+  display: flex !important;
+  align-items: center;
+  gap: 8px !important;
+}
+
+.showtime-pricing-actions .btn {
+  min-height: 38px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
 .showtime-pricing-mode {
   justify-self: end;
   padding: 8px 10px;
@@ -2481,6 +2493,48 @@
 .showtime-pricing-mode.custom {
   background: rgba(245, 158, 11, 0.14);
   color: #fde68a;
+}
+
+.showtime-pricing-breakdown {
+  grid-column: 1 / -1;
+  gap: 0 !important;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.showtime-pricing-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(105px, 0.7fr));
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.showtime-pricing-row + .showtime-pricing-row {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.showtime-pricing-row > span {
+  display: grid;
+  gap: 2px;
+}
+
+.showtime-pricing-row > span:not(:first-child) {
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+}
+
+.showtime-pricing-warning {
+  grid-column: 1 / -1;
+  padding: 11px 13px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .showtime-date-field {
@@ -5354,6 +5408,23 @@
     grid-template-columns: 1fr;
   }
 
+  .showtime-pricing-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .showtime-pricing-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .showtime-pricing-mode {
+    justify-self: start;
+  }
+
+  .showtime-pricing-row {
+    grid-template-columns: 1fr;
+  }
+
   .showtime-time-row {
     align-items: stretch;
     flex-direction: column;
@@ -7938,6 +8009,17 @@
 .admin-layout .showtime-preview {
   border-color: #e4e7ec;
   background: #ffffff;
+}
+
+.admin-layout .showtime-pricing-breakdown,
+.admin-layout .showtime-pricing-row + .showtime-pricing-row {
+  border-color: #e4e7ec;
+}
+
+.admin-layout .showtime-pricing-warning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
 }
 
 .admin-layout .showtime-form-panel {
