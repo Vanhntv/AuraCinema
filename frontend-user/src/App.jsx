@@ -6,6 +6,7 @@ import Footer from './components/Footer';
 import HeroSlider from './components/HeroSlider';
 import NowShowingMovies from './components/NowShowingMovies';
 import ProtectedRoute from './routes/ProtectedRoute';
+import { getLegacyLoginRedirect, LEGACY_LOGIN_PATH, LOGIN_PATH } from './utils/authRoutes';
 
 const MovieSchedule = lazy(() => import('./pages/MovieSchedule'));
 const BookingPage = lazy(() => import('./pages/BookingPage'));
@@ -52,6 +53,13 @@ function ScrollToTop() {
   }, [pathname]);
 
   return null;
+}
+
+function LegacyLoginRedirect() {
+  const location = useLocation();
+  const { state, to } = getLegacyLoginRedirect(location);
+
+  return <Navigate to={to} replace state={state} />;
 }
 
 function HomePage() {
@@ -117,8 +125,8 @@ function App() {
         <Route path="/cau-hoi-thuong-gap" element={<SupportInfoPage />} />
         <Route path="/dang-ky" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/dang-nhap" element={<LoginPage />} />
-        <Route path="/login" element={<LoginPage />} />
+        <Route path={LOGIN_PATH} element={<LoginPage />} />
+        <Route path={LEGACY_LOGIN_PATH} element={<LegacyLoginRedirect />} />
         <Route path="/quen-mat-khau" element={<ForgotPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/payment/vnpay-return" element={<VnpayReturnPage />} />

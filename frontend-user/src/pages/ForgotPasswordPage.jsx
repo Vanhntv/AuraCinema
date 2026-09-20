@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { forgotPassword, resetPassword } from "../api/authApi";
+import { LOGIN_PATH } from "../utils/authRoutes";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
@@ -123,7 +124,7 @@ function ForgotPasswordPage() {
         email: formData.email.trim(),
         otp: String(formData.otp || "").trim(),
       });
-      navigate("/login", {
+      navigate(LOGIN_PATH, {
         replace: true,
         state: { message: "Đặt lại mật khẩu thành công. Vui lòng đăng nhập." },
       });
@@ -233,7 +234,7 @@ function ForgotPasswordPage() {
         )}
 
         <p className="auth-switch">
-          Đã nhớ mật khẩu? <Link to="/login">Đăng nhập</Link>
+          Đã nhớ mật khẩu? <Link to={LOGIN_PATH}>Đăng nhập</Link>
         </p>
       </section>
     </main>

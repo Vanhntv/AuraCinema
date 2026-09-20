@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { LOGIN_PATH } from "../../utils/authRoutes";
 
 function AdminRoute({ children }) {
   const { isAdmin, loading } = useAuth();
@@ -7,8 +8,8 @@ function AdminRoute({ children }) {
 
   if (loading) {
     return (
-      <main className="auth-page">
-        <p className="auth-loading">Đang kiểm tra quyền truy cập...</p>
+      <main className="admin-auth-page">
+        <p className="admin-auth-loading">Đang kiểm tra quyền truy cập...</p>
       </main>
     );
   }
@@ -16,7 +17,7 @@ function AdminRoute({ children }) {
   if (!isAdmin) {
     return (
       <Navigate
-        to="/dang-nhap"
+        to={LOGIN_PATH}
         replace
         state={{
           from: location,

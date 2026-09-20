@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import { LOGIN_PATH } from "../../utils/authRoutes";
 
 function Header() {
   const navigate = useNavigate();
@@ -7,7 +8,7 @@ function Header() {
 
   const handleLogout = () => {
     logout();
-    navigate("/login", { replace: true });
+    navigate(LOGIN_PATH, { replace: true });
   };
 
   return (
@@ -28,7 +29,7 @@ function Header() {
           </>
         ) : (
           <>
-            <Link className="nav-link" to="/login">
+            <Link className="nav-link" to={LOGIN_PATH}>
               Đăng nhập
             </Link>
             <Link className="nav-button" to="/register">

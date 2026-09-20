@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
+import { LOGIN_PATH } from "../utils/authRoutes";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
@@ -95,7 +96,7 @@ function RegisterPage() {
         confirm_password: formData.confirm_password,
         phone: formData.phone.trim() || undefined,
       });
-      navigate("/login", {
+      navigate(LOGIN_PATH, {
         replace: true,
         state: { message: "Đăng ký thành công. Vui lòng đăng nhập." },
       });
@@ -210,7 +211,7 @@ function RegisterPage() {
         </form>
 
         <p className="auth-switch">
-          Đã có tài khoản? <Link to="/login">Đăng nhập</Link>
+          Đã có tài khoản? <Link to={LOGIN_PATH}>Đăng nhập</Link>
         </p>
       </section>
     </main>
