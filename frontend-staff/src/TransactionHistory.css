@@ -22,3 +22,195 @@
 .transaction-modal{border-color:var(--border);box-shadow:0 24px 56px rgba(16,24,40,.16)}
 .transaction-modal-heading button,.transaction-detail-item,.transaction-summary-line{color:#344054;background:#f9fafb}
 .transaction-detail-item span,.transaction-ticket-list span,.transaction-payment-list span,.transaction-ticket-list small,.transaction-audit-list span,.transaction-audit-list small{color:#667085}
+
+/* Dark mode must live here because this stylesheet loads after App.css. */
+html.dark .transaction-history {
+  color: #f8fafc;
+}
+
+html.dark .transaction-filters,
+html.dark .transaction-table-wrap,
+html.dark .transaction-modal {
+  border-color: #2b354c;
+  color: #f8fafc;
+  background: #111827;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24);
+}
+
+html.dark .transaction-filters label {
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+html.dark .transaction-filters input,
+html.dark .transaction-filters select {
+  border-color: #34405a;
+  color: #f8fafc;
+  background: #182033;
+  color-scheme: dark;
+}
+
+html.dark .transaction-filters input::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+}
+
+html.dark .transaction-filters input:focus,
+html.dark .transaction-filters select:focus {
+  border-color: #8b7cff;
+  box-shadow: 0 0 0 4px rgba(139, 124, 255, .18);
+}
+
+html.dark .transaction-filter-actions button,
+html.dark .transaction-detail-button {
+  color: #ffffff;
+  background: #6d5dfc;
+}
+
+html.dark .transaction-filter-actions button:hover,
+html.dark .transaction-detail-button:hover {
+  background: #7c6dfd;
+}
+
+html.dark .transaction-filter-actions button + button,
+html.dark .transaction-toolbar button,
+html.dark .transaction-pagination button {
+  border-color: #34405a;
+  color: #e2e8f0;
+  background: #182033;
+}
+
+html.dark .transaction-filter-actions button + button:hover,
+html.dark .transaction-toolbar button:hover:not(:disabled),
+html.dark .transaction-pagination button:hover:not(:disabled) {
+  color: #ffffff;
+  background: #222c42;
+}
+
+html.dark .transaction-toolbar,
+html.dark .transaction-pagination {
+  color: #cbd5e1;
+}
+
+html.dark .transaction-toolbar strong,
+html.dark .transaction-modal-heading span,
+html.dark .transaction-modal h3 {
+  color: #a99cff;
+}
+
+html.dark .transaction-table {
+  color: #e2e8f0;
+  background: #111827;
+}
+
+html.dark .transaction-table th {
+  border-color: #34405a;
+  color: #cbd5e1;
+  background: #182033;
+}
+
+html.dark .transaction-table td {
+  border-color: #2b354c;
+  color: #e2e8f0;
+  background: #111827;
+}
+
+html.dark .transaction-table td > strong {
+  color: #f8fafc;
+}
+
+html.dark .transaction-table td > small,
+html.dark .transaction-empty {
+  color: #aab6cb;
+}
+
+html.dark .transaction-table tbody tr:hover td {
+  background: #182033;
+}
+
+html.dark .transaction-badge {
+  color: #e2e8f0;
+  background: #334155;
+}
+
+html.dark .transaction-badge.paid,
+html.dark .transaction-badge.confirmed,
+html.dark .transaction-badge.valid,
+html.dark .transaction-badge.checked_in {
+  color: #bbf7d0;
+  background: rgba(22, 163, 74, .22);
+}
+
+html.dark .transaction-badge.pending,
+html.dark .transaction-badge.refund_pending {
+  color: #fde68a;
+  background: rgba(217, 119, 6, .24);
+}
+
+html.dark .transaction-badge.failed,
+html.dark .transaction-badge.cancelled,
+html.dark .transaction-badge.expired,
+html.dark .transaction-badge.refunded {
+  color: #fecaca;
+  background: rgba(220, 38, 38, .22);
+}
+
+html.dark .transaction-badge.online {
+  color: #ddd6fe;
+  background: rgba(124, 58, 237, .25);
+}
+
+html.dark .transaction-badge.counter {
+  color: #bfdbfe;
+  background: rgba(37, 99, 235, .24);
+}
+
+html.dark .transaction-error {
+  border: 1px solid rgba(248, 113, 113, .3);
+  color: #fecaca;
+  background: rgba(127, 29, 29, .3);
+}
+
+html.dark .transaction-modal-backdrop {
+  background: rgba(2, 6, 23, .82);
+}
+
+html.dark .transaction-modal-heading {
+  border-color: #2b354c;
+}
+
+html.dark .transaction-modal-heading h2,
+html.dark .transaction-ticket-list strong,
+html.dark .transaction-payment-list strong,
+html.dark .transaction-detail-item strong {
+  color: #f8fafc;
+}
+
+html.dark .transaction-modal-heading button,
+html.dark .transaction-detail-item,
+html.dark .transaction-summary-line {
+  color: #e2e8f0;
+  background: #182033;
+}
+
+html.dark .transaction-modal-heading button:hover {
+  color: #ffffff;
+  background: #26324a;
+}
+
+html.dark .transaction-detail-item span,
+html.dark .transaction-ticket-list span,
+html.dark .transaction-payment-list span,
+html.dark .transaction-ticket-list small,
+html.dark .transaction-audit-list span,
+html.dark .transaction-audit-list small {
+  color: #aab6cb;
+}
+
+html.dark .transaction-ticket-list article,
+html.dark .transaction-payment-list article,
+html.dark .transaction-audit-list > div {
+  border-color: #2b354c;
+  color: #e2e8f0;
+  background: #111827;
+}

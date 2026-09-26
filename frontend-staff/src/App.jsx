@@ -9,7 +9,7 @@ import {
   HiOutlineQrcode,
   HiOutlineSearch,
   HiOutlineShoppingBag,
-  HiOutlineSparkles,
+  HiOutlineSun,
   HiOutlineViewGrid,
 } from "react-icons/hi";
 import "./App.css";
@@ -32,6 +32,44 @@ const titles = {
   history: ["Lịch sử giao dịch", "Các giao dịch gần đây", "Tra cứu hóa đơn, trạng thái thanh toán và lịch sử bán vé."],
 };
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+
+const initialNotifications = [
+  {
+    id: 1,
+    title: "Có vé mới cần kiểm tra",
+    description: "Một giao dịch bán vé tại quầy vừa được ghi nhận.",
+    time: "5 phút trước",
+    isRead: false,
+  },
+  {
+    id: 2,
+    title: "Suất chiếu sắp bắt đầu",
+    description: "Hãy chuẩn bị kiểm tra vé cho suất chiếu tiếp theo.",
+    time: "20 phút trước",
+    isRead: false,
+  },
+  {
+    id: 3,
+    title: "Báo cáo ca đã được cập nhật",
+    description: "Số liệu bán vé và check-in trong ca đã sẵn sàng.",
+    time: "1 giờ trước",
+    isRead: true,
+  },
+];
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const getInitialTheme = () => {
+  if (typeof window === "undefined") return false;
+  const savedTheme = window.localStorage.getItem("theme");
+  if (savedTheme) return savedTheme === "dark";
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+};
 
 const headers = () => {
   const token = localStorage.getItem("staffAccessToken") || localStorage.getItem("adminAccessToken") || localStorage.getItem("accessToken");
@@ -66,8 +104,26 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [staff, setStaff] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [isDarkMode, setIsDarkMode] = useState(getInitialTheme);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const searchRef = useRef(null);
+  const notificationRef = useRef(null);
   const [crumb, title, description] = titles[active];
   consumeStaffTokenFromHash();
+
+  const filteredSearchResults = useMemo(() => {
+    const keyword = normalizeSearchText(searchTerm);
+    if (!keyword) return [];
+    return menu
+      .filter(([, label]) => normalizeSearchText(label).includes(keyword))
+      .map(([id, label]) => ({ id, label }));
+  }, [searchTerm]);
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   useEffect(() => {
     let live = true;
@@ -77,8 +133,75 @@ export default function App() {
     return () => { live = false; };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkMode);
+    window.localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false);
+        setActiveSearchIndex(-1);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const staffName = staff?.full_name || staff?.email || "Nhân viên";
   const staffInitial = staffName.charAt(0).toUpperCase();
+
+  const selectSearchResult = (result) => {
+    setActive(result.id);
+    setSearchTerm("");
+    setShowSearchResults(false);
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    setShowSearchResults(Boolean(value.trim()));
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === "Escape") {
+      setShowSearchResults(false);
+      setActiveSearchIndex(-1);
+      return;
+    }
+    if (!filteredSearchResults.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => (current + 1) % filteredSearchResults.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => current <= 0 ? filteredSearchResults.length - 1 : current - 1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      selectSearchResult(filteredSearchResults[activeSearchIndex] || filteredSearchResults[0]);
+    }
+  };
+
+  const markNotificationAsRead = (notificationId) => {
+    setNotifications((current) => current.map((notification) =>
+      notification.id === notificationId ? { ...notification, isRead: true } : notification,
+    ));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })));
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("staffAccessToken");
     localStorage.removeItem("adminAccessToken");
@@ -99,7 +222,7 @@ export default function App() {
           {menu.map(([id, label, Icon]) => <button key={id} type="button" className={`sidebar-link ${active === id ? "active" : ""}`} onClick={() => { setActive(id); setMobile(false); }} title={collapsed ? label : undefined}><span className="sidebar-link-icon"><Icon /></span><span className="sidebar-link-text">{label}</span></button>)}
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-footer-kicker"><HiOutlineSparkles /><span>Vận hành rạp phim</span></div>
+          <div className="sidebar-footer-kicker"><span>Vận hành rạp phim</span></div>
           <div className="sidebar-footer-info"><div className="sidebar-footer-avatar">{staffInitial}</div><div className="sidebar-footer-details"><strong>{staffName}</strong><span>Nhân viên quầy vé</span></div></div>
         </div>
       </aside>
@@ -112,9 +235,92 @@ export default function App() {
             <div className="header-title-group"><div className="breadcrumb"><span>Nhân viên</span><b>/</b><span>{crumb}</span></div><strong>{crumb}</strong></div>
           </div>
           <div className="header-right">
-            <label className="header-search"><HiOutlineSearch /><input placeholder="Tìm kiếm..." aria-label="Tìm kiếm" /></label>
-            <button type="button" className="header-icon" title="Chế độ tối"><HiOutlineMoon /></button>
-            <button type="button" className="header-icon header-notification" title="Thông báo"><HiOutlineBell /><i /></button>
+            <div className="header-search" ref={searchRef}>
+              <HiOutlineSearch aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Tìm kiếm chức năng..."
+                aria-label="Tìm kiếm chức năng"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showSearchResults}
+                aria-controls="staff-search-results"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onFocus={() => setShowSearchResults(Boolean(searchTerm.trim()))}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {showSearchResults && (
+                <div className="staff-search-dropdown" id="staff-search-results" role="listbox">
+                  {filteredSearchResults.length ? filteredSearchResults.map((result, index) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeSearchIndex === index}
+                      className={activeSearchIndex === index ? "active" : ""}
+                      key={result.id}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      onClick={() => selectSearchResult(result)}
+                    >
+                      <HiOutlineSearch aria-hidden="true" />
+                      <strong>{result.label}</strong>
+                    </button>
+                  )) : (
+                    <p>Không tìm thấy chức năng phù hợp.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className="header-icon"
+              onClick={() => setIsDarkMode((current) => !current)}
+              title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+              aria-label={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+            >
+              {isDarkMode ? <HiOutlineSun aria-hidden="true" /> : <HiOutlineMoon aria-hidden="true" />}
+            </button>
+            <div className="staff-notification-wrap" ref={notificationRef}>
+              <button
+                type="button"
+                className="header-icon header-notification"
+                title="Thông báo"
+                aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
+                aria-expanded={showNotifications}
+                onClick={() => {
+                  setShowNotifications((current) => !current);
+                  setShowSearchResults(false);
+                }}
+              >
+                <HiOutlineBell aria-hidden="true" />
+                {unreadCount > 0 && <i />}
+              </button>
+              {showNotifications && (
+                <div className="staff-notification-dropdown">
+                  <div className="staff-notification-heading">
+                    <div>
+                      <h2>Thông báo</h2>
+                      <p>{unreadCount ? `${unreadCount} thông báo chưa đọc` : "Bạn đã đọc tất cả"}</p>
+                    </div>
+                    <button type="button" onClick={markAllNotificationsAsRead} disabled={!unreadCount}>
+                      Đọc tất cả
+                    </button>
+                  </div>
+                  <ul>
+                    {notifications.map((notification) => (
+                      <li className={notification.isRead ? "read" : "unread"} key={notification.id}>
+                        <button type="button" onClick={() => markNotificationAsRead(notification.id)}>
+                          {!notification.isRead && <i />}
+                          <strong>{notification.title}</strong>
+                          <span>{notification.description}</span>
+                          <time>{notification.time}</time>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             <div className="header-user"><div>{staffInitial}</div><span><strong>{staffName}</strong><small>Nhân viên quầy vé</small></span></div>
             <button type="button" className="header-icon" onClick={handleLogout} title="Đăng xuất"><HiOutlineLogout /></button>
           </div>
