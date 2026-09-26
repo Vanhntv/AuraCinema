@@ -7,7 +7,6 @@ import {
   HiOutlineNewspaper,
   HiOutlineQrcode,
   HiOutlineShoppingBag,
-  HiOutlineSparkles,
   HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUsers,
@@ -136,7 +135,6 @@ const Sidebar = ({ isCollapsed, isMobileOpen, onCloseMobile }) => {
         </nav>
         <div className="sidebar-footer">
           <div className="sidebar-footer-kicker">
-            <HiOutlineSparkles />
             <span>Quản trị rạp phim</span>
           </div>
           <div className="sidebar-footer-info">
