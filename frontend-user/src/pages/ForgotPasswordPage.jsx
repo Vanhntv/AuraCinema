@@ -91,7 +91,7 @@ function ForgotPasswordPage() {
 
     try {
       const response = await forgotPassword({ email: formData.email.trim() });
-      const successMessage = response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message;
+      const successMessage = response.message;
       setMessage(successMessage);
       showToast("success", successMessage);
       setStep("reset");
@@ -189,6 +189,8 @@ function ForgotPasswordPage() {
             <label>
               OTP
               <input
+                autoComplete="one-time-code"
+                maxLength={6}
                 inputMode="numeric"
                 name="otp"
                 onChange={handleChange}
@@ -233,6 +235,10 @@ function ForgotPasswordPage() {
           </form>
         )}
 
+        {step === "reset" && <p className="auth-switch"><button type="button" className="auth-resend" disabled={submitting}
+          onClick={() => { setStep("request"); setError(""); setMessage(""); }}>
+          Chưa nhận được mã? Yêu cầu gửi lại
+        </button></p>}
         <p className="auth-switch">
           Đã nhớ mật khẩu? <Link to={LOGIN_PATH}>Đăng nhập</Link>
         </p>

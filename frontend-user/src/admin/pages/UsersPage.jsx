@@ -743,8 +743,7 @@ const UsersPage = () => {
     if (!resetTarget) return;
     try {
       const response = await forceResetPassword(resetTarget._id, "Admin hỗ trợ force reset password");
-      const otpText = response.dev_otp ? ` OTP dev: ${response.dev_otp}` : "";
-      addToast("success", `${response.message || "Đã tạo yêu cầu reset mật khẩu"}.${otpText}`);
+      addToast("success", response.message || "Đã gửi email đặt lại mật khẩu");
       setResetTarget(null);
       if (detail?.user?._id === resetTarget._id) await reloadDetail(resetTarget._id);
     } catch (error) {

@@ -79,3 +79,6 @@ const authApi = {
 };
 
 export default authApi;
+
+export const verifyEmail = async (payload) => (await axiosClient.post("/auth/verify-email", payload)).data;
+export const resendVerification = async (email) => (await axiosClient.post("/auth/resend-verification", { email })).data;

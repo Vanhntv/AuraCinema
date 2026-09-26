@@ -13,7 +13,7 @@ function LoginPage() {
   const { login } = useAuth();
   const successMessage = location.state?.message;
   const [formData, setFormData] = useState({
-    email: "",
+    email: location.state?.email || "",
     password: "",
   });
   const [error, setError] = useState("");
@@ -95,6 +95,11 @@ function LoginPage() {
 
       navigate(isAdminRedirect ? "/tai-khoan" : from, { replace: true });
     } catch (err) {
+      if (err.response?.data?.code === "EMAIL_NOT_VERIFIED") {
+        navigate("/xac-minh-email", { state: { email: formData.email.trim(), from,
+          message: "Email chưa được xác minh. Nhập mã đã nhận hoặc chọn Gửi lại mã." } });
+        return;
+      }
       const message = getApiErrorMessage(err, "Đăng nhập thất bại. Vui lòng thử lại.");
       setError(message);
       showToast("error", message);

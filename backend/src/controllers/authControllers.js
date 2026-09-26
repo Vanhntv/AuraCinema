@@ -1,9 +1,12 @@
-import { randomBytes, randomInt, scrypt as scryptCallback, timingSafeEqual } from "crypto";
+import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import User from "../models/User.js";
 import RewardPointLog from "../models/RewardPointLog.js";
 import { membershipView } from "../services/loyaltyPolicy.js";
 import { signJwt } from "../utils/jwt.js";
+
+import { issueEmailOtp, consumeEmailOtp } from "../services/emailOtpService.js";
+import { assertEmailConfigured } from "../services/emailService.js";
 
 const scrypt = promisify(scryptCallback);
 const DEFAULT_ROLE = "user";
@@ -11,8 +14,6 @@ const USER_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 const ADMIN_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5;
-const RESET_OTP_TTL_MS = 10 * 60 * 1000;
-const RESET_OTP_MAX_ATTEMPTS = 5;
 const loginAttempts = new Map();
 
 const resolveUserRole = (user) =>
@@ -87,12 +88,13 @@ const sendAuthError = (res, error, fallback = SERVER_ERROR_MESSAGE) => {
   const statusCode = error?.statusCode || (validationMessage ? 400 : 500);
 
   if (statusCode >= 500) {
-    console.error("Auth error:", error);
+    console.error("Auth error:", error.code || error.name || "UNKNOWN");
   }
 
   return res.status(statusCode).json({
     success: false,
     message: validationMessage || error?.publicMessage || fallback,
+    code: error?.code,
   });
 };
 
@@ -150,6 +152,8 @@ const verifyPassword = async (password, storedPassword) => {
 const sanitizeUser = (user) => {
   const userResponse = user.toObject ? user.toObject() : { ...user };
   delete userResponse.password;
+  delete userResponse.email_verification;
+  delete userResponse.password_recovery;
   delete userResponse.password_reset_otp;
   delete userResponse.password_reset_expires_at;
   delete userResponse.password_reset_attempts;
@@ -240,6 +244,10 @@ export const register = async (req, res) => {
       deleted_at: null,
     });
 
+    if (existingUser?.account_status === "unverified") {
+      return res.status(200).json({ success: true, verification_required: true,
+        email: normalizedEmail, message: "Tài khoản đang chờ xác minh. Vui lòng nhập mã đã nhận hoặc yêu cầu gửi lại." });
+    }
     if (existingUser) {
       return res.status(409).json({
         success: false,
@@ -247,6 +255,7 @@ export const register = async (req, res) => {
       });
     }
 
+    assertEmailConfigured();
     const hashedPassword = await hashPassword(password);
 
     const user = await User.create({
@@ -254,28 +263,23 @@ export const register = async (req, res) => {
       email: normalizedEmail,
       password: hashedPassword,
       role: DEFAULT_ROLE,
+      account_status: "unverified",
+      status: false,
+      email_verification_required: true,
       phone: phone?.trim() || null,
       avatar: avatar || null,
     });
 
-    const userResponse = sanitizeUser(user);
-
-    const token = signJwt(
-      {
-        id: user._id.toString(),
-        role_id: user.role_id,
-        role: resolveUserRole(user),
-      },
-      process.env.JWT_SECRET,
-      getTokenTtlSeconds(user)
-    );
-
-    return res.status(201).json({
-      success: true,
-      token,
-      message: "Đăng ký thành công",
-      data: userResponse,
-    });
+    try {
+      const timing = await issueEmailOtp({ userId: user._id, purpose: "verification" });
+      return res.status(201).json({ success: true, verification_required: true,
+        email: normalizedEmail, ...timing, message: "Đã gửi mã xác minh đến email của bạn." });
+    } catch (error) {
+      if (![429, 503].includes(error.statusCode)) throw error;
+      return res.status(201).json({ success: true, verification_required: true,
+        email: normalizedEmail, email_sent: false, retry_after_seconds: 60,
+        message: "Tài khoản đã được tạo nhưng chưa gửi được email. Vui lòng gửi lại mã sau 60 giây." });
+    }
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
@@ -310,7 +314,10 @@ export const login = async (req, res) => {
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
-      ...activeUserQuery,
+      $or: [
+        { account_status: { $in: ["active", "unverified"] } },
+        { account_status: { $exists: false }, status: true },
+      ],
     });
 
     if (!user) {
@@ -329,6 +336,10 @@ export const login = async (req, res) => {
       });
     }
 
+    if (user.account_status === "unverified" || user.email_verification_required) {
+      return res.status(403).json({ success: false, code: "EMAIL_NOT_VERIFIED",
+        message: "Vui lòng xác minh email trước khi đăng nhập." });
+    }
     resetLoginAttempts(req);
 
     const accountStatus = user.account_status || (user.status ? "active" : "banned");
@@ -385,7 +396,8 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
-      ...activeUserQuery,
+      $or: [{ account_status: { $in: ["active", "unverified"] } },
+        { account_status: { $exists: false }, status: true }],
     });
 
     const responsePayload = {
@@ -397,16 +409,7 @@ export const forgotPassword = async (req, res) => {
       return res.status(200).json(responsePayload);
     }
 
-    const otp = String(randomInt(100000, 1000000));
-    user.password_reset_otp = await hashPassword(otp);
-    user.password_reset_expires_at = new Date(Date.now() + RESET_OTP_TTL_MS);
-    user.password_reset_attempts = 0;
-    await user.save();
-
-    if (process.env.NODE_ENV !== "production") {
-      responsePayload.dev_otp = otp;
-      console.log(`Password reset OTP for ${normalizedEmail}: ${otp}`);
-    }
+    await issueEmailOtp({ userId: user._id, purpose: "recovery" });
 
     return res.status(200).json(responsePayload);
   } catch (error) {
@@ -446,48 +449,8 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
-      email: normalizeEmail(email),
-      deleted_at: null,
-      ...activeUserQuery,
-    });
-
-    if (
-      !user ||
-      !user.password_reset_otp ||
-      !user.password_reset_expires_at ||
-      user.password_reset_expires_at <= new Date()
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP không hợp lệ hoặc đã hết hạn",
-      });
-    }
-
-    if (user.password_reset_attempts >= RESET_OTP_MAX_ATTEMPTS) {
-      return res.status(429).json({
-        success: false,
-        message: "Bạn nhập sai OTP quá nhiều lần. Vui lòng yêu cầu mã mới.",
-      });
-    }
-
-    const isOtpValid = await verifyPassword(String(otp), user.password_reset_otp);
-
-    if (!isOtpValid) {
-      user.password_reset_attempts += 1;
-      await user.save();
-
-      return res.status(400).json({
-        success: false,
-        message: "OTP không hợp lệ hoặc đã hết hạn",
-      });
-    }
-
-    user.password = await hashPassword(password);
-    user.password_reset_otp = null;
-    user.password_reset_expires_at = null;
-    user.password_reset_attempts = 0;
-    await user.save();
+    await consumeEmailOtp({ email: normalizeEmail(email), otp: String(otp).trim(),
+      purpose: "recovery", passwordHash: await hashPassword(password) });
 
     return res.status(200).json({
       success: true,
@@ -647,4 +610,25 @@ export const changePassword = async (req, res) => {
   } catch (error) {
     return sendAuthError(res, error, "Đổi mật khẩu thất bại. Vui lòng thử lại sau.");
   }
+};
+
+export const resendVerification = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!isValidEmail(email)) return res.status(400).json({ success: false, message: "Email không hợp lệ" });
+    const user = await User.findOne({ email, deleted_at: null, email_verified_at: null,
+      account_status: { $in: ["unverified", "active"] } });
+    if (user) await issueEmailOtp({ userId: user._id, purpose: "verification" });
+    return res.json({ success: true, retry_after_seconds: 60, expires_in_seconds: 600,
+      message: "Nếu tài khoản cần xác minh, mã mới sẽ được gửi đến email của bạn. Hãy kiểm tra cả thư rác." });
+  } catch (error) { return sendAuthError(res, error, "Không thể gửi mã xác minh."); }
+};
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!isValidEmail(email)) return res.status(400).json({ success: false, message: "Email không hợp lệ" });
+    await consumeEmailOtp({ email, otp: String(req.body.otp || "").trim(), purpose: "verification" });
+    return res.json({ success: true, message: "Xác minh email thành công. Vui lòng đăng nhập." });
+  } catch (error) { return sendAuthError(res, error, "Không thể xác minh email."); }
 };

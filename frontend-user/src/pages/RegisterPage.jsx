@@ -89,16 +89,17 @@ function RegisterPage() {
     setSubmitting(true);
 
     try {
-      await register({
+      const response = await register({
         full_name: formData.full_name.trim(),
         email: formData.email.trim(),
         password: formData.password,
         confirm_password: formData.confirm_password,
         phone: formData.phone.trim() || undefined,
       });
-      navigate(LOGIN_PATH, {
+      navigate("/xac-minh-email", {
         replace: true,
-        state: { message: "Đăng ký thành công. Vui lòng đăng nhập." },
+        state: { email: formData.email.trim(), message: response.message,
+          retryAfter: response.retry_after_seconds || 0 },
       });
     } catch (err) {
       const message = getApiErrorMessage(err, "Đăng ký thất bại. Vui lòng thử lại.");
