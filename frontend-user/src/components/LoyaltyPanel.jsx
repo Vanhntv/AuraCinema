@@ -134,18 +134,20 @@ export default function LoyaltyPanel({ tab, user, onTabChange, refreshProfile })
       {tab === "member" && <>
         <h2>Thông tin thẻ thành viên</h2>
         <div className="loyalty-member-layout">
-          <div className={`loyalty-member-card tier-${membership.tier}`}>
-            <header><strong>AURACINEMA</strong><span>{membership.label}</span></header>
-            <div className="loyalty-card-tier"><p>Hạng thẻ</p><strong>{membership.label}</strong></div>
-            <div className="loyalty-card-owner"><p>Chủ thẻ</p><h3>{user.full_name || "Aura Member"}</h3><p>Mã thẻ</p><strong>{membership.code || "Chưa cấp mã"}</strong></div>
-          </div>
           <div className="loyalty-member-details">
             <dl>
-              <div><dt>Trạng thái thẻ</dt><dd className={membership.active ? "loyalty-success" : undefined}>{membership.active ? "Đang hoạt động" : "Chưa hoạt động"}</dd></div>
+              <div><dt>Hạng thẻ</dt><dd className="loyalty-member-tier">{membership.label}</dd></div>
+              <div><dt>Chủ thẻ</dt><dd>{user.full_name || "Aura Member"}</dd></div>
+              <div><dt>Mã thẻ</dt><dd className="loyalty-member-code">{membership.code || "Chưa cấp mã"}</dd></div>
+              <div><dt>Trạng thái thẻ</dt><dd><span className={`loyalty-member-status ${membership.active ? "active" : "inactive"}`}>{membership.active ? "Đang hoạt động" : "Chưa hoạt động"}</span></dd></div>
               <div><dt>Điểm khả dụng</dt><dd>{membership.available_points.toLocaleString("vi-VN")}</dd></div>
               {membership.points_debt > 0 && <div><dt>Điểm cần bù</dt><dd>{membership.points_debt}</dd></div>}
               <div><dt>Chi tiêu xét hạng</dt><dd>{money(membership.spent)}</dd></div>
             </dl>
+            <div className="loyalty-member-progress-heading">
+              <span>Tiến độ lên hạng</span>
+              <strong>{Math.round(Number(membership.progress || 0))}%</strong>
+            </div>
             <progress aria-label="Tiến độ lên hạng" max="100" value={membership.progress} />
             <p>{membership.next ? `Còn ${money(membership.remaining)} để lên ${membership.next}.` : "Bạn đang ở hạng cao nhất."}</p>
             <button onClick={() => onTabChange("rewards")}>Mở kho ưu đãi</button>
