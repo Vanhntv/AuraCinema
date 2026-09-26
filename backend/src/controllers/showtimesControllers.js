@@ -1,25 +1,24 @@
 import Movie from "../models/Movie.js";
 import Room from "../models/Room.js";
 import Showtime from "../models/Showtime.js";
+import ShowtimeSeat from "../models/ShowtimeSeat.js";
 import Booking from "../models/Booking.js";
 import AuditLog from "../models/AuditLog.js";
 import { withTransaction } from "../services/transactionService.js";
 import {
   generateShowtimeSeatsForShowtimeService,
 } from "../services/showtimeSeatService.js";
+import {
+  getShowtimeLocalDate,
+  resolveShowtimePricingSnapshot,
+  resolveStandardShowtimePricing,
+} from "../services/showtimePricingService.js";
 
 const SHOWTIME_STATUSES = ["scheduled", "now_showing", "completed", "cancelled"];
 const SHOWTIME_CLEANUP_BUFFER_MINUTES = 30;
-const VIP_SEAT_SURCHARGE = 20000;
-const COUPLE_SEAT_SURCHARGE = 20000;
-const STANDARD_TICKET_PRICES = {
-  "2D": { weekday: 50000, weekend: 70000, holiday: 80000 },
-  "3D": { weekday: 50000, weekend: 70000, holiday: 80000 },
-};
-const FIXED_HOLIDAYS = new Set(["01-01", "04-30", "05-01", "09-02"]);
 
-const jakartaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  timeZone: "Asia/Jakarta",
+const cinemaTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh",
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
@@ -32,12 +31,12 @@ const getDayRange = (dateValue) => {
     return null;
   }
 
-  const jakartaDay = date.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Jakarta",
+  const cinemaDay = date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  const start = new Date(`${jakartaDay}T00:00:00.000+07:00`);
-  const end = new Date(`${jakartaDay}T23:59:59.999+07:00`);
+  const start = new Date(`${cinemaDay}T00:00:00.000+07:00`);
+  const end = new Date(`${cinemaDay}T23:59:59.999+07:00`);
 
   return { start, end };
 };
@@ -47,7 +46,7 @@ const formatTime = (value) => {
     return null;
   }
 
-  return jakartaTimeFormatter.format(new Date(value));
+  return cinemaTimeFormatter.format(new Date(value));
 };
 
 const sendError = (res, error) => {
@@ -58,79 +57,6 @@ const sendError = (res, error) => {
 };
 
 const resolveBufferMinutes = () => SHOWTIME_CLEANUP_BUFFER_MINUTES;
-
-const isWeekendShowtime = (dateValue) => {
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Jakarta",
-    weekday: "short",
-  }).format(new Date(dateValue));
-
-  return weekday === "Sat" || weekday === "Sun";
-};
-
-const isHolidayShowtime = (dateValue) => {
-  const monthDay = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Jakarta",
-    month: "2-digit",
-    day: "2-digit",
-  })
-    .format(new Date(dateValue))
-    .replace("/", "-");
-
-  return FIXED_HOLIDAYS.has(monthDay);
-};
-
-const resolveStandardPricing = ({ room, startTime }) => {
-  const roomType = String(room?.room_type || "2D").toUpperCase();
-  const priceTable = STANDARD_TICKET_PRICES[roomType] || STANDARD_TICKET_PRICES["2D"];
-  const basePrice = isHolidayShowtime(startTime)
-    ? priceTable.holiday
-    : isWeekendShowtime(startTime)
-      ? priceTable.weekend
-      : priceTable.weekday;
-
-  return {
-    base_price: basePrice,
-    seat_prices: {
-      normal: basePrice,
-      vip: basePrice + VIP_SEAT_SURCHARGE,
-      couple: basePrice * 2 + COUPLE_SEAT_SURCHARGE,
-    },
-  };
-};
-
-const buildStandardSeatPrices = (basePrice) => ({
-  normal: basePrice,
-  vip: basePrice + VIP_SEAT_SURCHARGE,
-  couple: basePrice * 2 + COUPLE_SEAT_SURCHARGE,
-});
-
-const resolveShowtimePricingSnapshot = ({ base_price, seat_prices, room, startTime }) => {
-  const standardPricing = resolveStandardPricing({ room, startTime });
-  const parsedBasePrice = parsePrice(base_price, "base_price");
-  const normalizedSeatPrices =
-    seat_prices === undefined ? undefined : normalizeSeatPrices(seat_prices);
-  const finalBasePrice = parsedBasePrice ?? standardPricing.base_price;
-  const derivedSeatPrices = buildStandardSeatPrices(finalBasePrice);
-
-  return {
-    base_price: finalBasePrice,
-    seat_prices: {
-      normal:
-        normalizedSeatPrices?.normal ??
-        derivedSeatPrices.normal ??
-        finalBasePrice,
-      vip:
-        normalizedSeatPrices?.vip ??
-        derivedSeatPrices.vip ??
-        finalBasePrice,
-      couple:
-        normalizedSeatPrices?.couple ??
-        derivedSeatPrices.couple ??
-        finalBasePrice,
-    },
-  };
-};
 
 const resolveShowtimeStatus = (showtime, now = new Date()) => {
   if (showtime.status === "cancelled") return "cancelled";
@@ -150,36 +76,6 @@ const parseShowtimeStatus = (value, fallback = "scheduled") => {
   }
 
   return status;
-};
-
-const parsePrice = (value, fieldName) => {
-  if (value === undefined || value === null || value === "") return null;
-
-  const price = Number(value);
-  if (!Number.isFinite(price) || price < 0) {
-    const error = new Error(`${fieldName} khong hop le`);
-    error.statusCode = 400;
-    throw error;
-  }
-
-  return price;
-};
-
-const normalizeSeatPrices = (seatPrices) => {
-  if (seatPrices === undefined) return undefined;
-  if (!seatPrices || typeof seatPrices !== "object") {
-    return {
-      normal: null,
-      vip: null,
-      couple: null,
-    };
-  }
-
-  return {
-    normal: parsePrice(seatPrices.normal, "seat_prices.normal"),
-    vip: parsePrice(seatPrices.vip, "seat_prices.vip"),
-    couple: parsePrice(seatPrices.couple, "seat_prices.couple"),
-  };
 };
 
 const assertShowtimeHasNotStarted = (showtime) => {
@@ -220,9 +116,19 @@ const countActiveBookings = async (showtimeId) =>
   });
 
 const assertNoBookingsForImportantChanges = async (showtimeId) => {
-  const bookingCount = await countActiveBookings(showtimeId);
-  if (bookingCount > 0) {
-    const error = new Error("Khong the doi phim, phong hoac gio chieu khi da co booking");
+  const [bookingCount, activeHoldCount] = await Promise.all([
+    countActiveBookings(showtimeId),
+    ShowtimeSeat.countDocuments({
+      showtime_id: showtimeId,
+      deleted_at: null,
+      status: "held",
+      hold_expires_at: { $gt: new Date() },
+    }),
+  ]);
+  if (bookingCount > 0 || activeHoldCount > 0) {
+    const error = new Error(
+      "Khong the doi phim, phong, gio chieu hoac gia ve khi da co booking hay ghe dang duoc giu",
+    );
     error.statusCode = 409;
     throw error;
   }
@@ -239,6 +145,9 @@ const toAuditSnapshot = (showtime) => {
     end_time: raw.end_time,
     base_price: raw.base_price,
     seat_prices: raw.seat_prices,
+    pricing_mode: raw.pricing_mode,
+    pricing_day_type: raw.pricing_day_type,
+    pricing_rule_version: raw.pricing_rule_version,
     status: raw.status,
     cancelled_at: raw.cancelled_at,
     deleted_at: raw.deleted_at,
@@ -302,6 +211,9 @@ const mapShowtime = (showtime) => ({
   endTime: formatTime(showtime.end_time),
   base_price: showtime.base_price,
   seat_prices: showtime.seat_prices ?? null,
+  pricing_mode: showtime.pricing_mode ?? null,
+  pricing_day_type: showtime.pricing_day_type ?? null,
+  pricing_rule_version: showtime.pricing_rule_version ?? null,
   status: resolveShowtimeStatus(showtime),
   stored_status: showtime.status || "scheduled",
   buffer_minutes: resolveBufferMinutes(showtime.room_id),
@@ -479,9 +391,67 @@ export const getAllShowtimes = async (req, res) => {
   }
 };
 
+export const previewShowtimePricing = async (req, res) => {
+  try {
+    const { room_id, start_times } = req.body || {};
+
+    if (!room_id || !Array.isArray(start_times) || !start_times.length) {
+      return res.status(400).json({
+        success: false,
+        message: "room_id va start_times la bat buoc",
+      });
+    }
+
+    if (start_times.length > 250) {
+      return res.status(400).json({
+        success: false,
+        message: "Chi duoc xem truoc toi da 250 suat chieu moi lan",
+      });
+    }
+
+    const room = await Room.findOne({
+      _id: room_id,
+      deleted_at: null,
+    });
+
+    if (!room) {
+      return res.status(404).json({
+        success: false,
+        message: "Khong tim thay room",
+      });
+    }
+
+    const quotes = start_times.map((value) => {
+      const startTime = new Date(value);
+      const pricing = resolveStandardShowtimePricing({ room, startTime });
+
+      return {
+        start_time: startTime.toISOString(),
+        date: getShowtimeLocalDate(startTime),
+        ...pricing,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: quotes,
+    });
+  } catch (error) {
+    return sendError(res, error);
+  }
+};
+
 export const createShowtime = async (req, res) => {
   try {
-    const { movie_id, room_id, start_time, end_time, base_price, seat_prices } = req.body;
+    const {
+      movie_id,
+      room_id,
+      start_time,
+      end_time,
+      base_price,
+      seat_prices,
+      pricing_mode,
+    } = req.body;
 
     if (!movie_id || !room_id || !start_time) {
       return res.status(400).json({
@@ -580,8 +550,9 @@ export const createShowtime = async (req, res) => {
     });
 
     const pricingSnapshot = resolveShowtimePricingSnapshot({
-      base_price,
-      seat_prices,
+      pricingMode: pricing_mode,
+      basePrice: base_price,
+      seatPrices: seat_prices,
       room,
       startTime: startDate,
     });
@@ -591,6 +562,9 @@ export const createShowtime = async (req, res) => {
       cancelledShowtime.end_time = finalEndTime;
       cancelledShowtime.base_price = pricingSnapshot.base_price;
       cancelledShowtime.seat_prices = pricingSnapshot.seat_prices;
+      cancelledShowtime.pricing_mode = pricingSnapshot.pricing_mode;
+      cancelledShowtime.pricing_day_type = pricingSnapshot.pricing_day_type;
+      cancelledShowtime.pricing_rule_version = pricingSnapshot.pricing_rule_version;
       cancelledShowtime.status = "scheduled";
       cancelledShowtime.cancelled_at = null;
       await cancelledShowtime.save();
@@ -632,6 +606,9 @@ export const createShowtime = async (req, res) => {
       end_time: finalEndTime,
       base_price: pricingSnapshot.base_price,
       seat_prices: pricingSnapshot.seat_prices,
+      pricing_mode: pricingSnapshot.pricing_mode,
+      pricing_day_type: pricingSnapshot.pricing_day_type,
+      pricing_rule_version: pricingSnapshot.pricing_rule_version,
       status: "scheduled",
     });
 
@@ -766,7 +743,16 @@ export const checkShowtimeConflict = async (req, res) => {
 export const updateShowtime = async (req, res) => {
   try {
     const { id } = req.params;
-    const { movie_id, room_id, start_time, end_time, base_price, seat_prices, status } = req.body;
+    const {
+      movie_id,
+      room_id,
+      start_time,
+      end_time,
+      base_price,
+      seat_prices,
+      pricing_mode,
+      status,
+    } = req.body;
 
     if (status !== undefined && parseShowtimeStatus(status) === "cancelled") {
       return deleteShowtime(req, res);
@@ -910,6 +896,48 @@ export const updateShowtime = async (req, res) => {
       });
     }
 
+    const requestedPricingMode =
+      pricing_mode !== undefined
+        ? pricing_mode
+        : base_price !== undefined || seat_prices !== undefined
+          ? "custom"
+          : showtime.pricing_mode || "custom";
+    const shouldResolvePricing =
+      pricing_mode !== undefined ||
+      base_price !== undefined ||
+      seat_prices !== undefined ||
+      ((start_time !== undefined || room_id !== undefined) &&
+        requestedPricingMode === "standard");
+    const pricingSnapshot = shouldResolvePricing
+      ? resolveShowtimePricingSnapshot({
+          pricingMode: requestedPricingMode,
+          basePrice:
+            requestedPricingMode === "custom"
+              ? base_price ?? showtime.base_price
+              : undefined,
+          seatPrices:
+            requestedPricingMode === "custom"
+              ? seat_prices ?? showtime.seat_prices
+              : undefined,
+          room: roomForValidation,
+          startTime: nextStartTime,
+        })
+      : null;
+    const pricingWillChange = Boolean(
+      pricingSnapshot &&
+        (pricingSnapshot.pricing_mode !== showtime.pricing_mode ||
+          pricingSnapshot.pricing_day_type !== showtime.pricing_day_type ||
+          pricingSnapshot.pricing_rule_version !== showtime.pricing_rule_version ||
+          pricingSnapshot.base_price !== showtime.base_price ||
+          pricingSnapshot.seat_prices.normal !== showtime.seat_prices?.normal ||
+          pricingSnapshot.seat_prices.vip !== showtime.seat_prices?.vip ||
+          pricingSnapshot.seat_prices.couple !== showtime.seat_prices?.couple),
+    );
+
+    if (pricingWillChange && !hasImportantChanges) {
+      await assertNoBookingsForImportantChanges(showtime._id);
+    }
+
     const conflictShowtime = await hasShowtimeConflict({
       room_id: nextRoomId,
       startTime: nextStartTime,
@@ -942,17 +970,18 @@ export const updateShowtime = async (req, res) => {
       cancelledShowtime.status = "scheduled";
       cancelledShowtime.cancelled_at = null;
 
-      if (base_price !== undefined) {
-        cancelledShowtime.base_price = parsePrice(base_price, "base_price");
-      }
-
-      if (seat_prices !== undefined) {
-        cancelledShowtime.seat_prices = normalizeSeatPrices(seat_prices);
+      if (pricingSnapshot) {
+        cancelledShowtime.base_price = pricingSnapshot.base_price;
+        cancelledShowtime.seat_prices = pricingSnapshot.seat_prices;
+        cancelledShowtime.pricing_mode = pricingSnapshot.pricing_mode;
+        cancelledShowtime.pricing_day_type = pricingSnapshot.pricing_day_type;
+        cancelledShowtime.pricing_rule_version =
+          pricingSnapshot.pricing_rule_version;
       }
 
       await cancelledShowtime.save();
 
-      if (base_price !== undefined || seat_prices !== undefined) {
+      if (pricingSnapshot) {
         await generateShowtimeSeatsForShowtimeService(cancelledShowtime._id);
       }
 
@@ -987,12 +1016,12 @@ export const updateShowtime = async (req, res) => {
     showtime.start_time = nextStartTime;
     showtime.end_time = nextEndTime;
 
-    if (base_price !== undefined) {
-      showtime.base_price = parsePrice(base_price, "base_price");
-    }
-
-    if (seat_prices !== undefined) {
-      showtime.seat_prices = normalizeSeatPrices(seat_prices);
+    if (pricingSnapshot) {
+      showtime.base_price = pricingSnapshot.base_price;
+      showtime.seat_prices = pricingSnapshot.seat_prices;
+      showtime.pricing_mode = pricingSnapshot.pricing_mode;
+      showtime.pricing_day_type = pricingSnapshot.pricing_day_type;
+      showtime.pricing_rule_version = pricingSnapshot.pricing_rule_version;
     }
 
     if (status !== undefined) {
@@ -1001,7 +1030,7 @@ export const updateShowtime = async (req, res) => {
 
     await showtime.save();
 
-    if (base_price !== undefined || seat_prices !== undefined || room_id !== undefined) {
+    if (pricingSnapshot || room_id !== undefined) {
       await generateShowtimeSeatsForShowtimeService(showtime._id);
     }
 

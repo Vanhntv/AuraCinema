@@ -848,7 +848,9 @@ function RoomsPage() {
       {isFormOpen ? (
         <section className="card room-form-card">
           <div className="modal-header">
-            <h2>{editingRoom ? "Cập nhật phòng chiếu" : "Thêm phòng chiếu"}</h2>
+            <h2 className="room-form-title">
+              {editingRoom ? "Cập nhật phòng chiếu" : "Thêm phòng chiếu"}
+            </h2>
             <p>Nhập số hàng và số cột để hệ thống tự sinh sơ đồ ghế.</p>
           </div>
           <form className="showtime-form" onSubmit={handleSubmit}>

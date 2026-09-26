@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   HiOutlineBell,
   HiOutlineChartBar,
@@ -9,9 +10,10 @@ import {
   HiOutlineQrcode,
   HiOutlineSearch,
   HiOutlineShoppingBag,
-  HiOutlineSparkles,
+  HiOutlineSun,
   HiOutlineViewGrid,
 } from "react-icons/hi";
+import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import "./App.css";
 import TransactionHistory from "./TransactionHistory.jsx";
 import auraCinemaLogo from "../../frontend-user/src/assets/logo-datn-auracinema.jpg";
@@ -32,6 +34,44 @@ const titles = {
   history: ["Lịch sử giao dịch", "Các giao dịch gần đây", "Tra cứu hóa đơn, trạng thái thanh toán và lịch sử bán vé."],
 };
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+
+const initialNotifications = [
+  {
+    id: 1,
+    title: "Có vé mới cần kiểm tra",
+    description: "Một giao dịch bán vé tại quầy vừa được ghi nhận.",
+    time: "5 phút trước",
+    isRead: false,
+  },
+  {
+    id: 2,
+    title: "Suất chiếu sắp bắt đầu",
+    description: "Hãy chuẩn bị kiểm tra vé cho suất chiếu tiếp theo.",
+    time: "20 phút trước",
+    isRead: false,
+  },
+  {
+    id: 3,
+    title: "Báo cáo ca đã được cập nhật",
+    description: "Số liệu bán vé và check-in trong ca đã sẵn sàng.",
+    time: "1 giờ trước",
+    isRead: true,
+  },
+];
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const getInitialTheme = () => {
+  if (typeof window === "undefined") return false;
+  const savedTheme = window.localStorage.getItem("theme");
+  if (savedTheme) return savedTheme === "dark";
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+};
 
 const headers = () => {
   const token = localStorage.getItem("staffAccessToken") || localStorage.getItem("adminAccessToken") || localStorage.getItem("accessToken");
@@ -66,8 +106,26 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [staff, setStaff] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [isDarkMode, setIsDarkMode] = useState(getInitialTheme);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const searchRef = useRef(null);
+  const notificationRef = useRef(null);
   const [crumb, title, description] = titles[active];
   consumeStaffTokenFromHash();
+
+  const filteredSearchResults = useMemo(() => {
+    const keyword = normalizeSearchText(searchTerm);
+    if (!keyword) return [];
+    return menu
+      .filter(([, label]) => normalizeSearchText(label).includes(keyword))
+      .map(([id, label]) => ({ id, label }));
+  }, [searchTerm]);
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   useEffect(() => {
     let live = true;
@@ -77,8 +135,75 @@ export default function App() {
     return () => { live = false; };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkMode);
+    window.localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false);
+        setActiveSearchIndex(-1);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const staffName = staff?.full_name || staff?.email || "Nhân viên";
   const staffInitial = staffName.charAt(0).toUpperCase();
+
+  const selectSearchResult = (result) => {
+    setActive(result.id);
+    setSearchTerm("");
+    setShowSearchResults(false);
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    setShowSearchResults(Boolean(value.trim()));
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === "Escape") {
+      setShowSearchResults(false);
+      setActiveSearchIndex(-1);
+      return;
+    }
+    if (!filteredSearchResults.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => (current + 1) % filteredSearchResults.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => current <= 0 ? filteredSearchResults.length - 1 : current - 1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      selectSearchResult(filteredSearchResults[activeSearchIndex] || filteredSearchResults[0]);
+    }
+  };
+
+  const markNotificationAsRead = (notificationId) => {
+    setNotifications((current) => current.map((notification) =>
+      notification.id === notificationId ? { ...notification, isRead: true } : notification,
+    ));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })));
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("staffAccessToken");
     localStorage.removeItem("adminAccessToken");
@@ -99,7 +224,7 @@ export default function App() {
           {menu.map(([id, label, Icon]) => <button key={id} type="button" className={`sidebar-link ${active === id ? "active" : ""}`} onClick={() => { setActive(id); setMobile(false); }} title={collapsed ? label : undefined}><span className="sidebar-link-icon"><Icon /></span><span className="sidebar-link-text">{label}</span></button>)}
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-footer-kicker"><HiOutlineSparkles /><span>Vận hành rạp phim</span></div>
+          <div className="sidebar-footer-kicker"><span>Vận hành rạp phim</span></div>
           <div className="sidebar-footer-info"><div className="sidebar-footer-avatar">{staffInitial}</div><div className="sidebar-footer-details"><strong>{staffName}</strong><span>Nhân viên quầy vé</span></div></div>
         </div>
       </aside>
@@ -112,9 +237,92 @@ export default function App() {
             <div className="header-title-group"><div className="breadcrumb"><span>Nhân viên</span><b>/</b><span>{crumb}</span></div><strong>{crumb}</strong></div>
           </div>
           <div className="header-right">
-            <label className="header-search"><HiOutlineSearch /><input placeholder="Tìm kiếm..." aria-label="Tìm kiếm" /></label>
-            <button type="button" className="header-icon" title="Chế độ tối"><HiOutlineMoon /></button>
-            <button type="button" className="header-icon header-notification" title="Thông báo"><HiOutlineBell /><i /></button>
+            <div className="header-search" ref={searchRef}>
+              <HiOutlineSearch aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Tìm kiếm chức năng..."
+                aria-label="Tìm kiếm chức năng"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showSearchResults}
+                aria-controls="staff-search-results"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onFocus={() => setShowSearchResults(Boolean(searchTerm.trim()))}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {showSearchResults && (
+                <div className="staff-search-dropdown" id="staff-search-results" role="listbox">
+                  {filteredSearchResults.length ? filteredSearchResults.map((result, index) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeSearchIndex === index}
+                      className={activeSearchIndex === index ? "active" : ""}
+                      key={result.id}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      onClick={() => selectSearchResult(result)}
+                    >
+                      <HiOutlineSearch aria-hidden="true" />
+                      <strong>{result.label}</strong>
+                    </button>
+                  )) : (
+                    <p>Không tìm thấy chức năng phù hợp.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className="header-icon"
+              onClick={() => setIsDarkMode((current) => !current)}
+              title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+              aria-label={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+            >
+              {isDarkMode ? <HiOutlineSun aria-hidden="true" /> : <HiOutlineMoon aria-hidden="true" />}
+            </button>
+            <div className="staff-notification-wrap" ref={notificationRef}>
+              <button
+                type="button"
+                className="header-icon header-notification"
+                title="Thông báo"
+                aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
+                aria-expanded={showNotifications}
+                onClick={() => {
+                  setShowNotifications((current) => !current);
+                  setShowSearchResults(false);
+                }}
+              >
+                <HiOutlineBell aria-hidden="true" />
+                {unreadCount > 0 && <i />}
+              </button>
+              {showNotifications && (
+                <div className="staff-notification-dropdown">
+                  <div className="staff-notification-heading">
+                    <div>
+                      <h2>Thông báo</h2>
+                      <p>{unreadCount ? `${unreadCount} thông báo chưa đọc` : "Bạn đã đọc tất cả"}</p>
+                    </div>
+                    <button type="button" onClick={markAllNotificationsAsRead} disabled={!unreadCount}>
+                      Đọc tất cả
+                    </button>
+                  </div>
+                  <ul>
+                    {notifications.map((notification) => (
+                      <li className={notification.isRead ? "read" : "unread"} key={notification.id}>
+                        <button type="button" onClick={() => markNotificationAsRead(notification.id)}>
+                          {!notification.isRead && <i />}
+                          <strong>{notification.title}</strong>
+                          <span>{notification.description}</span>
+                          <time>{notification.time}</time>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             <div className="header-user"><div>{staffInitial}</div><span><strong>{staffName}</strong><small>Nhân viên quầy vé</small></span></div>
             <button type="button" className="header-icon" onClick={handleLogout} title="Đăng xuất"><HiOutlineLogout /></button>
           </div>
@@ -382,8 +590,45 @@ function CounterSale() {
   const [clock, setClock] = useState(() => Date.now());
   const [selectedDate, setSelectedDate] = useState(() => getVietnamDateValue());
   const [selectedMovieId, setSelectedMovieId] = useState("");
-  const dateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
-  const effectiveDate = dateOptions.some((item) => item.value === selectedDate) ? selectedDate : dateOptions[0].value;
+  const [datePickerAnchor, setDatePickerAnchor] = useState(null);
+  const resetOrder = () => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
+  const changeDate = (date) => {
+    if (date === "__date_picker__") {
+      const calendarButton = document.activeElement?.closest?.(".pos-date-tabs > button:last-child");
+      setDatePickerAnchor((current) => current ? null : calendarButton);
+      return;
+    }
+
+    setDatePickerAnchor(null);
+    if (!date || date === selectedDate) return;
+    setSelectedDate(date);
+    setSelectedMovieId("");
+    resetOrder();
+    setError("");
+    setLoading(true);
+  };
+  const rollingDateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
+  const isCustomDate = !rollingDateOptions.some((item) => item.value === selectedDate);
+  const queryDate = selectedDate || rollingDateOptions[0].value;
+  const dateOptions = [
+    ...rollingDateOptions,
+    {
+      value: "__date_picker__",
+      label: isCustomDate ? formatReportDate(selectedDate) : "Ngày khác",
+      day: (
+        <StaffDatePopover
+          key={`${queryDate}-${datePickerAnchor ? "open" : "closed"}`}
+          anchor={datePickerAnchor}
+          minDate={getVietnamDateValue(clock)}
+          selectedDate={queryDate}
+          onClose={() => setDatePickerAnchor(null)}
+          onSelect={changeDate}
+        />
+      ),
+      month: null,
+    },
+  ];
+  const effectiveDate = isCustomDate ? "__date_picker__" : selectedDate;
   const visibleShowtimes = useMemo(() => showtimes.filter((item) => item.status === "scheduled" && new Date(item.start_time).getTime() > clock), [showtimes, clock]);
   const movies = useMemo(() => {
     const groupedMovies = new Map();
@@ -402,7 +647,7 @@ function CounterSale() {
   const comboTotal = selectedCombos.reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0);
   const total = seatTotal + comboTotal;
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(effectiveDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [effectiveDate, clock]);
+  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(queryDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [queryDate, clock]);
   useEffect(() => { let live = true; api("/combos/public?limit=100").then((data) => { const list = Array.isArray(data) ? data : data?.data || []; if (live) { setCombos(list.filter((item) => item.status)); setComboError(""); } }).catch((err) => { if (live) { setCombos([]); setComboError(err.message); } }).finally(() => live && setComboLoading(false)); return () => { live = false; }; }, []);
   useEffect(() => {
     const showtimeId = current?.id;
@@ -459,8 +704,6 @@ function CounterSale() {
     const timer = window.setInterval(updateCountdown, 1_000);
     return () => window.clearInterval(timer);
   }, [holdExpiresAt]);
-  const resetOrder = () => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
-  const changeDate = (date) => { setSelectedDate(date); setSelectedMovieId(""); resetOrder(); setError(""); setLoading(true); };
   const chooseMovie = (movie) => { setSelectedMovieId(String(movie.id)); resetOrder(); setError(""); };
   const choose = async (showtime) => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(showtime); setSelected([]); setSeats([]); setComboQuantities({}); setSale(null); setError(""); setSeatLoading(true); try { const [data, activeHold] = await Promise.all([api(`/showtime-seats?showtime_id=${showtime.id}`), api(`/showtime-seats/hold/active?showtime_id=${showtime.id}`)]); const normalizedSeats = data.map(normalizeSeat); const heldIds = new Set((activeHold?.showtime_seat_ids || []).map(String)); holdIdRef.current = String(activeHold?.hold_id || ""); setHoldToken(activeHold?.hold_token || ""); setHoldExpiresAt(activeHold?.expires_at || null); setRemainingHoldSeconds(getRemainingHoldSeconds(activeHold?.expires_at)); setSelected(normalizedSeats.filter((seat) => heldIds.has(String(seat.id))).map((seat) => seat.id)); setSeats(normalizedSeats); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
   const toggle = async (seat) => {
@@ -506,6 +749,116 @@ function CounterSale() {
 }
 
 function Step({ number, title, text }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>; }
+function StaffDatePopover({ anchor, minDate, selectedDate, onClose, onSelect }) {
+  const popoverRef = useRef(null);
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const initialDate = new Date(`${selectedDate || minDate}T00:00:00`);
+    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!anchor) return undefined;
+    const handlePointerDown = (event) => {
+      if (popoverRef.current?.contains(event.target) || anchor.contains(event.target)) return;
+      onClose();
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleViewportChange = () => onClose();
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [anchor, minDate, onClose, selectedDate]);
+
+  if (!anchor) return <FiCalendar aria-hidden="true" />;
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const popoverWidth = 310;
+  const estimatedHeight = 350;
+  const left = Math.max(12, Math.min(anchorRect.left, window.innerWidth - popoverWidth - 12));
+  const openAbove = anchorRect.bottom + estimatedHeight > window.innerHeight && anchorRect.top > estimatedHeight;
+  const top = openAbove
+    ? Math.max(12, anchorRect.top - estimatedHeight - 8)
+    : anchorRect.bottom + 8;
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const calendarCells = [
+    ...Array.from({ length: firstWeekday }, (_, index) => ({ key: `blank-${index}`, blank: true })),
+    ...Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const value = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      return { key: value, day, value, disabled: value < minDate };
+    }),
+  ];
+
+  return (
+    <>
+      <FiCalendar aria-hidden="true" />
+      {createPortal(
+        <div
+          ref={popoverRef}
+          className="staff-date-popover"
+          style={{ top, left }}
+          role="dialog"
+          aria-label="Chọn ngày chiếu"
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="staff-date-popover-header">
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month - 1, 1))}
+              aria-label="Tháng trước"
+            >
+              <FiChevronLeft />
+            </button>
+            <strong>Tháng {month + 1}, {year}</strong>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month + 1, 1))}
+              aria-label="Tháng sau"
+            >
+              <FiChevronRight />
+            </button>
+          </div>
+          <div className="staff-date-weekdays" aria-hidden="true">
+            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => <span key={label}>{label}</span>)}
+          </div>
+          <div className="staff-date-days">
+            {calendarCells.map((cell) => cell.blank ? <span key={cell.key} /> : (
+              <button
+                type="button"
+                className={cell.value === selectedDate ? "selected" : ""}
+                disabled={cell.disabled}
+                aria-pressed={cell.value === selectedDate}
+                key={cell.key}
+                onClick={() => onSelect(cell.value)}
+              >
+                {cell.day}
+              </button>
+            ))}
+          </div>
+          <div className="staff-date-popover-footer">
+            <button type="button" onClick={() => onSelect(minDate)}>Hôm nay</button>
+            <button type="button" onClick={onClose}>Đóng</button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
 function getRemainingHoldSeconds(expiresAt) { return expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0; }
 function formatHoldCountdown(totalSeconds) { const seconds = Math.max(0, Number(totalSeconds) || 0); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function dateTime(value) { return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }); }

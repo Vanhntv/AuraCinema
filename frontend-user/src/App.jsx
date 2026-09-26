@@ -17,6 +17,7 @@ const PromotionDetailPage = lazy(() => import('./pages/PromotionDetailPage'));
 const TicketPricePage = lazy(() => import('./pages/ticket-price/TicketPricePage'));
 const AboutPage = lazy(() => import('./pages/about/AboutPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
@@ -82,7 +83,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[var(--aura-ink)] text-white">
       <Toaster
-        position="top-right"
+        position={isAdminRoute ? 'top-center' : 'top-right'}
         toastOptions={{
           duration: 3600,
           style: {
@@ -123,6 +124,7 @@ function App() {
         <Route path="/chinh-sach-bao-mat" element={<SupportInfoPage />} />
         <Route path="/huong-dan-dat-ve" element={<SupportInfoPage />} />
         <Route path="/cau-hoi-thuong-gap" element={<SupportInfoPage />} />
+        <Route path="/xac-minh-email" element={<VerifyEmailPage />} />
         <Route path="/dang-ky" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path={LOGIN_PATH} element={<LoginPage />} />

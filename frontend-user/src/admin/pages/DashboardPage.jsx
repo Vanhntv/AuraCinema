@@ -5,6 +5,8 @@ import {
   HiOutlineChartBar,
   HiOutlineCheckCircle,
   HiOutlineFilm,
+  HiOutlineClock,
+  HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineTicket,
 } from "react-icons/hi";
@@ -23,6 +25,38 @@ import {
   getWeeklyRevenue,
   getYearlyRevenue,
 } from "../services/dashboardService";
+import RevenueChart from "../components/dashboard/RevenueChart";
+import MovieSearch from "../components/dashboard/MovieSearch";
+
+const emptyDashboard = {
+  stats: {
+    genres: 0,
+    movies: 0,
+    cinemas: 0,
+    bookings: 0,
+    todayShowtimes: 0,
+    nowShowingMovies: 0,
+    revenue: 0,
+    todayRevenue: 0,
+    ticketsSold: 0,
+    successfulBookings: 0,
+    comboRevenue: 0,
+    voucherUsageCount: 0,
+    voucherDiscountAmount: 0,
+  },
+  recentBookings: [],
+  todayShowtimes: [],
+  topMovies: [],
+  topCombos: [],
+  bookingStatuses: {
+    pending: 0,
+    confirmed: 0,
+    cancelled: 0,
+    expired: 0,
+    refunded: 0,
+    checked_in: 0,
+  },
+};
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
@@ -220,24 +254,65 @@ const DashboardPage = () => {
   }, [periodRange, selectedMovie]);
 
   useEffect(() => {
-    const request = window.setTimeout(fetchDashboard, 0);
-    return () => window.clearTimeout(request);
-  }, [fetchDashboard]);
-  useEffect(() => {
-    const request = window.setTimeout(() => { fetchRevenue(); fetchRankings(); }, 0);
-    return () => window.clearTimeout(request);
-  }, [fetchRankings, fetchRevenue]);
-  useEffect(() => {
-    const request = window.setTimeout(fetchSelectedMovie, 0);
-    return () => window.clearTimeout(request);
-  }, [fetchSelectedMovie]);
+    if (revenuePeriod === "month") {
+      fetchMonthlyRevenue(dashboardCurrentMonth, dashboardCurrentYear);
+    }
+  }, [fetchMonthlyRevenue, revenuePeriod]);
 
-  const handleRefresh = () => { fetchDashboard(); fetchRevenue(); fetchRankings(); fetchSelectedMovie(); };
-  const chooseDate = (date) => { setRevenuePeriod("day"); setSelectedDate(date); };
-  const formatDisplayDate = (value) => displayDateFormatter.format(new Date(`${value}T12:00:00+07:00`));
-  const selectedPeriodLabel = comparison.current.label || (periodRange.from === periodRange.to
-    ? formatDisplayDate(periodRange.from)
-    : `${formatDisplayDate(periodRange.from)} - ${formatDisplayDate(periodRange.to)}`);
+  const fetchRevenueComparison = useCallback(async (period, date) => {
+    if (!date) return;
+
+    try {
+      setComparisonLoading(true);
+      setComparisonError("");
+      const response = await getRevenueComparison(period, date);
+      setRevenueComparison({
+        ...emptyRevenueComparison,
+        ...(response.data || {}),
+      });
+    } catch (err) {
+      setComparisonError(
+        err.response?.data?.message || "Không thể tải dữ liệu so sánh kỳ trước.",
+      );
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const period = revenuePeriod === "today" || revenuePeriod === "custom"
+      ? "day"
+      : revenuePeriod;
+    const date = revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate;
+    fetchRevenueComparison(period, date);
+  }, [fetchRevenueComparison, revenuePeriod, selectedDate]);
+
+  const dailyChartData = useMemo(() => {
+    const date = revenuePeriod === "today" ? dashboardCurrentDate : selectedDate;
+    const [, month, day] = String(date || "").split("-");
+
+    return [{
+      label: day && month ? `${day}/${month}` : "-",
+      revenue: Number(dailyStats.revenue || 0),
+    }];
+  }, [dailyStats.revenue, revenuePeriod, selectedDate]);
+
+  const topMovieRevenueMax = useMemo(
+    () => Math.max(
+      ...dashboard.topMovies.map((movie) => Number(movie.revenue || 0)),
+      0,
+    ),
+    [dashboard.topMovies],
+  );
+
+  const topComboQuantityMax = useMemo(
+    () => Math.max(
+      ...dashboard.topCombos.map((combo) => Number(combo.quantitySold || 0)),
+      0,
+    ),
+    [dashboard.topCombos],
+  );
+
   const comparisonTrend = useMemo(() => {
     const change = comparison.percentageChange;
     if (change === null || change === undefined) return { label: "Chưa có dữ liệu đối chiếu", tone: "neutral" };
@@ -246,24 +321,168 @@ const DashboardPage = () => {
     return { label: "Không thay đổi", tone: "neutral" };
   }, [comparison.percentageChange]);
 
-  const statCards = [
-    { label: "Tổng doanh thu", value: dashboard.stats.revenue, icon: <HiOutlineCash />, currency: true, tone: "teal" },
-    { label: "Doanh thu hôm nay", value: dashboard.stats.todayRevenue, icon: <HiOutlineChartBar />, currency: true, tone: "blue" },
-    { label: "Vé đã bán", value: dashboard.stats.ticketsSold, icon: <HiOutlineTicket />, tone: "orange" },
-    { label: "Đơn thành công", value: dashboard.stats.successfulBookings, icon: <HiOutlineCheckCircle />, tone: "purple" },
-    { label: "Tổng đơn đặt vé", value: dashboard.stats.bookings, icon: <HiOutlineTicket />, tone: "blue" },
-    { label: "Phim trong hệ thống", value: dashboard.stats.movies, icon: <HiOutlineFilm />, tone: "purple" },
-    { label: "Rạp đang quản lý", value: dashboard.stats.cinemas, icon: <HiOutlineChartBar />, tone: "teal" },
-    { label: "Suất chiếu hôm nay", value: dashboard.stats.todayShowtimes, icon: <HiOutlineCalendar />, tone: "orange" },
-  ];
-  const topMovieRevenue = Math.max(...topMovies.map((item) => Number(item.revenue || 0)), 0);
-  const topComboRevenue = Math.max(...topCombos.map((item) => Number(item.revenue || 0)), 0);
+  const fetchSelectedMovieRevenue = useCallback(async (movie, filters = {}) => {
+    if (!movie?._id) return;
+
+    try {
+      setMovieRevenueLoading(true);
+      setMovieRevenueError("");
+      const response = await getMovieRevenue(movie._id, filters);
+      setMovieRevenue({
+        ...emptyMovieRevenue,
+        ...(response.data || {}),
+      });
+    } catch (err) {
+      setMovieRevenueError(
+        err.response?.data?.message || "Không thể tải doanh thu của phim.",
+      );
+    } finally {
+      setMovieRevenueLoading(false);
+    }
+  }, []);
+
+  const handleMovieSelect = (movie) => {
+    setSelectedMovie(movie);
+    setMovieRevenueFrom("");
+    setMovieRevenueTo("");
+    setMovieRevenueError("");
+
+    if (movie) {
+      fetchSelectedMovieRevenue(movie);
+    } else {
+      setMovieRevenue(emptyMovieRevenue);
+    }
+  };
+
+  const handleMovieRevenueFilter = (event) => {
+    event.preventDefault();
+    if (!selectedMovie) return;
+
+    if (!movieRevenueFrom || !movieRevenueTo) {
+      setMovieRevenueError("Vui lòng chọn đầy đủ từ ngày và đến ngày.");
+      return;
+    }
+    if (movieRevenueFrom > movieRevenueTo) {
+      setMovieRevenueError("Từ ngày không được lớn hơn đến ngày.");
+      return;
+    }
+
+    fetchSelectedMovieRevenue(selectedMovie, {
+      from: movieRevenueFrom,
+      to: movieRevenueTo,
+    });
+  };
+
+  const handleClearMovieRevenueFilter = () => {
+    setMovieRevenueFrom("");
+    setMovieRevenueTo("");
+    fetchSelectedMovieRevenue(selectedMovie);
+  };
+
+  const handleRefresh = () => {
+    fetchDashboard();
+
+    const comparisonPeriod = revenuePeriod === "today" || revenuePeriod === "custom"
+      ? "day"
+      : revenuePeriod;
+    const comparisonDate = revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate;
+    fetchRevenueComparison(comparisonPeriod, comparisonDate);
+
+    if (revenuePeriod === "today") {
+      fetchDailyStats(dashboardCurrentDate);
+    } else if (revenuePeriod === "week") {
+      fetchWeeklyRevenue(dashboardCurrentDate);
+    } else if (revenuePeriod === "month") {
+      fetchMonthlyRevenue(dashboardCurrentMonth, dashboardCurrentYear);
+    } else {
+      fetchDailyStats(selectedDate);
+    }
+  };
+
+  const statCards = useMemo(
+    () => [
+      {
+        label: "Doanh thu hôm nay",
+        value: dashboard.stats.todayRevenue,
+        icon: <HiOutlineCash />,
+        tone: "teal",
+        hint: "Booking đã thanh toán hôm nay",
+        isCurrency: true,
+      },
+      {
+        label: "Tổng doanh thu",
+        value: dashboard.stats.revenue,
+        icon: <HiOutlineCash />,
+        tone: "teal",
+        hint: "Doanh thu đã thanh toán",
+        isCurrency: true,
+      },
+      {
+        label: "Doanh thu bắp nước",
+        value: dashboard.stats.comboRevenue,
+        icon: <HiOutlineShoppingBag />,
+        tone: "pink",
+        hint: "Combo trong booking đã thanh toán",
+        isCurrency: true,
+      },
+      {
+        label: "Lượt sử dụng voucher",
+        value: dashboard.stats.voucherUsageCount,
+        icon: <HiOutlineTag />,
+        tone: "blue",
+        hint: "Booking đã thanh toán có voucher",
+      },
+      {
+        label: "Tổng tiền đã giảm",
+        value: dashboard.stats.voucherDiscountAmount,
+        icon: <HiOutlineCash />,
+        tone: "pink",
+        hint: "Ưu đãi từ voucher đã sử dụng",
+        isCurrency: true,
+      },
+      {
+        label: "Tổng phim",
+        value: dashboard.stats.movies,
+        icon: <HiOutlineFilm />,
+        tone: "blue",
+        hint: `${numberFormatter.format(dashboard.stats.nowShowingMovies)} đang chiếu`,
+      },
+      {
+        label: "Đơn thành công",
+        value: dashboard.stats.successfulBookings,
+        icon: <HiOutlineCheckCircle />,
+        tone: "purple",
+        hint: "Đã thanh toán và xác nhận",
+      },
+      {
+        label: "Vé đã bán",
+        value: dashboard.stats.ticketsSold,
+        icon: <HiOutlineTicket />,
+        tone: "orange",
+        hint: "Từ booking đã thanh toán",
+      },
+    ],
+    [dashboard.stats],
+  );
 
   return (
     <div className="dashboard-page">
       <div className="page-header dashboard-header">
-        <div className="page-header-info"><h1>Dashboard kinh doanh</h1><p>Tổng quan vận hành, doanh thu vé, phim và combo</p></div>
-        <button className="btn btn-secondary" onClick={handleRefresh} disabled={loading || revenueLoading}><HiOutlineRefresh /> Làm mới</button>
+        <div className="page-header-info">
+          <h1>Dashboard</h1>
+          <p>Chào mừng bạn trở lại với AuraCinema Admin</p>
+        </div>
+
+        <div className="dashboard-header-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={handleRefresh}
+            disabled={loading}
+          >
+            <HiOutlineRefresh />
+            Làm mới
+          </button>
+        </div>
       </div>
       {error && <div className="dashboard-alert">{error}</div>}
 
@@ -279,32 +498,190 @@ const DashboardPage = () => {
         ))}
       </div>
 
-      <section className="dashboard-revenue-workspace">
-        <div className="dashboard-revenue-toolbar">
-          <div><h2>Phân tích doanh thu</h2><p>Xem doanh thu theo ngày, tuần, tháng, năm hoặc khoảng ngày tùy chọn</p></div>
-          <div className="dashboard-revenue-controls">
-            <div className="dashboard-date-shortcuts" aria-label="Chọn ngày nhanh">
-              <button className={selectedDate === currentDate && revenuePeriod === "day" ? "active" : ""} onClick={() => chooseDate(currentDate)} type="button">Hôm nay</button>
-              <button className={selectedDate === yesterdayDate && revenuePeriod === "day" ? "active" : ""} onClick={() => chooseDate(yesterdayDate)} type="button">Hôm qua</button>
+      <section className="dashboard-booking-status-panel">
+        <div className="dashboard-panel-header">
+          <div>
+            <h2>Thống kê trạng thái booking</h2>
+            <p>Mỗi booking được tính một lần theo trạng thái hiện tại</p>
+          </div>
+          <HiOutlineChartPie />
+        </div>
+        <div className="dashboard-booking-status-grid" aria-busy={loading}>
+          {bookingStatusItems.map((status) => (
+            <div
+              className={`dashboard-booking-status-item ${status.tone}`}
+              key={status.key}
+            >
+              <span className="dashboard-booking-status-dot" />
+              <div>
+                <strong>
+                  {loading
+                    ? "..."
+                    : numberFormatter.format(dashboard.bookingStatuses[status.key] || 0)}
+                </strong>
+                <span>{status.label}</span>
+              </div>
             </div>
-            <label className="dashboard-date-filter"><span>Kiểu xem</span><select className="form-input dashboard-period-select" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value)}><option value="day">Theo ngày</option><option value="week">Theo tuần</option><option value="month">Theo tháng</option><option value="year">Theo năm</option><option value="range">Khoảng ngày</option></select></label>
-            {(revenuePeriod === "day" || revenuePeriod === "week") && <label className="dashboard-date-filter"><span>{revenuePeriod === "day" ? "Chọn ngày" : "Ngày thuộc tuần"}</span><input className="form-input dashboard-date-input" type="date" max={currentDate} value={selectedDate} onChange={(event) => event.target.value && setSelectedDate(event.target.value)} /></label>}
-            {revenuePeriod === "month" && <label className="dashboard-date-filter"><span>Chọn tháng</span><input className="form-input dashboard-date-input" type="month" max={currentDate.slice(0, 7)} value={selectedDate.slice(0, 7)} onChange={(event) => event.target.value && setSelectedDate(`${event.target.value}-01`)} /></label>}
-            {revenuePeriod === "year" && <label className="dashboard-date-filter"><span>Chọn năm</span><input className="form-input dashboard-year-input" type="number" min="2000" max={currentYear} value={selectedDate.slice(0, 4)} onChange={(event) => { const year = Number(event.target.value); if (year >= 2000 && year <= currentYear) setSelectedDate(`${year}-01-01`); }} /></label>}
-            {revenuePeriod === "range" && <div className="dashboard-range-filter">
-              <label className="dashboard-date-filter"><span>Từ ngày</span><input className="form-input dashboard-date-input" type="date" max={rangeTo || currentDate} value={rangeFrom} onChange={(event) => { const value = event.target.value; if (!value) return; setRangeFrom(value); if (value > rangeTo) setRangeTo(value); }} /></label>
-              <label className="dashboard-date-filter"><span>Đến ngày</span><input className="form-input dashboard-date-input" type="date" min={rangeFrom} max={currentDate} value={rangeTo} onChange={(event) => event.target.value && setRangeTo(event.target.value)} /></label>
-            </div>}
+          ))}
+        </div>
+      </section>
+
+      <section className="dashboard-revenue-filter">
+        <div>
+          <h2>Phân tích doanh thu</h2>
+          <p>Chọn khoảng thời gian muốn theo dõi</p>
+        </div>
+        <label className="dashboard-date-filter">
+          <span>Thời gian</span>
+          <select
+            className="form-input dashboard-period-select"
+            value={revenuePeriod}
+            onChange={(event) => setRevenuePeriod(event.target.value)}
+          >
+            <option value="today">Hôm nay</option>
+            <option value="week">Tuần này</option>
+            <option value="month">Tháng này</option>
+            <option value="custom">Tùy chọn</option>
+          </select>
+        </label>
+      </section>
+
+      <section className="dashboard-comparison-panel">
+        <div className="dashboard-panel-header">
+          <div>
+            <h2>So sánh kỳ trước</h2>
+            <p>Đối chiếu doanh thu với kỳ liền trước cùng độ dài</p>
+          </div>
+          <HiOutlineChartBar />
+        </div>
+
+        {comparisonError ? (
+          <div className="dashboard-daily-error">{comparisonError}</div>
+        ) : (
+          <div className="dashboard-comparison-grid" aria-busy={comparisonLoading}>
+            <div className="dashboard-comparison-metric current">
+              <span>{comparisonLoading ? "Kỳ hiện tại" : revenueComparison.current.label}</span>
+              <strong>
+                {comparisonLoading
+                  ? "..."
+                  : currencyFormatter.format(revenueComparison.current.revenue || 0)}
+              </strong>
+              <small>Kỳ hiện tại</small>
+            </div>
+            <div className="dashboard-comparison-metric previous">
+              <span>{comparisonLoading ? "Kỳ trước" : revenueComparison.previous.label}</span>
+              <strong>
+                {comparisonLoading
+                  ? "..."
+                  : currencyFormatter.format(revenueComparison.previous.revenue || 0)}
+              </strong>
+              <small>Kỳ trước</small>
+            </div>
+            <div className={`dashboard-comparison-metric trend ${comparisonTrend.tone}`}>
+              <span>Biến động</span>
+              <strong>{comparisonLoading ? "..." : comparisonTrend.label}</strong>
+              <small>So với kỳ trước</small>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {(revenuePeriod === "today" || revenuePeriod === "custom") && (
+      <section className="dashboard-daily-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>
+              {revenuePeriod === "today"
+                ? "Doanh thu hôm nay"
+                : "Doanh thu ngày tùy chọn"}
+            </h2>
+            <p>Chỉ tính booking đã thanh toán và xác nhận</p>
+          </div>
+          {revenuePeriod === "custom" && (
+          <label className="dashboard-date-filter">
+            <span>Chọn ngày</span>
+            <input
+              className="form-input dashboard-date-input"
+              type="date"
+              required
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+            />
+          </label>
+          )}
+        </div>
+
+        {dailyError ? (
+          <div className="dashboard-daily-error">{dailyError}</div>
+        ) : (
+          <>
+          <div className="dashboard-daily-results" aria-busy={dailyLoading}>
+            <div className="dashboard-daily-metric">
+              <span>Doanh thu</span>
+              <strong>
+                {dailyLoading ? "..." : currencyFormatter.format(dailyStats.revenue)}
+              </strong>
+            </div>
+            <div className="dashboard-daily-metric">
+              <span>Vé đã bán</span>
+              <strong>
+                {dailyLoading ? "..." : numberFormatter.format(dailyStats.ticketsSold)}
+              </strong>
+            </div>
+            <div className="dashboard-daily-metric">
+              <span>Đơn thành công</span>
+              <strong>
+                {dailyLoading ? "..." : numberFormatter.format(dailyStats.bookingCount)}
+              </strong>
+            </div>
+          </div>
+          <RevenueChart data={dailyChartData} loading={dailyLoading} />
+          </>
+        )}
+      </section>
+      )}
+
+      {revenuePeriod === "week" && (
+      <section className="dashboard-weekly-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>Doanh thu theo tuần</h2>
+            <p>
+              Tổng tuần: {weeklyLoading
+                ? "..."
+                : currencyFormatter.format(weeklyRevenueSummary.total)}
+            </p>
           </div>
         </div>
-        {revenueError ? <div className="dashboard-daily-error">{revenueError}</div> : <>
-          <div className="dashboard-revenue-summary">
-            <div className="dashboard-revenue-primary"><span>Doanh thu · {selectedPeriodLabel}</span><strong>{revenueLoading ? "..." : currencyFormatter.format(periodTotal)}</strong>{(revenuePeriod === "day" || revenuePeriod === "range") && <small>{revenueLoading ? "..." : numberFormatter.format(dailyStats.bookingCount)} đơn · {revenueLoading ? "..." : numberFormatter.format(dailyStats.ticketsSold)} vé</small>}</div>
-            <div className="dashboard-comparison-inline"><div><span>Kỳ trước</span><strong>{revenueLoading ? "..." : currencyFormatter.format(comparison.previous.revenue || 0)}</strong><small>{comparison.previous.label}</small></div><div className={`dashboard-trend ${comparisonTrend.tone}`}><span>Biến động</span><strong>{revenueLoading ? "..." : comparisonTrend.label}</strong><small>So với kỳ trước</small></div></div>
-          </div>
-          {revenuePeriod !== "day" && <RevenueChart data={chartData} loading={revenueLoading} xAxisLabel={revenuePeriod === "year" ? "Tháng" : "Ngày"} />}
-        </>}
+
+        {weeklyError ? (
+          <div className="dashboard-daily-error">{weeklyError}</div>
+        ) : (
+          <RevenueChart data={weeklyRevenue} loading={weeklyLoading} />
+        )}
       </section>
+      )}
+
+      {revenuePeriod === "month" && (
+      <section className="dashboard-monthly-panel">
+        <div className="dashboard-daily-header">
+          <div>
+            <h2>Doanh thu theo tháng</h2>
+            <p>
+              Tổng tháng: {monthlyLoading
+                ? "..."
+                : currencyFormatter.format(monthlyRevenue.totalRevenue)}
+            </p>
+          </div>
+        </div>
+
+        {monthlyError ? (
+          <div className="dashboard-daily-error">{monthlyError}</div>
+        ) : (
+          <RevenueChart data={monthlyRevenue.days} loading={monthlyLoading} />
+        )}
+      </section>
+      )}
 
       <div className="dashboard-ranking-grid">
         <RankingPanel title="Doanh thu theo phim" subtitle={selectedPeriodLabel} items={topMovies} loading={rankingsLoading} maxRevenue={topMovieRevenue} type="movie" onSelect={(item) => setSelectedMovie({ _id: item.id, title: item.title })} />
@@ -322,45 +699,132 @@ const DashboardPage = () => {
           <div className="dashboard-panel-header"><div><h2>Lịch chiếu hôm nay</h2><p>{numberFormatter.format(dashboard.stats.todayShowtimes || 0)} suất chiếu</p></div><HiOutlineCalendar /></div>
           {loading ? <div className="dashboard-mini-loading">Đang tải...</div> : dashboard.todayShowtimes.length ? <div className="showtime-list">{dashboard.todayShowtimes.slice(0, 6).map((showtime) => <div className="showtime-item" key={showtime.id || showtime._id}><div><strong>{showtime.movieTitle}</strong><span>{showtime.cinemaName || "Rạp"} · {showtime.roomName || "Phòng chiếu"}</span></div><time>{showtime.startTime}</time></div>)}</div> : <div className="dashboard-empty-state">Chưa có lịch chiếu hôm nay.</div>}
         </section>
-        <section className="dashboard-panel">
-          <div className="dashboard-panel-header"><div><h2>Đơn đặt vé gần đây</h2><p>5 giao dịch mới nhất trong hệ thống</p></div><HiOutlineTicket /></div>
-          {loading ? <div className="dashboard-mini-loading">Đang tải...</div> : dashboard.recentBookings.length ? <div className="dashboard-recent-bookings">{dashboard.recentBookings.map((booking) => <div className="dashboard-recent-booking" key={booking.id}><div><strong>{booking.code}</strong><span>{booking.movieTitle} · {booking.customerName}</span></div><div><strong>{currencyFormatter.format(booking.totalAmount || 0)}</strong><span>{booking.status}</span></div></div>)}</div> : <div className="dashboard-empty-state">Chưa có đơn đặt vé.</div>}
+      )}
+
+      <div className="dashboard-grid">
+        <section className="table-container dashboard-table">
+          <div className="table-toolbar">
+            <div className="table-toolbar-left">
+              <span className="table-toolbar-title">Vé đặt gần đây</span>
+              <span className="table-toolbar-count">
+                {dashboard.recentBookings.length} vé
+              </span>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="loading-spinner">
+              <div className="spinner"></div>
+            </div>
+          ) : dashboard.recentBookings.length ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Mã vé</th>
+                  <th>Khách hàng</th>
+                  <th>Phim</th>
+                  <th>Tổng tiền</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dashboard.recentBookings.map((booking) => (
+                  <tr key={booking.id || booking._id}>
+                    <td className="table-cell-name">{booking.code}</td>
+                    <td>{booking.customerName}</td>
+                    <td>{booking.movieTitle}</td>
+                    <td>
+                      {currencyFormatter.format(booking.totalAmount || 0)}
+                    </td>
+                    <td>
+                      <span className="status-badge status-now-showing">
+                        {booking.status || "Đã đặt"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="table-empty">
+              <HiOutlineTicket className="dashboard-empty-icon" />
+              <div className="table-empty-text">Chưa có vé đặt gần đây</div>
+              <div className="table-empty-sub">
+                Dữ liệu sẽ hiển thị khi module đặt vé được kết nối.
+              </div>
+            </div>
+          )}
         </section>
+
+        <aside className="dashboard-side">
+          <section className="dashboard-panel">
+            <div className="dashboard-panel-header">
+              <div>
+                <h2>Lịch chiếu hôm nay</h2>
+                <p>
+                  {numberFormatter.format(dashboard.stats.todayShowtimes || 0)}{" "}
+                  suất chiếu
+                </p>
+              </div>
+              <HiOutlineCalendar />
+            </div>
+
+            {loading ? (
+              <div className="dashboard-mini-loading">Đang tải...</div>
+            ) : dashboard.todayShowtimes.length ? (
+              <div className="showtime-list">
+                {dashboard.todayShowtimes.map((showtime) => (
+                  <div
+                    className="showtime-item"
+                    key={showtime.id || showtime._id}
+                  >
+                    <div>
+                      <strong>{showtime.movieTitle}</strong>
+                      <span>{showtime.roomName || "Phòng chiếu"}</span>
+                    </div>
+                    <time>{showtime.startTime}</time>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="dashboard-empty-state">
+                Chưa có lịch chiếu hôm nay.
+              </div>
+            )}
+          </section>
+
+          <section className="dashboard-panel">
+            <div className="dashboard-panel-header">
+              <div>
+                <h2>Thao tác nhanh</h2>
+                <p>Đi tới tác vụ quản trị thường dùng</p>
+              </div>
+              <HiOutlinePlus />
+            </div>
+
+            <div className="quick-actions">
+              <Link className="quick-action" to="/admin/movies">
+                <HiOutlineFilm />
+                Quản lý phim
+              </Link>
+              <Link className="quick-action" to="/admin/genres">
+                <HiOutlineTag />
+                Quản lý thể loại
+              </Link>
+              <Link className="quick-action" to="/admin/showtimes">
+                <HiOutlineCalendar />
+                Lịch chiếu
+              </Link>
+              <Link className="quick-action" to="/admin/movies">
+                <HiOutlineCash />
+                Doanh thu
+              </Link>
+            </div>
+          </section>
+        </aside>
       </div>
     </div>
   );
-};
-
-const RankingPanel = ({ title, subtitle, items, loading, maxRevenue, type, onSelect }) => (
-  <section className="dashboard-top-movies-panel">
-    <div className="dashboard-panel-header dashboard-top-movies-header"><div><h2>{title}</h2><p>{subtitle}</p></div>{type === "movie" ? <HiOutlineFilm /> : <HiOutlineCash />}</div>
-    {loading ? <div className="dashboard-chart-state">Đang tải dữ liệu...</div> : items.length ? <div className="dashboard-top-movies-list">{items.map((item, index) => {
-      const name = type === "movie" ? item.title : item.name;
-      return <button className="dashboard-top-movie dashboard-ranking-button" key={item.id || name} type="button" onClick={() => onSelect?.(item)} disabled={!onSelect}><span className={`dashboard-movie-rank rank-${index + 1}`}>{index + 1}</span><span className="dashboard-top-movie-info"><span className="dashboard-top-movie-title-row"><strong>{name || "Chưa xác định"}</strong><span>{currencyFormatter.format(item.revenue || 0)}</span></span><span className="dashboard-top-movie-track"><span className={`dashboard-top-movie-bar ${type === "combo" ? "dashboard-top-combo-bar" : ""}`} style={{ width: `${maxRevenue ? Math.max((Number(item.revenue || 0) / maxRevenue) * 100, 3) : 0}%` }} /></span><small>{type === "movie" ? `${numberFormatter.format(item.ticketsSold || 0)} vé · ${numberFormatter.format(item.bookingCount || 0)} đơn` : `${numberFormatter.format(item.quantitySold || 0)} sản phẩm`}</small></span></button>;
-    })}</div> : <div className="dashboard-empty-state">Chưa có dữ liệu trong kỳ này.</div>}
-  </section>
-);
-
-const MovieRevenueReport = ({ report, loading, error, periodLabel }) => {
-  if (loading) return <section className="dashboard-movie-revenue-panel"><div className="dashboard-chart-state">Đang tải báo cáo phim...</div></section>;
-  if (error) return <section className="dashboard-movie-revenue-panel"><div className="dashboard-daily-error">{error}</div></section>;
-  if (!report) return null;
-  const metrics = [
-    ["Doanh thu", currencyFormatter.format(report.revenue || 0), <HiOutlineCash />],
-    ["Vé đã bán", numberFormatter.format(report.ticketsSold || 0), <HiOutlineTicket />],
-    ["Đơn thành công", numberFormatter.format(report.bookingCount || 0), <HiOutlineCheckCircle />],
-    ["Suất chiếu", numberFormatter.format(report.showtimeCount || 0), <HiOutlineCalendar />],
-    ["Lấp đầy trung bình", `${numberFormatter.format(report.averageOccupancyRate || 0)}%`, <HiOutlineChartBar />],
-  ];
-  return <section className="dashboard-movie-revenue-panel">
-    <div className="dashboard-panel-header"><div><h2>{report.movie?.title}</h2><p>Báo cáo chi tiết · {periodLabel}</p></div><HiOutlineFilm /></div>
-    <div className="dashboard-movie-revenue-grid">{metrics.map(([label, value, icon], index) => <div className={`dashboard-movie-revenue-metric ${index === 0 ? "primary" : ""}`} key={label}>{icon}<span>{label}</span><strong>{value}</strong></div>)}</div>
-    <div className="dashboard-movie-daily-chart"><div className="dashboard-movie-chart-heading"><h3>Doanh thu phim theo ngày</h3><p>Chi tiết doanh thu phát sinh trong kỳ</p></div><RevenueChart data={report.dailyRevenue || []} /></div>
-    <div className="dashboard-movie-detail-grid">
-      <div><div className="dashboard-movie-chart-heading"><h3>Vé theo loại ghế</h3><p>Cơ cấu vé đã bán</p></div><div className="dashboard-seat-type-grid">{[["normal", "Ghế thường"], ["vip", "Ghế VIP"], ["couple", "Ghế đôi"]].map(([key, label]) => <div className={`dashboard-seat-type-item ${key}`} key={key}><HiOutlineTicket /><span>{label}</span><strong>{numberFormatter.format(report.ticketsBySeatType?.[key] || 0)}</strong></div>)}</div></div>
-      <div><div className="dashboard-movie-chart-heading"><h3>Lấp đầy theo suất chiếu</h3><p>Số ghế bán trên tổng sức chứa</p></div><div className="dashboard-occupancy-list">{(report.occupancyByShowtime || []).length ? report.occupancyByShowtime.map((item) => <div className="dashboard-occupancy-row" key={item.id}><div className="dashboard-occupancy-showtime"><strong>{dateTimeFormatter.format(new Date(item.startTime))}</strong><span>{item.roomName || "Phòng chiếu"}</span></div><span className="dashboard-occupancy-seats">{numberFormatter.format(item.soldSeats || 0)}/{numberFormatter.format(item.totalSeats || 0)} ghế</span><div className="dashboard-occupancy-progress"><div style={{ width: `${Math.min(Number(item.occupancyRate || 0), 100)}%` }} /></div><strong className="dashboard-occupancy-rate">{numberFormatter.format(item.occupancyRate || 0)}%</strong></div>) : <div className="dashboard-empty-state">Chưa có dữ liệu suất chiếu.</div>}</div></div>
-    </div>
-  </section>;
 };
 
 export default DashboardPage;

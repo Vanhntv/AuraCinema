@@ -188,11 +188,6 @@ const BookingsPage = () => {
     setReprintTicketIds([]);
   };
 
-  const handleSubmitFilters = (event) => {
-    event.preventDefault();
-    fetchBookings(1);
-  };
-
   const handlePageLookup = (event) => {
     event.preventDefault();
     const requestedPage = Number(pageLookup);
@@ -293,7 +288,7 @@ const BookingsPage = () => {
         </div>
       )}
 
-      <form className="booking-admin-filters" onSubmit={handleSubmitFilters}>
+      <div className="booking-admin-filters">
         <div className="filter-search">
           <HiOutlineSearch />
           <input
@@ -315,10 +310,7 @@ const BookingsPage = () => {
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
-        <button className="btn btn-primary" disabled={loading} type="submit">
-          Lọc
-        </button>
-      </form>
+      </div>
 
       <div className="table-container">
         <div className="table-toolbar">

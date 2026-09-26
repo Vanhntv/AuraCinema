@@ -2,9 +2,8 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { forgotPassword, resetPassword } from "../api/authApi";
 import { LOGIN_PATH } from "../utils/authRoutes";
+import { getEmailSyntaxError, normalizeEmailForRequest } from "../utils/emailValidation";
 import { getApiErrorMessage, showToast } from "../utils/toast";
-
-const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
 
 function ForgotPasswordPage() {
   const navigate = useNavigate();
@@ -32,9 +31,8 @@ function ForgotPasswordPage() {
       return "Vui lòng nhập email.";
     }
 
-    if (!isValidEmail(formData.email)) {
-      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
-    }
+    const emailError = getEmailSyntaxError(formData.email);
+    if (emailError) return emailError;
 
     if (!String(formData.otp || "").trim()) {
       return "Vui lòng nhập mã OTP.";
@@ -68,9 +66,8 @@ function ForgotPasswordPage() {
       return "Vui lòng nhập email.";
     }
 
-    if (!isValidEmail(formData.email)) {
-      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
-    }
+    const emailError = getEmailSyntaxError(formData.email);
+    if (emailError) return emailError;
 
     return "";
   };
@@ -90,8 +87,8 @@ function ForgotPasswordPage() {
     setSubmitting(true);
 
     try {
-      const response = await forgotPassword({ email: formData.email.trim() });
-      const successMessage = response.dev_otp ? `${response.message} OTP dev: ${response.dev_otp}` : response.message;
+      const response = await forgotPassword({ email: normalizeEmailForRequest(formData.email) });
+      const successMessage = response.message;
       setMessage(successMessage);
       showToast("success", successMessage);
       setStep("reset");
@@ -121,7 +118,7 @@ function ForgotPasswordPage() {
     try {
       await resetPassword({
         ...formData,
-        email: formData.email.trim(),
+        email: normalizeEmailForRequest(formData.email),
         otp: String(formData.otp || "").trim(),
       });
       navigate(LOGIN_PATH, {
@@ -189,6 +186,8 @@ function ForgotPasswordPage() {
             <label>
               OTP
               <input
+                autoComplete="one-time-code"
+                maxLength={6}
                 inputMode="numeric"
                 name="otp"
                 onChange={handleChange}
@@ -233,6 +232,10 @@ function ForgotPasswordPage() {
           </form>
         )}
 
+        {step === "reset" && <p className="auth-switch"><button type="button" className="auth-resend" disabled={submitting}
+          onClick={() => { setStep("request"); setError(""); setMessage(""); }}>
+          Chưa nhận được mã? Yêu cầu gửi lại
+        </button></p>}
         <p className="auth-switch">
           Đã nhớ mật khẩu? <Link to={LOGIN_PATH}>Đăng nhập</Link>
         </p>
