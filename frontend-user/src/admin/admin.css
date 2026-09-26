@@ -1037,8 +1037,19 @@
   font-weight: 600;
 }
 
+.dashboard-range-filter {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .dashboard-date-input {
   min-width: 170px;
+  color-scheme: dark;
+}
+
+.dashboard-year-input {
+  width: 120px;
   color-scheme: dark;
 }
 
@@ -1252,6 +1263,28 @@
   .dashboard-compact-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.dashboard-ranking-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.dashboard-ranking-button:not(:disabled) {
+  cursor: pointer;
+}
+
+.dashboard-ranking-button:not(:disabled):hover {
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.dashboard-ranking-button:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 .dashboard-top-movie-info small {
@@ -1483,6 +1516,53 @@
   border-top: 1px solid var(--color-border);
 }
 
+.dashboard-movie-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 18px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-recent-bookings {
+  display: grid;
+}
+
+.dashboard-recent-booking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-recent-booking:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-recent-booking > div:last-child {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dashboard-recent-booking strong,
+.dashboard-recent-booking span {
+  display: block;
+}
+
+.dashboard-recent-booking strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.dashboard-recent-booking span {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .dashboard-movie-chart-heading {
   margin-bottom: 12px;
 }
@@ -1631,6 +1711,10 @@
 @media (max-width: 1024px) {
   .dashboard-movie-revenue-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-movie-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3365,6 +3449,11 @@
     width: 100%;
   }
 
+  .dashboard-range-filter {
+    width: 100%;
+    flex-direction: column;
+  }
+
   .dashboard-revenue-summary,
   .dashboard-comparison-inline {
     grid-template-columns: 1fr;
@@ -3375,6 +3464,10 @@
   }
 
   .dashboard-date-input {
+    width: 100%;
+  }
+
+  .dashboard-year-input {
     width: 100%;
   }
 
