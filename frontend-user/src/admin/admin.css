@@ -2317,10 +2317,10 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
   display: grid;
   gap: 12px;
   margin-bottom: 16px;
-  border: 1px solid rgba(239, 68, 68, 0.28);
+  border: 1px solid #fca5a5;
   border-radius: var(--radius-lg);
   padding: 16px;
-  background: rgba(239, 68, 68, 0.08);
+  background: #fff7f7;
 }
 
 .showtime-conflict-header {
@@ -2328,13 +2328,15 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #fecaca;
+  color: #b91c1c;
   font-size: 14px;
+  font-weight: 900;
 }
 
 .showtime-conflict-header span {
-  color: var(--color-text-secondary);
+  color: #7f1d1d;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .showtime-conflict-list {
@@ -2347,10 +2349,11 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
   grid-template-columns: minmax(160px, 0.75fr) minmax(220px, 1fr) minmax(180px, 1fr);
   gap: 14px;
   align-items: start;
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid #fecaca;
   border-radius: var(--radius-md);
   padding: 12px;
-  background: rgba(10, 14, 26, 0.34);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(127, 29, 29, 0.08);
 }
 
 .showtime-conflict-item strong,
@@ -2359,14 +2362,16 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
 }
 
 .showtime-conflict-item strong {
-  color: var(--color-text-primary);
+  color: #111827;
   font-size: 13px;
+  font-weight: 800;
 }
 
 .showtime-conflict-item small,
 .showtime-conflict-message {
-  color: var(--color-text-secondary);
+  color: #374151;
   font-size: 12px;
+  font-weight: 600;
   line-height: 1.45;
 }
 
@@ -2386,11 +2391,11 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
 .showtime-conflict-range strong {
   display: inline-flex;
   align-items: center;
-  border: 1px solid rgba(255, 96, 112, 0.42);
+  border: 1px solid #fca5a5;
   border-radius: 999px;
   padding: 4px 9px;
-  background: rgba(255, 96, 112, 0.14);
-  color: #ff9aa5;
+  background: #fee2e2;
+  color: #b91c1c;
   font-size: 12px;
   font-weight: 800;
 }
@@ -2398,11 +2403,49 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
 .showtime-conflict-label {
   display: block;
   margin-bottom: 4px;
-  color: var(--color-text-muted);
+  color: #b91c1c;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+html.dark .admin-layout .showtime-conflict-panel {
+  border-color: #7f1d1d;
+  background: #240f14;
+}
+
+html.dark .admin-layout .showtime-conflict-header {
+  color: #fecaca;
+}
+
+html.dark .admin-layout .showtime-conflict-header span {
+  color: #fca5a5;
+}
+
+html.dark .admin-layout .showtime-conflict-item {
+  border-color: #4c1d24;
+  background: #151827;
+  box-shadow: none;
+}
+
+html.dark .admin-layout .showtime-conflict-item strong {
+  color: #f8fafc;
+}
+
+html.dark .admin-layout .showtime-conflict-item small,
+html.dark .admin-layout .showtime-conflict-message {
+  color: #d1d5db;
+}
+
+html.dark .admin-layout .showtime-conflict-label {
+  color: #fca5a5;
+}
+
+html.dark .admin-layout .showtime-conflict-range strong {
+  border-color: #991b1b;
+  background: #7f1d1d;
+  color: #fee2e2;
 }
 
 .showtime-form-panel {
@@ -3058,11 +3101,14 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
 .toast-container {
   position: fixed;
   top: 20px;
-  right: 20px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 300;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 10px;
+  width: min(460px, calc(100vw - 32px));
 }
 
 .toast {
@@ -4621,7 +4667,7 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
 
 .booking-admin-filters {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) 210px 210px auto;
+  grid-template-columns: minmax(280px, 1fr) 210px 210px;
   gap: 12px;
   align-items: center;
   border: 1px solid var(--color-border);
@@ -7394,17 +7440,7 @@ html.dark .admin-layout .showtime-alert.error .showtime-alert-icon {
   font-weight: 700;
 }
 
-.sidebar-footer-kicker svg {
-  color: #ff5364;
-  flex-shrink: 0;
-}
-
 .sidebar.collapsed .sidebar-footer-kicker {
-  justify-content: center;
-  padding: 9px;
-}
-
-.sidebar.collapsed .sidebar-footer-kicker span {
   display: none;
 }
 

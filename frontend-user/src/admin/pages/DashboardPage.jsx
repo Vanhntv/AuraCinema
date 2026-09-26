@@ -8,7 +8,6 @@ import {
   HiOutlineCheckCircle,
   HiOutlineFilm,
   HiOutlineClock,
-  HiOutlineLogout,
   HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineShoppingBag,
@@ -30,7 +29,6 @@ import {
 } from "../services/dashboardService";
 import RevenueChart from "../components/dashboard/RevenueChart";
 import MovieSearch from "../components/dashboard/MovieSearch";
-import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
   stats: {
@@ -123,7 +121,6 @@ const bookingStatusItems = [
 ];
 
 const DashboardPage = () => {
-  const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -554,10 +551,6 @@ const DashboardPage = () => {
     [dashboard.stats],
   );
 
-  const handleLogout = () => {
-    logout();
-  };
-
   return (
     <div className="dashboard-page">
       <div className="page-header dashboard-header">
@@ -574,10 +567,6 @@ const DashboardPage = () => {
           >
             <HiOutlineRefresh />
             Làm mới
-          </button>
-          <button className="btn btn-danger" onClick={handleLogout}>
-            <HiOutlineLogout />
-            Đăng xuất
           </button>
         </div>
       </div>
@@ -637,7 +626,6 @@ const DashboardPage = () => {
                     : numberFormatter.format(dashboard.bookingStatuses[status.key] || 0)}
                 </strong>
                 <span>{status.label}</span>
-                <small>{status.key}</small>
               </div>
             </div>
           ))}
