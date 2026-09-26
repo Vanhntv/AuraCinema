@@ -29,6 +29,21 @@ const showtimeSchema = new mongoose.Schema(
       vip: { type: Number, default: null, min: 0 },
       couple: { type: Number, default: null, min: 0 },
     },
+    pricing_mode: {
+      type: String,
+      enum: ["standard", "custom"],
+      default: null,
+    },
+    pricing_day_type: {
+      type: String,
+      enum: ["weekday", "weekend", "holiday"],
+      default: null,
+    },
+    pricing_rule_version: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     status: {
       type: String,
       enum: ["scheduled", "now_showing", "completed", "cancelled"],
