@@ -93,7 +93,6 @@
 .sidebar-link-icon { width: 24px; font-size: 20px; }
 .sidebar-footer { display: block; padding: 16px 0 20px; }
 .sidebar-footer-kicker { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; color: #667085; background: var(--surface-subtle); font-size: 12px; font-weight: 700; }
-.sidebar-footer-kicker svg { flex-shrink: 0; color: #ff5364; }
 .sidebar-footer-info { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
 .sidebar-footer-avatar, .header-user > div { color: #fff; background: var(--accent); }
 .sidebar-footer-details { min-width: 0; }
@@ -326,4 +325,497 @@
   .header-user span { display: none; }
   .header-icon[title="Chế độ tối"] { display: none; }
   .page-heading h1 { font-size: 22px; }
+}
+
+/* ============================================
+   Interactive staff header
+   ============================================ */
+.header {
+  overflow: visible;
+}
+
+.header-right {
+  position: relative;
+  overflow: visible;
+}
+
+.header-search {
+  position: relative;
+  z-index: 200;
+}
+
+.header-search input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.staff-search-dropdown {
+  position: absolute;
+  z-index: 1200;
+  top: calc(100% + 10px);
+  left: 0;
+  display: grid;
+  width: 100%;
+  min-width: 360px;
+  padding: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 20px 45px rgba(16, 24, 40, .2);
+}
+
+.staff-search-dropdown > button {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 9px;
+  color: var(--primary);
+  background: transparent;
+  text-align: left;
+  transition: color .15s ease, background .15s ease;
+}
+
+.staff-search-dropdown > button:hover,
+.staff-search-dropdown > button.active {
+  color: var(--accent);
+  background: rgba(70, 95, 255, .1);
+}
+
+.staff-search-dropdown > button svg {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-size: 17px;
+}
+
+.staff-search-dropdown > button strong {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.staff-search-dropdown > p {
+  margin: 0;
+  padding: 20px 14px;
+  color: var(--secondary);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.staff-notification-wrap {
+  position: relative;
+  z-index: 150;
+}
+
+.staff-notification-dropdown {
+  position: absolute;
+  z-index: 1100;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(420px, calc(100vw - 24px));
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 22px 50px rgba(16, 24, 40, .22);
+}
+
+.staff-notification-heading {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.staff-notification-heading > div {
+  min-width: 0;
+}
+
+.staff-notification-heading h2,
+.staff-notification-heading p {
+  margin: 0;
+}
+
+.staff-notification-heading h2 {
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.staff-notification-heading p {
+  margin-top: 4px;
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.staff-notification-heading > button {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.staff-notification-heading > button:hover:not(:disabled) {
+  background: rgba(70, 95, 255, .1);
+}
+
+.staff-notification-heading > button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.staff-notification-dropdown ul {
+  max-height: 360px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.staff-notification-dropdown li + li {
+  border-top: 1px solid var(--border);
+}
+
+.staff-notification-dropdown li > button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 94px;
+  gap: 5px;
+  padding: 15px 40px 15px 18px;
+  color: var(--primary);
+  background: var(--surface);
+  text-align: left;
+  transition: background .15s ease;
+}
+
+.staff-notification-dropdown li.unread > button {
+  background: #eff4ff;
+}
+
+.staff-notification-dropdown li > button:hover {
+  background: var(--surface-hover);
+}
+
+.staff-notification-dropdown li > button > i {
+  position: absolute;
+  top: 19px;
+  right: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f04438;
+}
+
+.staff-notification-dropdown li strong {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.staff-notification-dropdown li span {
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.55;
+}
+
+.staff-notification-dropdown li time {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ============================================
+   Staff dark theme
+   ============================================ */
+html.dark {
+  color-scheme: dark;
+  --border: #2b354c;
+  --muted: #94a3b8;
+  --secondary: #cbd5e1;
+  --primary: #f8fafc;
+  --accent: #8b7cff;
+  --gradient: linear-gradient(135deg, #6d5dfc, #8b5cf6);
+  --surface: #111827;
+  --surface-subtle: #182033;
+  --surface-hover: #222c42;
+  --shadow-card: 0 10px 26px rgba(0, 0, 0, .22);
+}
+
+html.dark,
+html.dark body,
+html.dark #root {
+  color: var(--primary);
+  background: #0b1020;
+}
+
+html.dark .staff-layout {
+  color: var(--primary);
+  background: linear-gradient(180deg, rgba(91, 75, 219, .09), transparent 240px), #0b1020;
+}
+
+html.dark .sidebar {
+  border-color: var(--border);
+  background: #101827;
+  box-shadow: 1px 0 0 rgba(255, 255, 255, .02);
+}
+
+html.dark .sidebar-logo-text,
+html.dark .sidebar-footer-details strong,
+html.dark .header-title-group > strong,
+html.dark .page-heading h1,
+html.dark .card-heading h2,
+html.dark .pos-step h2,
+html.dark .order-panel h2,
+html.dark .room-panel-heading h2,
+html.dark .room-detail-heading h2,
+html.dark .scanner-heading h2,
+html.dark .room-empty h2 {
+  color: #f8fafc;
+}
+
+html.dark .sidebar-link {
+  color: #cbd5e1;
+}
+
+html.dark .sidebar-link:hover {
+  color: #ffffff;
+  background: #1b2538;
+}
+
+html.dark .sidebar-link.active {
+  color: #a99cff;
+  background: rgba(109, 93, 252, .2);
+}
+
+html.dark .sidebar-footer-kicker,
+html.dark .sidebar-footer-info,
+html.dark .header-user,
+html.dark .header-toggle,
+html.dark .header-icon {
+  border-color: var(--border);
+  color: #cbd5e1;
+  background: var(--surface);
+}
+
+html.dark .sidebar-footer-kicker,
+html.dark .sidebar-footer-details span,
+html.dark .header-user small,
+html.dark .breadcrumb,
+html.dark .breadcrumb span:last-child,
+html.dark .page-heading p,
+html.dark .card-heading p,
+html.dark .pos-step p,
+html.dark .scanner-heading p,
+html.dark .room-choice small,
+html.dark .room-empty p {
+  color: #aab6cb;
+}
+
+html.dark .header {
+  border-color: var(--border);
+  color: var(--primary);
+  background: rgba(11, 16, 32, .94);
+}
+
+html.dark .header-toggle:hover,
+html.dark .header-icon:hover {
+  color: #ffffff;
+  background: var(--surface-hover);
+}
+
+html.dark .header-search input {
+  border-color: var(--border);
+  color: #f8fafc;
+  background: var(--surface);
+}
+
+html.dark .header-search input:focus {
+  border-color: #8b7cff;
+  box-shadow: 0 0 0 4px rgba(139, 124, 255, .18);
+}
+
+html.dark .header-user strong {
+  color: #f8fafc;
+}
+
+html.dark .staff-search-dropdown,
+html.dark .staff-notification-dropdown,
+html.dark .staff-notification-heading,
+html.dark .staff-notification-dropdown li > button {
+  border-color: var(--border);
+  color: #f8fafc;
+  background: var(--surface);
+}
+
+html.dark .staff-search-dropdown > button {
+  color: #e2e8f0;
+}
+
+html.dark .staff-search-dropdown > button:hover,
+html.dark .staff-search-dropdown > button.active {
+  color: #c4b5fd;
+  background: rgba(139, 124, 255, .18);
+}
+
+html.dark .staff-notification-dropdown li.unread > button {
+  background: #18233a;
+}
+
+html.dark .staff-notification-dropdown li > button:hover {
+  background: #202b42;
+}
+
+html.dark .staff-notification-heading h2,
+html.dark .staff-notification-dropdown li strong {
+  color: #f8fafc;
+}
+
+html.dark .staff-notification-heading p,
+html.dark .staff-notification-dropdown li span {
+  color: #cbd5e1;
+}
+
+html.dark .staff-notification-dropdown li time {
+  color: #aab6cb;
+}
+
+html.dark .stats-grid article,
+html.dark .content-card,
+html.dark .pos-workspace,
+html.dark .order-panel,
+html.dark .room-list-panel,
+html.dark .room-seat-panel,
+html.dark .scanner-panel,
+html.dark .shift-summary article {
+  border-color: var(--border);
+  color: var(--primary);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+html.dark .movie-card,
+html.dark .showtime-card,
+html.dark .showtime,
+html.dark .seat-map,
+html.dark .maintenance-map,
+html.dark .room-choice,
+html.dark .room-showtimes > button,
+html.dark .combo-card,
+html.dark .combo-image,
+html.dark .combo-message,
+html.dark .pos-date-tabs button,
+html.dark .scan-ticket-grid > div,
+html.dark .scanner-message,
+html.dark .scanner-token-form input {
+  border-color: var(--border);
+  color: #e2e8f0;
+  background: var(--surface-subtle);
+}
+
+html.dark .movie-card:hover,
+html.dark .movie-card.selected,
+html.dark .showtime-card:hover,
+html.dark .showtime-card.selected,
+html.dark .showtime:hover,
+html.dark .room-choice.selected,
+html.dark .room-showtimes > button:hover,
+html.dark .room-showtimes > button.active,
+html.dark .pos-date-tabs button:hover,
+html.dark .pos-date-tabs button.active {
+  border-color: #7667ed;
+  color: #ffffff;
+  background: #222c42;
+}
+
+html.dark .scanner-viewfinder {
+  border-color: #3c4970;
+  background: radial-gradient(circle, rgba(139, 124, 255, .13), transparent 62%), #0f172a;
+}
+
+html.dark .scanner-heading > span,
+html.dark .room-panel-heading button,
+html.dark .combo-actions button,
+html.dark .order-seats b {
+  color: #ddd6fe;
+  background: rgba(139, 124, 255, .18);
+}
+
+html.dark .outline-button,
+html.dark .scanner-controls button,
+html.dark .scan-next-button {
+  border-color: #4c5a78;
+  color: #c4b5fd;
+  background: var(--surface);
+}
+
+html.dark .outline-button:hover,
+html.dark .scanner-controls button:hover,
+html.dark .scan-next-button:hover {
+  background: var(--surface-hover);
+}
+
+html.dark .shift-meta strong,
+html.dark .shift-card-title,
+html.dark .combo-info strong,
+html.dark .order-breakdown strong,
+html.dark .pos-date-tabs button.active {
+  color: #f1f5f9;
+}
+
+html.dark .sale-success,
+html.dark .scanner-message.success,
+html.dark .scan-status,
+html.dark .room-feedback.success {
+  color: #bbf7d0;
+  background: rgba(22, 101, 52, .28);
+}
+
+html.dark .scanner-message.error,
+html.dark .scanner-result.error .scan-status,
+html.dark .room-feedback.error,
+html.dark .pos-alert,
+html.dark .shift-error,
+html.dark .combo-error {
+  color: #fecaca;
+  background: rgba(127, 29, 29, .3);
+}
+
+html.dark .maintenance-help {
+  border-color: rgba(245, 158, 11, .35);
+  color: #fde68a;
+  background: rgba(120, 53, 15, .25);
+}
+
+@media (max-width: 900px) {
+  .staff-search-dropdown {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .staff-notification-dropdown {
+    position: fixed;
+    top: calc(var(--header-height) + 8px);
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
 }
