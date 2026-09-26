@@ -82,7 +82,7 @@ function App() {
   return (
     <div className="min-h-screen bg-[var(--aura-ink)] text-white">
       <Toaster
-        position="top-right"
+        position={isAdminRoute ? 'top-center' : 'top-right'}
         toastOptions={{
           duration: 3600,
           style: {
