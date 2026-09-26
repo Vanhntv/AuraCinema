@@ -2504,7 +2504,7 @@
 
 .showtime-pricing-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(105px, 0.7fr));
+  grid-template-columns: minmax(210px, 1.4fr) repeat(3, minmax(120px, 0.8fr));
   gap: 12px;
   align-items: center;
   padding: 9px 0;
@@ -2524,6 +2524,69 @@
 .showtime-pricing-row > span:not(:first-child) {
   grid-template-columns: auto auto;
   justify-content: space-between;
+}
+
+.showtime-pricing-row.editable {
+  align-items: start;
+  padding: 12px 0;
+}
+
+.showtime-pricing-summary {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.showtime-pricing-mixed {
+  color: #fbbf24 !important;
+}
+
+.showtime-pricing-restore {
+  justify-self: start;
+  margin-top: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #93c5fd;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.showtime-pricing-restore:hover,
+.showtime-pricing-restore:focus-visible {
+  color: #dbeafe;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.showtime-pricing-restore:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
+.showtime-pricing-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.showtime-pricing-input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.showtime-pricing-field .form-error {
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .showtime-pricing-warning {
@@ -5425,6 +5488,15 @@
     grid-template-columns: 1fr;
   }
 
+  .showtime-pricing-field {
+    grid-template-columns: minmax(80px, 1fr) minmax(150px, 2fr);
+    align-items: center;
+  }
+
+  .showtime-pricing-field .form-error {
+    grid-column: 1 / -1;
+  }
+
   .showtime-time-row {
     align-items: stretch;
     flex-direction: column;
@@ -8020,6 +8092,19 @@
   border-color: #fcd34d;
   background: #fffbeb;
   color: #92400e;
+}
+
+.admin-layout .showtime-pricing-mixed {
+  color: #b45309 !important;
+}
+
+.admin-layout .showtime-pricing-restore {
+  color: #2563eb;
+}
+
+.admin-layout .showtime-pricing-restore:hover,
+.admin-layout .showtime-pricing-restore:focus-visible {
+  color: #1d4ed8;
 }
 
 .admin-layout .showtime-form-panel {

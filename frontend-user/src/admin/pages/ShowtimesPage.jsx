@@ -23,7 +23,9 @@ import {
 import {
   PRICING_MODE_CUSTOM,
   PRICING_MODE_STANDARD,
+  buildCustomPriceDrafts,
   buildShowtimePricingFields,
+  findPricingDayTypeForStartTime,
   groupShowtimePricingQuotes,
   pricingDayTypeLabels,
 } from "../utils/showtimePricing";
@@ -34,10 +36,6 @@ const emptyForm = {
   start_date: "",
   end_date: "",
   show_time: "",
-  base_price: "",
-  normal_price: "",
-  vip_price: "",
-  couple_price: "",
 };
 
 const text = {
@@ -108,6 +106,9 @@ const statusLabels = {
   completed: "Đã kết thúc",
   cancelled: "Đã hủy",
 };
+
+const getCustomPriceErrorKey = (dayType, field) =>
+  `pricing.${dayType}.${field}`;
 
 const normalizeShowtimeErrorMessage = (message, fallback) => {
   if (!message) return fallback;
@@ -445,6 +446,7 @@ const ShowtimesPage = () => {
   const [pricingPreview, setPricingPreview] = useState([]);
   const [pricingPreviewLoading, setPricingPreviewLoading] = useState(false);
   const [pricingPreviewError, setPricingPreviewError] = useState("");
+  const [customPriceDrafts, setCustomPriceDrafts] = useState({});
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [dateRangeAnchor, setDateRangeAnchor] = useState("");
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -698,13 +700,9 @@ const ShowtimesPage = () => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
-      ...(field === "normal_price" ? { base_price: value } : {}),
       ...(field === "start_date" ? { end_date: value } : {}),
     }));
     setFormErrors((prev) => ({ ...prev, [field]: "" }));
-    if (["base_price", "normal_price", "vip_price", "couple_price"].includes(field)) {
-      setPriceMode(PRICING_MODE_CUSTOM);
-    }
     if (!isEditing && ["movie_id", "room_id", "start_date", "end_date"].includes(field)) {
       setAutoScheduleSlots([]);
       setConflictShowtimes([]);
@@ -734,33 +732,67 @@ const ShowtimesPage = () => {
 
   const useStandardPricing = () => {
     setPriceMode(PRICING_MODE_STANDARD);
-    setFormErrors((current) => ({
-      ...current,
-      base_price: "",
-      normal_price: "",
-      vip_price: "",
-      couple_price: "",
-    }));
+    setCustomPriceDrafts(
+      buildCustomPriceDrafts({ quotes: pricingPreview }),
+    );
+    setFormErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.startsWith("pricing.")),
+      ),
+    );
   };
 
   const useCustomPricing = () => {
-    const firstQuote = pricingPreview[0]?.seat_prices;
     setPriceMode(PRICING_MODE_CUSTOM);
-    setFormData((current) => ({
+  };
+
+  const updateCustomPrice = (dayType, field, value) => {
+    setCustomPriceDrafts((current) => {
+      const nextDraft = {
+        ...current[dayType],
+        [field]: value,
+      };
+      const hasIncompletePrice = ["normal", "vip", "couple"].some(
+        (priceField) => !nextDraft[priceField],
+      );
+
+      return {
+        ...current,
+        [dayType]: {
+          ...nextDraft,
+          hasMixedPrices:
+            current[dayType]?.hasMixedPrices && hasIncompletePrice,
+        },
+      };
+    });
+    setFormErrors((current) => ({
       ...current,
-      base_price:
-        current.base_price ||
-        (firstQuote?.normal != null ? String(firstQuote.normal) : ""),
-      normal_price:
-        current.normal_price ||
-        (firstQuote?.normal != null ? String(firstQuote.normal) : ""),
-      vip_price:
-        current.vip_price ||
-        (firstQuote?.vip != null ? String(firstQuote.vip) : ""),
-      couple_price:
-        current.couple_price ||
-        (firstQuote?.couple != null ? String(firstQuote.couple) : ""),
+      [getCustomPriceErrorKey(dayType, field)]: "",
+      pricing_preview: "",
     }));
+  };
+
+  const restoreStandardPriceGroup = (dayType) => {
+    setCustomPriceDrafts((current) => {
+      const draft = current[dayType];
+      if (!draft?.standardPrices) return current;
+
+      return {
+        ...current,
+        [dayType]: {
+          ...draft,
+          ...draft.standardPrices,
+          hasMixedPrices: false,
+        },
+      };
+    });
+    setFormErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([key]) => !key.startsWith(`pricing.${dayType}.`),
+        ),
+      ),
+    );
   };
 
   const resetForm = () => {
@@ -773,6 +805,7 @@ const ShowtimesPage = () => {
     setPricingPreview([]);
     setPricingPreviewLoading(false);
     setPricingPreviewError("");
+    setCustomPriceDrafts({});
     setEditingGroupShowtimes([]);
     setDatePickerOpen(false);
     setDateRangeAnchor("");
@@ -808,6 +841,9 @@ const ShowtimesPage = () => {
 
     const currentStartTime = new Date(showtime.start_time);
     setEditingShowtime(showtime);
+    setPricingPreview([]);
+    setPricingPreviewError("");
+    setCustomPriceDrafts({});
     setEditingGroupShowtimes(
       relatedShowtimes
         .filter(canEditShowtime)
@@ -828,13 +864,6 @@ const ShowtimesPage = () => {
       start_date: toDateInputValue(showtime.start_time),
       end_date: toDateInputValue(showtime.start_time),
       show_time: toTimeInputValue(showtime.start_time),
-      base_price:
-        showtime.base_price !== undefined && showtime.base_price !== null
-          ? String(showtime.base_price)
-          : "",
-      normal_price: showtime.seat_prices?.normal != null ? String(showtime.seat_prices.normal) : "",
-      vip_price: showtime.seat_prices?.vip != null ? String(showtime.seat_prices.vip) : "",
-      couple_price: showtime.seat_prices?.couple != null ? String(showtime.seat_prices.couple) : "",
     });
     setFormErrors({});
     setFeedback({ type: "", message: "" });
@@ -881,24 +910,59 @@ const ShowtimesPage = () => {
     }
 
     if (priceMode === PRICING_MODE_CUSTOM) {
-      ["normal_price", "vip_price", "couple_price"].forEach((field) => {
-        if (formData[field] === "") errors[field] = text.priceRequired;
-        else if (!Number.isFinite(Number(formData[field])) || Number(formData[field]) < 0) {
-          errors[field] = text.priceInvalid;
-        }
-      });
+      const previewCoversEverySlot = slotTimes.every((slot) =>
+        findPricingDayTypeForStartTime(pricingPreview, slot),
+      );
+
+      if (
+        pricingPreviewLoading ||
+        pricingPreviewError ||
+        !previewCoversEverySlot
+      ) {
+        errors.pricing_preview = pricingPreviewError
+          ? "Không thể xác định nhóm ngày. Hãy tải lại bảng giá trước khi lưu."
+          : "Đang xác định nhóm giá cho các suất chiếu. Vui lòng thử lại.";
+      } else {
+        const activeDayTypes = new Set(
+          slotTimes.map((slot) =>
+            findPricingDayTypeForStartTime(pricingPreview, slot),
+          ),
+        );
+
+        activeDayTypes.forEach((dayType) => {
+          const draft = customPriceDrafts[dayType];
+          ["normal", "vip", "couple"].forEach((field) => {
+            const value = draft?.[field];
+            const errorKey = getCustomPriceErrorKey(dayType, field);
+            if (value === "" || value == null) errors[errorKey] = text.priceRequired;
+            else if (!Number.isFinite(Number(value)) || Number(value) < 0) {
+              errors[errorKey] = text.priceInvalid;
+            }
+          });
+        });
+      }
     }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const buildShowtimePayload = (startDateTime) => ({
-    movie_id: formData.movie_id,
-    room_id: formData.room_id,
-    start_time: startDateTime.toISOString(),
-    ...buildShowtimePricingFields({ mode: priceMode, formData }),
-  });
+  const buildShowtimePayload = (startDateTime) => {
+    const dayType = findPricingDayTypeForStartTime(
+      pricingPreview,
+      startDateTime,
+    );
+
+    return {
+      movie_id: formData.movie_id,
+      room_id: formData.room_id,
+      start_time: startDateTime.toISOString(),
+      ...buildShowtimePricingFields({
+        mode: priceMode,
+        prices: dayType ? customPriceDrafts[dayType] : null,
+      }),
+    };
+  };
 
   const getFormSlotTimes = () => {
     if (autoScheduleSlots.length) {
@@ -1129,13 +1193,6 @@ const ShowtimesPage = () => {
     if (!formData.movie_id) errors.movie_id = text.requiredMovie;
     if (!formData.room_id) errors.room_id = text.requiredRoom;
     if (!formData.start_date) errors.start_date = text.requiredStart;
-    if (priceMode === PRICING_MODE_CUSTOM) {
-      ["normal_price", "vip_price", "couple_price"].forEach((field) => {
-        if (formData[field] !== "" && Number(formData[field]) < 0) {
-          errors[field] = text.priceInvalid;
-        }
-      });
-    }
 
     if (!selectedMovie?.duration || Number(selectedMovie.duration) <= 0) {
       errors.movie_id = "Phim chưa có thời lượng để tự động xếp lịch.";
@@ -1428,7 +1485,36 @@ const ShowtimesPage = () => {
           },
           { signal: controller.signal },
         );
-        setPricingPreview(response.data?.data || []);
+        const quotes = response.data?.data || [];
+        const initialDrafts = buildCustomPriceDrafts({
+          quotes,
+          showtimes:
+            isEditing && priceMode === PRICING_MODE_CUSTOM
+              ? editingGroupShowtimes.length
+                ? editingGroupShowtimes
+                : [editingShowtime].filter(Boolean)
+              : [],
+        });
+
+        setPricingPreview(quotes);
+        setFormErrors((current) => ({
+          ...current,
+          pricing_preview: "",
+        }));
+        setCustomPriceDrafts((current) =>
+          Object.fromEntries(
+            Object.entries(initialDrafts).map(([dayType, initialDraft]) => [
+              dayType,
+              priceMode === PRICING_MODE_CUSTOM && current[dayType]
+                ? {
+                    ...initialDraft,
+                    ...current[dayType],
+                    standardPrices: initialDraft.standardPrices,
+                  }
+                : initialDraft,
+            ]),
+          ),
+        );
       } catch (error) {
         if (error.code === "ERR_CANCELED") return;
         setPricingPreview([]);
@@ -1444,13 +1530,19 @@ const ShowtimesPage = () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [formData.room_id, isFormOpen, pricingPreviewKey]);
+  }, [
+    editingGroupShowtimes,
+    editingShowtime,
+    formData.room_id,
+    isEditing,
+    isFormOpen,
+    priceMode,
+    pricingPreviewKey,
+  ]);
   const pricingPreviewGroups = useMemo(
     () => groupShowtimePricingQuotes(pricingPreview),
     [pricingPreview],
   );
-  const hasMixedPricingDayTypes =
-    new Set(pricingPreviewGroups.map((group) => group.dayType)).size > 1;
   const autoScheduleSlotGroups = useMemo(
     () => groupSlotsByDate(autoScheduleSlots),
     [autoScheduleSlots],
@@ -1810,60 +1902,105 @@ const ShowtimesPage = () => {
                   </button>
                 </div>
                 <span className={`showtime-pricing-mode ${priceMode}`}>
-                  {priceMode === PRICING_MODE_STANDARD ? "Tự động theo ngày" : "Áp dụng đồng giá"}
+                  {priceMode === PRICING_MODE_STANDARD
+                    ? "Tự động theo ngày"
+                    : "Chỉnh theo nhóm ngày"}
                 </span>
                 {pricingPreviewGroups.length ? (
                   <div className="showtime-pricing-breakdown">
-                    {pricingPreviewGroups.map((group) => (
-                      <div className="showtime-pricing-row" key={`${group.dayType}-${group.dates.join("-")}`}>
-                        <span>
-                          <strong>{pricingDayTypeLabels[group.dayType] || group.dayType}</strong>
-                          <small>
-                            {group.dates.map(formatDateRangeValue).join(", ")} · {group.slotCount} suất
-                          </small>
-                        </span>
-                        <span>Thường <strong>{formatCurrency(group.prices.normal)}</strong></span>
-                        <span>VIP <strong>{formatCurrency(group.prices.vip)}</strong></span>
-                        <span>Đôi <strong>{formatCurrency(group.prices.couple)}</strong></span>
-                      </div>
-                    ))}
+                    {pricingPreviewGroups.map((group) => {
+                      const draft = customPriceDrafts[group.dayType];
+                      const isCustom = priceMode === PRICING_MODE_CUSTOM;
+                      const priceColumns = [
+                        ["normal", "Thường"],
+                        ["vip", "VIP"],
+                        ["couple", "Đôi"],
+                      ];
+
+                      return (
+                        <div
+                          className={`showtime-pricing-row ${isCustom ? "editable" : ""}`}
+                          key={`${group.dayType}-${group.dates.join("-")}`}
+                        >
+                          <div className="showtime-pricing-summary">
+                            <strong>
+                              {pricingDayTypeLabels[group.dayType] || group.dayType}
+                            </strong>
+                            <small>
+                              {group.dates.map(formatDateRangeValue).join(", ")} ·{" "}
+                              {group.slotCount} suất
+                            </small>
+                            {isCustom && draft?.hasMixedPrices ? (
+                              <small className="showtime-pricing-mixed">
+                                Nhóm này đang có nhiều mức giá. Nhập bộ giá mới để đồng bộ.
+                              </small>
+                            ) : null}
+                            {isCustom ? (
+                              <button
+                                type="button"
+                                className="showtime-pricing-restore"
+                                onClick={() =>
+                                  restoreStandardPriceGroup(group.dayType)
+                                }
+                              >
+                                Khôi phục giá chuẩn
+                              </button>
+                            ) : null}
+                          </div>
+                          {priceColumns.map(([field, label]) => {
+                            const errorKey = getCustomPriceErrorKey(
+                              group.dayType,
+                              field,
+                            );
+                            return isCustom ? (
+                              <label
+                                className="showtime-pricing-field"
+                                key={field}
+                              >
+                                <span>{label}</span>
+                                <input
+                                  className={`form-input showtime-pricing-input ${formErrors[errorKey] ? "error" : ""}`}
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="0"
+                                  step="1000"
+                                  value={draft?.[field] ?? ""}
+                                  onChange={(event) =>
+                                    updateCustomPrice(
+                                      group.dayType,
+                                      field,
+                                      event.target.value,
+                                    )
+                                  }
+                                  aria-label={`${label} - ${pricingDayTypeLabels[group.dayType] || group.dayType}`}
+                                  required
+                                />
+                                {formErrors[errorKey] ? (
+                                  <small className="form-error">
+                                    {formErrors[errorKey]}
+                                  </small>
+                                ) : null}
+                              </label>
+                            ) : (
+                              <span key={field}>
+                                {label}{" "}
+                                <strong>
+                                  {formatCurrency(group.prices[field])}
+                                </strong>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {formErrors.pricing_preview ? (
+                  <div className="showtime-pricing-warning" role="alert">
+                    {formErrors.pricing_preview}
                   </div>
                 ) : null}
               </div>
-
-              {priceMode === PRICING_MODE_CUSTOM ? (
-                <>
-                  <div className="showtime-pricing-warning" role="status">
-                    {hasMixedPricingDayTypes
-                      ? "Khoảng ngày đang gồm nhiều loại ngày. Bộ giá ngoại lệ dưới đây sẽ áp dụng giống nhau cho tất cả suất đã chọn."
-                      : "Bộ giá ngoại lệ sẽ áp dụng cho tất cả suất chiếu đang chọn."}
-                  </div>
-                  {[
-                    ["normal_price", "Giá ghế thường"],
-                    ["vip_price", "Giá ghế VIP"],
-                    ["couple_price", "Giá ghế đôi"],
-                  ].map(([field, label]) => (
-                    <label className="form-group" key={field}>
-                      <span className="form-label">{label}</span>
-                      <input
-                        className={`form-input ${formErrors[field] ? "error" : ""}`}
-                        type="number"
-                        min="0"
-                        step="1000"
-                        value={formData[field]}
-                        onChange={(event) => updateField(field, event.target.value)}
-                        placeholder="Ví dụ: 80000"
-                        required
-                      />
-                      {formErrors[field] ? (
-                        <span className="form-error">{formErrors[field]}</span>
-                      ) : (
-                        <span className="form-hint">Giá snapshot ngoại lệ của suất chiếu.</span>
-                      )}
-                    </label>
-                  ))}
-                </>
-              ) : null}
 
               <label className="form-group">
                 <span className="form-label">
@@ -2047,16 +2184,25 @@ const ShowtimesPage = () => {
                   <HiOutlineCash />
                   {priceMode === PRICING_MODE_STANDARD
                     ? "Mỗi ngày dùng đúng giá chuẩn tại thời điểm tạo suất"
-                    : `Đồng giá: thường ${formatCurrency(formData.normal_price)} · VIP ${formatCurrency(formData.vip_price)} · Đôi ${formatCurrency(formData.couple_price)}`}
+                    : "Giá ngoại lệ được áp dụng riêng theo từng nhóm ngày"}
                 </span>
-                {priceMode === PRICING_MODE_STANDARD
-                  ? pricingPreviewGroups.map((group) => (
-                      <span key={`preview-${group.dayType}-${group.dates.join("-")}`}>
-                        <HiOutlineCash />
-                        {pricingDayTypeLabels[group.dayType] || group.dayType}: thường {formatCurrency(group.prices.normal)} · VIP {formatCurrency(group.prices.vip)} · Đôi {formatCurrency(group.prices.couple)}
-                      </span>
-                    ))
-                  : null}
+                {pricingPreviewGroups.map((group) => {
+                  const prices =
+                    priceMode === PRICING_MODE_CUSTOM
+                      ? customPriceDrafts[group.dayType] || {}
+                      : group.prices;
+                  return (
+                    <span
+                      key={`preview-${group.dayType}-${group.dates.join("-")}`}
+                    >
+                      <HiOutlineCash />
+                      {pricingDayTypeLabels[group.dayType] || group.dayType}:
+                      thường {formatCurrency(prices.normal)} · VIP{" "}
+                      {formatCurrency(prices.vip)} · Đôi{" "}
+                      {formatCurrency(prices.couple)}
+                    </span>
+                  );
+                })}
               </div>
             </aside>
 
