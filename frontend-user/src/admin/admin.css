@@ -8258,3 +8258,194 @@
   background: #fee2e2;
   color: #b91c1c;
 }
+
+/* Class-based dark mode controlled by the admin header. */
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark .admin-layout {
+  --color-bg-primary: #0b1120;
+  --color-bg-secondary: #111827;
+  --color-bg-tertiary: #172033;
+  --color-bg-card: #111827;
+  --color-bg-card-hover: #172033;
+  --color-bg-input: #0f172a;
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+  --gradient-sidebar: #0f172a;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-border: #263449;
+  --color-border-hover: #3b82f6;
+  background:
+    linear-gradient(180deg, rgba(37, 99, 235, 0.08), transparent 240px),
+    var(--color-bg-primary);
+}
+
+html.dark .admin-layout .sidebar,
+html.dark .admin-layout .sidebar-footer-info,
+html.dark .admin-layout .header,
+html.dark .admin-layout .header-user,
+html.dark .admin-layout .header-toggle-btn,
+html.dark .admin-layout .header-icon-btn,
+html.dark .admin-layout .stat-card,
+html.dark .admin-layout .dashboard-booking-status-panel,
+html.dark .admin-layout .dashboard-daily-panel,
+html.dark .admin-layout .dashboard-revenue-filter,
+html.dark .admin-layout .dashboard-comparison-panel,
+html.dark .admin-layout .data-table-container,
+html.dark .admin-layout .table-card,
+html.dark .admin-layout .form-card,
+html.dark .admin-layout .settings-panel,
+html.dark .admin-layout .ticket-scanner-panel,
+html.dark .admin-layout .showtime-form-panel,
+html.dark .admin-layout .showtime-pricing-panel,
+html.dark .admin-layout .showtime-date-picker,
+html.dark .admin-layout .showtime-auto-slots,
+html.dark .admin-layout .showtime-preview {
+  border-color: var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+}
+
+html.dark .admin-layout .header {
+  background: rgba(11, 17, 32, 0.94);
+}
+
+html.dark .admin-layout .sidebar-link,
+html.dark .admin-layout .header-title-group strong,
+html.dark .admin-layout .header-user-name,
+html.dark .admin-layout .page-header-info h1,
+html.dark .admin-layout .dashboard-panel-header h2,
+html.dark .admin-layout .dashboard-daily-header h2,
+html.dark .admin-layout .dashboard-revenue-filter h2,
+html.dark .admin-layout .settings-panel-header h2 {
+  color: var(--color-text-primary);
+}
+
+html.dark .admin-layout .sidebar-link:hover,
+html.dark .admin-layout .header-toggle-btn:hover,
+html.dark .admin-layout .header-icon-btn:hover {
+  border-color: #334155;
+  background: #1e293b;
+  color: #f8fafc;
+}
+
+html.dark .admin-layout .sidebar-link.active {
+  background: rgba(37, 99, 235, 0.18);
+  color: #60a5fa;
+}
+
+html.dark .admin-layout .sidebar-footer-kicker,
+html.dark .admin-layout input,
+html.dark .admin-layout textarea,
+html.dark .admin-layout select {
+  border-color: var(--color-border);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+}
+
+html.dark .admin-layout .data-table thead,
+html.dark .admin-layout .data-table thead tr,
+html.dark .admin-layout .data-table th,
+html.dark .admin-layout .bookings-table th:last-child,
+html.dark .admin-layout .ticket-scan-table th {
+  border-color: var(--color-border);
+  background: #172033;
+  color: #94a3b8;
+}
+
+html.dark .admin-layout .data-table td {
+  border-color: var(--color-border);
+  background: var(--color-bg-card);
+  color: var(--color-text-secondary);
+}
+
+/* Keep header popovers above admin tables and sticky page controls. */
+.admin-layout .header {
+  z-index: 400;
+  overflow: visible;
+}
+
+.admin-layout .header-search-dropdown {
+  z-index: 1200;
+  min-width: 340px;
+  padding: 8px;
+}
+
+.admin-layout .header-search-result {
+  min-height: 44px;
+  gap: 12px;
+  padding: 10px 16px;
+  line-height: 1.5;
+  font-weight: 700;
+}
+
+.admin-layout .header-notification-dropdown {
+  z-index: 1100;
+  width: min(420px, calc(100vw - 24px));
+  background-color: #ffffff;
+  color: #111827;
+  opacity: 1;
+  isolation: isolate;
+}
+
+.admin-layout .header-notification-heading {
+  min-height: 80px;
+  gap: 16px;
+  padding: 16px 20px;
+}
+
+.admin-layout .header-notification-action {
+  padding: 8px 12px;
+}
+
+.admin-layout .header-notification-summary {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.admin-layout .header-notification-item {
+  min-height: 92px;
+  padding: 16px 20px;
+}
+
+.admin-layout .header-notification-item p {
+  margin-top: 6px;
+  padding-right: 20px;
+  color: #374151;
+  font-weight: 600;
+}
+
+.admin-layout .header-notification-item time {
+  margin-top: 8px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.admin-layout .header-notification-item h3 {
+  color: #111827;
+  font-weight: 700;
+}
+
+html.dark .admin-layout .header-notification-item h3 {
+  color: #f9fafb;
+}
+
+html.dark .admin-layout .header-notification-summary {
+  color: #d1d5db;
+}
+
+html.dark .admin-layout .header-notification-item p {
+  color: #e5e7eb;
+}
+
+html.dark .admin-layout .header-notification-item time {
+  color: #d1d5db;
+}
+
+html.dark .admin-layout .header-notification-dropdown {
+  background-color: #1f2937;
+  color: #f3f4f6;
+}
