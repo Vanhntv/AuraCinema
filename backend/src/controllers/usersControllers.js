@@ -1,30 +1,21 @@
-import { randomBytes, randomInt, scrypt as scryptCallback } from "crypto";
 import mongoose from "mongoose";
 import { withTransaction } from "../services/transactionService.js";
-import { promisify } from "util";
 import AuditLog from "../models/AuditLog.js";
 import Booking from "../models/Booking.js";
 import RewardPointLog from "../models/RewardPointLog.js";
 import User from "../models/User.js";
 import UserVoucher from "../models/UserVoucher.js";
 
-const scrypt = promisify(scryptCallback);
+import { issueEmailOtp, OTP_TTL_MS } from "../services/emailOtpService.js";
 
 const ALLOWED_GENDERS = ["male", "female", "other", null, ""];
 const ALLOWED_TIERS = ["member", "vip", "vvip"];
 const ALLOWED_ROLES = ["user", "staff", "admin"];
 const ALLOWED_ACCOUNT_STATUSES = ["active", "banned", "unverified"];
 const ADMIN_EDITABLE_PROFILE_FIELDS = new Set(["full_name", "phone", "birth_date", "gender"]);
-const RESET_OTP_TTL_MS = 10 * 60 * 1000;
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
-
-const hashPassword = async (password) => {
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = await scrypt(password, salt, 64);
-  return `${salt}:${derivedKey.toString("hex")}`;
-};
 
 const resolveAccountStatus = (user) => {
   if (user.account_status) return user.account_status;
@@ -320,6 +311,17 @@ export const updateUserBasicInfo = async (req, res) => {
       return res.status(400).json({ success: false, message: "Không có thông tin hợp lệ để cập nhật" });
     }
 
+    if (data.email && data.email !== currentUser.email) {
+      data.email_verified_at = null;
+      data.email_verification_required = true;
+      data.password_changed_at = new Date(Date.now() + 1000);
+      data.email_verification = null;
+      data.password_recovery = null;
+      if ((data.account_status || resolveAccountStatus(currentUser)) !== "banned") {
+        data.account_status = "unverified";
+        data.status = false;
+      }
+    }
     const before = pickAuditFields(currentUser);
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, deleted_at: null },
@@ -477,32 +479,27 @@ export const forceResetPassword = async (req, res) => {
       return res.status(403).json({ success: false, message: "Không được đặt lại mật khẩu của tài khoản admin từ trang quản lý người dùng" });
     }
 
-    const otp = String(randomInt(100000, 1000000));
-    user.password_reset_otp = await hashPassword(otp);
-    user.password_reset_expires_at = new Date(Date.now() + RESET_OTP_TTL_MS);
-    user.password_reset_attempts = 0;
-    await user.save();
+    if (resolveAccountStatus(user) === "banned") {
+      return res.status(409).json({ success: false, message: "Tài khoản đang bị khóa." });
+    }
+    await issueEmailOtp({ userId: user._id, purpose: "recovery" });
 
     await writeAuditLog({
       req,
       targetUserId: req.params.id,
       action: "FORCE_RESET_PASSWORD",
       before: null,
-      after: { password_reset_expires_at: user.password_reset_expires_at },
+      after: { password_reset_expires_at: new Date(Date.now() + OTP_TTL_MS) },
       reason: req.body.reason,
     });
 
     const payload = {
       success: true,
-      message: "Đã tạo yêu cầu đặt lại mật khẩu cho người dùng",
+      message: "Đã gửi email đặt lại mật khẩu cho người dùng",
     };
-
-    if (process.env.NODE_ENV !== "production") {
-      payload.dev_otp = otp;
-    }
 
     return res.json(payload);
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || "Không thể gửi email đặt lại mật khẩu." });
   }
 };
