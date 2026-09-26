@@ -54,7 +54,7 @@ test("email auth with isolated MongoDB", { skip: process.env.RUN_EMAIL_AUTH_INTE
   };
   let seq = 0;
   const signup = async () => {
-    const email = `guest${++seq}@example.com`;
+    const email = `guest${++seq}@gmail.com`;
     const res = await call(register, { email, full_name: "Test Guest", password, confirm_password: password });
     assert.equal(res.statusCode, 201);
     return { email, otp: mail.at(-1).otp, user: await User.findOne({ email }), res };
@@ -92,10 +92,16 @@ test("email auth with isolated MongoDB", { skip: process.env.RUN_EMAIL_AUTH_INTE
     const guesses = await Promise.allSettled(Array.from({ length: 8 }, () => consumeEmailOtp({ email, otp: wrong, purpose: "verification" })));
     assert.equal(guesses.filter(x => x.status === "rejected").length, 8);
     assert.equal((await User.findById(user._id).select("+email_verification")).email_verification.attempts, 5);
-    await assert.rejects(consumeEmailOtp({ email, otp, purpose: "verification" }));
+    await assert.rejects(
+      consumeEmailOtp({ email, otp, purpose: "verification" }),
+      { statusCode: 429, code: "OTP_ATTEMPTS_EXCEEDED" },
+    );
     const other = await signup();
     await User.updateOne({ _id: other.user._id }, { $set: { "email_verification.expires_at": new Date(0) } });
-    await assert.rejects(consumeEmailOtp({ email: other.email, otp: other.otp, purpose: "verification" }));
+    await assert.rejects(
+      consumeEmailOtp({ email: other.email, otp: other.otp, purpose: "verification" }),
+      { statusCode: 410, code: "OTP_EXPIRED", publicMessage: "Mã OTP đã hết hạn" },
+    );
   });
   await t.test("parallel successful verification consumes the code exactly once", async () => {
     const { email, otp } = await signup();

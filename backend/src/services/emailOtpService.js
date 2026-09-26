@@ -10,7 +10,7 @@ const WINDOW_MS = 60 * 60 * 1000;
 const MAX_SENDS = 5;
 const MAX_ATTEMPTS = 5;
 const fields = { verification: "email_verification", recovery: "password_recovery" };
-const error = (message, statusCode = 400, code = "INVALID_OTP") =>
+const error = (message, statusCode = 400, code = "OTP_INVALID") =>
   Object.assign(new Error(message), { publicMessage: message, statusCode, code });
 const fieldFor = (purpose) => {
   if (!fields[purpose]) throw new Error("Unknown OTP purpose");
@@ -83,19 +83,39 @@ export const issueEmailOtp = async ({ userId, purpose, now = new Date() }, {
 export const consumeEmailOtp = async ({ email, otp, purpose, passwordHash, now = new Date() }, {
   users = User,
 } = {}) => {
-  if (typeof otp !== "string" || !/^\d{6}$/.test(otp)) throw error("Mã OTP phải gồm 6 chữ số.");
+  if (typeof otp !== "string" || !/^\d{6}$/.test(otp)) {
+    throw error("Mã OTP không chính xác", 400, "OTP_INVALID");
+  }
   const field = fieldFor(purpose);
   const base = { email, ...eligible(purpose) };
+  const currentUser = await users.findOne(base).select(`+${field}`);
+  const currentChallenge = currentUser?.[field];
+
+  if (!currentChallenge?.hash) {
+    throw error("Mã OTP không chính xác", 400, "OTP_INVALID");
+  }
+  if (!currentChallenge.expires_at || currentChallenge.expires_at <= now) {
+    throw error("Mã OTP đã hết hạn", 410, "OTP_EXPIRED");
+  }
+  if (Number(currentChallenge.attempts || 0) >= MAX_ATTEMPTS) {
+    throw error(
+      "Bạn đã nhập sai mã OTP quá 5 lần. Vui lòng yêu cầu mã mới.",
+      429,
+      "OTP_ATTEMPTS_EXCEEDED",
+    );
+  }
+
   // Claim an attempt before expensive hashing; parallel guesses share the same budget.
   const user = await users.findOneAndUpdate({
     ...base,
-    [`${field}.hash`]: { $type: "string" },
+    [`${field}.request_id`]: currentChallenge.request_id,
+    [`${field}.hash`]: currentChallenge.hash,
     [`${field}.expires_at`]: { $gt: now },
     [`${field}.attempts`]: { $lt: MAX_ATTEMPTS },
   }, { $inc: { [`${field}.attempts`]: 1 } }, { returnDocument: "after" }).select(`+${field}`);
   const challenge = user?.[field];
   if (!challenge || !await verifyOtpHash(otp, challenge.hash)) {
-    throw error("Mã không đúng, đã hết hạn hoặc đã nhập sai 5 lần. Vui lòng kiểm tra hoặc yêu cầu mã mới.");
+    throw error("Mã OTP không chính xác", 400, "OTP_INVALID");
   }
   const changes = purpose === "verification" ? {
     email_verified_at: now, email_verification_required: false,
@@ -115,5 +135,7 @@ export const consumeEmailOtp = async ({ email, otp, purpose, passwordHash, now =
     $set: changes,
     $unset: { [`${field}.hash`]: 1, [`${field}.expires_at`]: 1 },
   });
-  if (result.modifiedCount !== 1) throw error("Mã đã được sử dụng hoặc thay thế. Vui lòng yêu cầu mã mới.");
+  if (result.modifiedCount !== 1) {
+    throw error("Mã OTP không chính xác", 400, "OTP_INVALID");
+  }
 };

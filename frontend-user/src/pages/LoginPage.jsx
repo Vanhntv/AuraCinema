@@ -3,9 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 import { getStaffAppUrl, isAdminUser, isStaffUser } from "../utils/authRedirect";
+import { getEmailSyntaxError, normalizeEmailForRequest } from "../utils/emailValidation";
 import { getApiErrorMessage, showToast } from "../utils/toast";
-
-const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -49,9 +48,8 @@ function LoginPage() {
       return "Vui lòng nhập email.";
     }
 
-    if (!isValidEmail(email)) {
-      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
-    }
+    const emailError = getEmailSyntaxError(email);
+    if (emailError) return emailError;
 
     if (!formData.password) {
       return "Vui lòng nhập mật khẩu.";
@@ -79,7 +77,7 @@ function LoginPage() {
 
     try {
       const response = await login({
-        email: formData.email.trim(),
+        email: normalizeEmailForRequest(formData.email),
         password: formData.password,
       });
 
@@ -96,7 +94,7 @@ function LoginPage() {
       navigate(isAdminRedirect ? "/tai-khoan" : from, { replace: true });
     } catch (err) {
       if (err.response?.data?.code === "EMAIL_NOT_VERIFIED") {
-        navigate("/xac-minh-email", { state: { email: formData.email.trim(), from,
+        navigate("/xac-minh-email", { state: { email: normalizeEmailForRequest(formData.email), from,
           message: "Email chưa được xác minh. Nhập mã đã nhận hoặc chọn Gửi lại mã." } });
         return;
       }

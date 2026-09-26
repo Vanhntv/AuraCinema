@@ -3,9 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { HiOutlineEye, HiOutlineEyeOff } from "react-icons/hi";
 import { useAuth } from "../hooks/useAuth";
 import { LOGIN_PATH } from "../utils/authRoutes";
+import { getEmailSyntaxError, normalizeEmailForRequest } from "../utils/emailValidation";
 import { getApiErrorMessage, showToast } from "../utils/toast";
 
-const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(String(email || "").trim());
 const isValidPhone = (phone) => /^0\d{9}$/.test(String(phone || "").trim());
 
 function RegisterPage() {
@@ -19,6 +19,7 @@ function RegisterPage() {
     phone: "",
   });
   const [error, setError] = useState("");
+  const [emailSuggestion, setEmailSuggestion] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -29,6 +30,7 @@ function RegisterPage() {
       ...current,
       [name]: value,
     }));
+    if (name === "email") setEmailSuggestion("");
   };
 
   const validateForm = () => {
@@ -48,9 +50,8 @@ function RegisterPage() {
       return "Vui lòng nhập email.";
     }
 
-    if (!isValidEmail(email)) {
-      return "Email không hợp lệ. Vui lòng nhập đúng định dạng, ví dụ email@example.com.";
-    }
+    const emailError = getEmailSyntaxError(email);
+    if (emailError) return emailError;
 
     if (phone && !isValidPhone(phone)) {
       return "Số điện thoại không hợp lệ. Vui lòng nhập 10 số và bắt đầu bằng số 0.";
@@ -91,18 +92,19 @@ function RegisterPage() {
     try {
       const response = await register({
         full_name: formData.full_name.trim(),
-        email: formData.email.trim(),
+        email: normalizeEmailForRequest(formData.email),
         password: formData.password,
         confirm_password: formData.confirm_password,
         phone: formData.phone.trim() || undefined,
       });
       navigate("/xac-minh-email", {
         replace: true,
-        state: { email: formData.email.trim(), message: response.message,
+        state: { email: normalizeEmailForRequest(formData.email), message: response.message,
           retryAfter: response.retry_after_seconds || 0 },
       });
     } catch (err) {
       const message = getApiErrorMessage(err, "Đăng ký thất bại. Vui lòng thử lại.");
+      setEmailSuggestion(err.response?.data?.suggested_email || "");
       setError(message);
       showToast("error", message);
     } finally {
@@ -121,6 +123,19 @@ function RegisterPage() {
 
         <form className="auth-form auth-form-grid" noValidate onSubmit={handleSubmit}>
           {error && <div className="auth-error">{error}</div>}
+          {emailSuggestion && (
+            <button
+              className="auth-resend auth-field-full"
+              type="button"
+              onClick={() => {
+                setFormData((current) => ({ ...current, email: emailSuggestion }));
+                setEmailSuggestion("");
+                setError("");
+              }}
+            >
+              Dùng {emailSuggestion}
+            </button>
+          )}
 
           <label className="auth-field-full">
             Họ và tên

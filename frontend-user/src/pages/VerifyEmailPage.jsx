@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resendVerification, verifyEmail } from "../api/authApi";
 import { LOGIN_PATH } from "../utils/authRoutes";
+import { getEmailSyntaxError, normalizeEmailForRequest } from "../utils/emailValidation";
 import { getApiErrorMessage } from "../utils/toast";
 
 export default function VerifyEmailPage() {
@@ -24,14 +25,14 @@ export default function VerifyEmailPage() {
     deadline.current = Date.now() + seconds * 1000;
     setRemaining(seconds);
   };
-  const validEmail = () => /^\S+@\S+\.\S+$/.test(email.trim());
   const resend = async () => {
     if (busy || remaining) return;
     setError("");
-    if (!validEmail()) { setError("Vui lòng nhập email hợp lệ."); return; }
+    const emailError = getEmailSyntaxError(email);
+    if (emailError) { setError(emailError); return; }
     setBusy("send");
     try {
-      const response = await resendVerification(email.trim());
+      const response = await resendVerification(normalizeEmailForRequest(email));
       setMessage(response.message);
       setOtp("");
       startCooldown(response.retry_after_seconds || 60);
@@ -45,14 +46,16 @@ export default function VerifyEmailPage() {
     event.preventDefault();
     if (busy) return;
     setError("");
-    if (!validEmail() || !/^\d{6}$/.test(otp)) {
-      setError("Vui lòng nhập email hợp lệ và mã xác minh gồm 6 chữ số.");
+    const emailError = getEmailSyntaxError(email);
+    if (emailError || !/^\d{6}$/.test(otp)) {
+      setError(emailError || "Mã OTP không chính xác");
       return;
     }
     setBusy("verify");
     try {
-      const response = await verifyEmail({ email: email.trim(), otp });
-      navigate(LOGIN_PATH, { replace: true, state: { email: email.trim(),
+      const normalizedEmail = normalizeEmailForRequest(email);
+      const response = await verifyEmail({ email: normalizedEmail, otp });
+      navigate(LOGIN_PATH, { replace: true, state: { email: normalizedEmail,
         from: location.state?.from, message: response.message } });
     } catch (err) {
       setError(getApiErrorMessage(err, "Không thể xác minh. Vui lòng thử lại."));

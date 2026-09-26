@@ -20,7 +20,9 @@ Không có chế độ in OTP ra console/trả OTP trong JSON. Thiếu cấu hì
 
 ## Hành vi
 
-- `POST /api/auth/register`: tạo user `unverified`, `status=false`, `email_verification_required=true`; không cấp JWT. Trả `verification_required`, `email`, thời gian gửi lại và thông báo. Đăng ký lại tài khoản chờ xác minh không ghi đè mật khẩu.
+- `POST /api/auth/register`: kiểm tra cú pháp, lỗi gõ tên miền phổ biến, DNS MX/A/AAAA và email trùng trước khi tạo user `unverified`, `status=false`, `email_verification_required=true`; không cấp JWT. Trả `verification_required`, `email`, thời gian gửi lại và thông báo. Đăng ký lại tài khoản chờ xác minh không ghi đè mật khẩu.
+- Email được trim, phần tên miền chuyển về chữ thường và khóa đăng nhập lưu chữ thường để chống trùng. `gmail.com`, Outlook, Yahoo và tên miền công ty/trường học đều được hỗ trợ; dấu chấm và `+tag` trong username được chấp nhận.
+- DNS tạm thời lỗi trả `503 EMAIL_DOMAIN_CHECK_UNAVAILABLE`; tên miền không tồn tại trả `422 EMAIL_DOMAIN_INVALID`. Lỗi rõ ràng như `gmai.com` trả `EMAIL_DOMAIN_TYPO` cùng `suggested_email` để giao diện cho người dùng sửa nhanh.
 - `POST /api/auth/resend-verification` với `{ email }`: yêu cầu mã mới. Email không tồn tại/đã xác minh nhận thông báo chung.
 - `POST /api/auth/verify-email` với `{ email, otp }`: kích hoạt tài khoản và ghi `email_verified_at`; sau đó người dùng đăng nhập bằng mật khẩu.
 - `POST /api/auth/login`: chỉ sau khi mật khẩu đúng mới trả `403 EMAIL_NOT_VERIFIED` nếu cần xác minh. Không tự gửi thư mỗi lần đăng nhập.
@@ -30,7 +32,7 @@ Không có chế độ in OTP ra console/trả OTP trong JSON. Thiếu cấu hì
 
 ## Chính sách và tính nguyên tử
 
-OTP 6 chữ số, sinh bằng `crypto.randomInt`, lưu bằng scrypt với salt riêng; hạn 10 phút, tối đa 5 lượt kiểm tra mỗi mã. Gửi tối đa 5 lần/giờ/mục đích/tài khoản, cách nhau ít nhất 60 giây. Quota lưu trong MongoDB, vẫn có hiệu lực khi restart hoặc có nhiều backend. Lần gửi thất bại cũng tính vào quota, mã đó bị vô hiệu hóa.
+OTP 6 chữ số, sinh bằng `crypto.randomInt`, lưu bằng scrypt với salt riêng; hạn 10 phút, tối đa 5 lượt kiểm tra mỗi mã. Mã sai trả `OTP_INVALID`, hết hạn trả `OTP_EXPIRED`, vượt số lần thử trả `OTP_ATTEMPTS_EXCEEDED`. Gửi tối đa 5 lần/giờ/mục đích/tài khoản, cách nhau ít nhất 60 giây. Quota lưu trong MongoDB, vẫn có hiệu lực khi restart hoặc có nhiều backend. Lần gửi thất bại cũng tính vào quota, mã đó bị vô hiệu hóa.
 
 Challenge được nhúng trong User (ẩn khỏi truy vấn thông thường bằng `select:false`) để tiêu thụ OTP và cập nhật tài khoản/mật khẩu trong một thao tác MongoDB nguyên tử. Không cần transaction nhiều document. So khớp request ID/hash ngăn dùng lại mã, mã cũ sau resend và xóa nhầm mã mới khi request gửi trước thất bại muộn. Claim lượt thử trước khi so sánh hash ngăn vượt số lần thử bằng request đồng thời.
 

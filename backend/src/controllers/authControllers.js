@@ -7,6 +7,11 @@ import { signJwt } from "../utils/jwt.js";
 
 import { issueEmailOtp, consumeEmailOtp } from "../services/emailOtpService.js";
 import { assertEmailConfigured } from "../services/emailService.js";
+import {
+  normalizeEmailKey,
+  validateEmailSyntax,
+  validateRegistrationEmail,
+} from "../services/emailValidationService.js";
 
 const scrypt = promisify(scryptCallback);
 const DEFAULT_ROLE = "user";
@@ -29,8 +34,6 @@ const hashPassword = async (password) => {
   return `${salt}:${derivedKey.toString("hex")}`;
 };
 
-const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
-
 const isStrongPassword = (password) =>
   typeof password === "string" &&
   password.length >= 8 &&
@@ -40,14 +43,12 @@ const isStrongPassword = (password) =>
 const getTokenTtlSeconds = (user) =>
   resolveUserRole(user) === "admin" ? ADMIN_TOKEN_TTL_SECONDS : USER_TOKEN_TTL_SECONDS;
 
-const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
-
 const getRateLimitKey = (req) => {
   const forwardedFor = req.headers["x-forwarded-for"];
   const ip = Array.isArray(forwardedFor)
     ? forwardedFor[0]
     : String(forwardedFor || req.ip || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
-  return `${ip}:${normalizeEmail(req.body?.email)}`;
+  return `${ip}:${normalizeEmailKey(req.body?.email)}`;
 };
 
 const resetLoginAttempts = (req) => {
@@ -95,6 +96,7 @@ const sendAuthError = (res, error, fallback = SERVER_ERROR_MESSAGE) => {
     success: false,
     message: validationMessage || error?.publicMessage || fallback,
     code: error?.code,
+    ...(error?.suggested_email ? { suggested_email: error.suggested_email } : {}),
   });
 };
 
@@ -158,6 +160,7 @@ const sanitizeUser = (user) => {
   delete userResponse.password_reset_expires_at;
   delete userResponse.password_reset_attempts;
   userResponse.role = resolveUserRole(user);
+  userResponse.emailVerified = Boolean(userResponse.email_verified_at);
   return userResponse;
 };
 
@@ -217,12 +220,7 @@ export const register = async (req, res) => {
       });
     }
 
-    if (!isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Email không hợp lệ",
-      });
-    }
+    const { emailKey: normalizedEmail } = await validateRegistrationEmail(email);
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
@@ -238,7 +236,6 @@ export const register = async (req, res) => {
       });
     }
 
-    const normalizedEmail = normalizeEmail(email);
     const existingUser = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
@@ -303,14 +300,7 @@ export const login = async (req, res) => {
       });
     }
 
-    if (!isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Email không hợp lệ",
-      });
-    }
-
-    const normalizedEmail = normalizeEmail(email);
+    const { emailKey: normalizedEmail } = validateEmailSyntax(email);
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
@@ -385,14 +375,14 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email || !isValidEmail(email)) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email không hợp lệ",
+        message: "Email không đúng định dạng",
       });
     }
 
-    const normalizedEmail = normalizeEmail(email);
+    const { emailKey: normalizedEmail } = validateEmailSyntax(email);
     const user = await User.findOne({
       email: normalizedEmail,
       deleted_at: null,
@@ -428,12 +418,7 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    if (!isValidEmail(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Email không hợp lệ",
-      });
-    }
+    const { emailKey: normalizedEmail } = validateEmailSyntax(email);
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
@@ -449,7 +434,7 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    await consumeEmailOtp({ email: normalizeEmail(email), otp: String(otp).trim(),
+    await consumeEmailOtp({ email: normalizedEmail, otp: String(otp).trim(),
       purpose: "recovery", passwordHash: await hashPassword(password) });
 
     return res.status(200).json({
@@ -614,8 +599,7 @@ export const changePassword = async (req, res) => {
 
 export const resendVerification = async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    if (!isValidEmail(email)) return res.status(400).json({ success: false, message: "Email không hợp lệ" });
+    const { emailKey: email } = validateEmailSyntax(req.body.email);
     const user = await User.findOne({ email, deleted_at: null, email_verified_at: null,
       account_status: { $in: ["unverified", "active"] } });
     if (user) await issueEmailOtp({ userId: user._id, purpose: "verification" });
@@ -626,8 +610,7 @@ export const resendVerification = async (req, res) => {
 
 export const verifyEmail = async (req, res) => {
   try {
-    const email = normalizeEmail(req.body.email);
-    if (!isValidEmail(email)) return res.status(400).json({ success: false, message: "Email không hợp lệ" });
+    const { emailKey: email } = validateEmailSyntax(req.body.email);
     await consumeEmailOtp({ email, otp: String(req.body.otp || "").trim(), purpose: "verification" });
     return res.json({ success: true, message: "Xác minh email thành công. Vui lòng đăng nhập." });
   } catch (error) { return sendAuthError(res, error, "Không thể xác minh email."); }
