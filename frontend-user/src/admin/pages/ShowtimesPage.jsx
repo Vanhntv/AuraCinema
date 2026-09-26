@@ -10,7 +10,6 @@ import {
   HiOutlinePlus,
   HiOutlineRefresh,
   HiOutlineSearch,
-  HiOutlineSparkles,
   HiOutlineTrash,
   HiOutlineX,
 } from "react-icons/hi";
@@ -49,8 +48,6 @@ const text = {
   chooseRoom: "Ch\u1ecdn ph\u00f2ng chi\u1ebfu",
   close: "\u0110\u00f3ng",
   closeForm: "\u0110\u00f3ng form",
-  createDescription:
-    "Ho\u00e0n thi\u1ec7n th\u00f4ng tin l\u1ecbch chi\u1ebfu tr\u01b0\u1edbc khi m\u1edf b\u00e1n v\u00e9.",
   formInvalid:
     "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
   loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
@@ -84,8 +81,6 @@ const text = {
   tableStart: "Gi\u1edd b\u1eaft \u0111\u1ea7u",
   tableStatus: "Tr\u1ea1ng th\u00e1i",
   title: "Qu\u1ea3n l\u00fd Su\u1ea5t chi\u1ebfu",
-  updateDescription:
-    "\u0110i\u1ec1u ch\u1ec9nh phim, ph\u00f2ng, th\u1eddi gian ho\u1eb7c gi\u00e1 v\u00e9 cho su\u1ea5t \u0111ang ch\u1ecdn.",
   updateShowtime: "C\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu",
   updateFailed: "Kh\u00f4ng th\u1ec3 c\u1eadp nh\u1eadt su\u1ea5t chi\u1ebfu.",
   createFailed: "Kh\u00f4ng th\u1ec3 th\u00eam su\u1ea5t chi\u1ebfu.",
@@ -1822,15 +1817,7 @@ const ShowtimesPage = () => {
         <section className="showtime-form-panel">
           <div className="showtime-form-header">
             <div className="showtime-form-title">
-              <span className="showtime-form-icon">
-                <HiOutlineSparkles />
-              </span>
-              <div>
-                <h2>{isEditing ? text.updateShowtime : text.addShowtimeNew}</h2>
-                <p>
-                  {isEditing ? text.updateDescription : text.createDescription}
-                </p>
-              </div>
+              <h2>{isEditing ? text.updateShowtime : text.addShowtimeNew}</h2>
             </div>
             <button
               type="button"
