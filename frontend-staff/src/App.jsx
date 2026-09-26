@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   HiOutlineBell,
   HiOutlineChartBar,
@@ -12,6 +13,7 @@ import {
   HiOutlineSun,
   HiOutlineViewGrid,
 } from "react-icons/hi";
+import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import "./App.css";
 import TransactionHistory from "./TransactionHistory.jsx";
 import auraCinemaLogo from "../../frontend-user/src/assets/logo-datn-auracinema.jpg";
@@ -588,8 +590,45 @@ function CounterSale() {
   const [clock, setClock] = useState(() => Date.now());
   const [selectedDate, setSelectedDate] = useState(() => getVietnamDateValue());
   const [selectedMovieId, setSelectedMovieId] = useState("");
-  const dateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
-  const effectiveDate = dateOptions.some((item) => item.value === selectedDate) ? selectedDate : dateOptions[0].value;
+  const [datePickerAnchor, setDatePickerAnchor] = useState(null);
+  const resetOrder = () => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
+  const changeDate = (date) => {
+    if (date === "__date_picker__") {
+      const calendarButton = document.activeElement?.closest?.(".pos-date-tabs > button:last-child");
+      setDatePickerAnchor((current) => current ? null : calendarButton);
+      return;
+    }
+
+    setDatePickerAnchor(null);
+    if (!date || date === selectedDate) return;
+    setSelectedDate(date);
+    setSelectedMovieId("");
+    resetOrder();
+    setError("");
+    setLoading(true);
+  };
+  const rollingDateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
+  const isCustomDate = !rollingDateOptions.some((item) => item.value === selectedDate);
+  const queryDate = selectedDate || rollingDateOptions[0].value;
+  const dateOptions = [
+    ...rollingDateOptions,
+    {
+      value: "__date_picker__",
+      label: isCustomDate ? formatReportDate(selectedDate) : "Ngày khác",
+      day: (
+        <StaffDatePopover
+          key={`${queryDate}-${datePickerAnchor ? "open" : "closed"}`}
+          anchor={datePickerAnchor}
+          minDate={getVietnamDateValue(clock)}
+          selectedDate={queryDate}
+          onClose={() => setDatePickerAnchor(null)}
+          onSelect={changeDate}
+        />
+      ),
+      month: null,
+    },
+  ];
+  const effectiveDate = isCustomDate ? "__date_picker__" : selectedDate;
   const visibleShowtimes = useMemo(() => showtimes.filter((item) => item.status === "scheduled" && new Date(item.start_time).getTime() > clock), [showtimes, clock]);
   const movies = useMemo(() => {
     const groupedMovies = new Map();
@@ -608,7 +647,7 @@ function CounterSale() {
   const comboTotal = selectedCombos.reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0);
   const total = seatTotal + comboTotal;
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(effectiveDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [effectiveDate, clock]);
+  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(queryDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [queryDate, clock]);
   useEffect(() => { let live = true; api("/combos/public?limit=100").then((data) => { const list = Array.isArray(data) ? data : data?.data || []; if (live) { setCombos(list.filter((item) => item.status)); setComboError(""); } }).catch((err) => { if (live) { setCombos([]); setComboError(err.message); } }).finally(() => live && setComboLoading(false)); return () => { live = false; }; }, []);
   useEffect(() => {
     const showtimeId = current?.id;
@@ -665,8 +704,6 @@ function CounterSale() {
     const timer = window.setInterval(updateCountdown, 1_000);
     return () => window.clearInterval(timer);
   }, [holdExpiresAt]);
-  const resetOrder = () => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
-  const changeDate = (date) => { setSelectedDate(date); setSelectedMovieId(""); resetOrder(); setError(""); setLoading(true); };
   const chooseMovie = (movie) => { setSelectedMovieId(String(movie.id)); resetOrder(); setError(""); };
   const choose = async (showtime) => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(showtime); setSelected([]); setSeats([]); setComboQuantities({}); setSale(null); setError(""); setSeatLoading(true); try { const [data, activeHold] = await Promise.all([api(`/showtime-seats?showtime_id=${showtime.id}`), api(`/showtime-seats/hold/active?showtime_id=${showtime.id}`)]); const normalizedSeats = data.map(normalizeSeat); const heldIds = new Set((activeHold?.showtime_seat_ids || []).map(String)); holdIdRef.current = String(activeHold?.hold_id || ""); setHoldToken(activeHold?.hold_token || ""); setHoldExpiresAt(activeHold?.expires_at || null); setRemainingHoldSeconds(getRemainingHoldSeconds(activeHold?.expires_at)); setSelected(normalizedSeats.filter((seat) => heldIds.has(String(seat.id))).map((seat) => seat.id)); setSeats(normalizedSeats); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
   const toggle = async (seat) => {
@@ -712,6 +749,116 @@ function CounterSale() {
 }
 
 function Step({ number, title, text }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>; }
+function StaffDatePopover({ anchor, minDate, selectedDate, onClose, onSelect }) {
+  const popoverRef = useRef(null);
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const initialDate = new Date(`${selectedDate || minDate}T00:00:00`);
+    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!anchor) return undefined;
+    const handlePointerDown = (event) => {
+      if (popoverRef.current?.contains(event.target) || anchor.contains(event.target)) return;
+      onClose();
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleViewportChange = () => onClose();
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [anchor, minDate, onClose, selectedDate]);
+
+  if (!anchor) return <FiCalendar aria-hidden="true" />;
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const popoverWidth = 310;
+  const estimatedHeight = 350;
+  const left = Math.max(12, Math.min(anchorRect.left, window.innerWidth - popoverWidth - 12));
+  const openAbove = anchorRect.bottom + estimatedHeight > window.innerHeight && anchorRect.top > estimatedHeight;
+  const top = openAbove
+    ? Math.max(12, anchorRect.top - estimatedHeight - 8)
+    : anchorRect.bottom + 8;
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const calendarCells = [
+    ...Array.from({ length: firstWeekday }, (_, index) => ({ key: `blank-${index}`, blank: true })),
+    ...Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const value = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      return { key: value, day, value, disabled: value < minDate };
+    }),
+  ];
+
+  return (
+    <>
+      <FiCalendar aria-hidden="true" />
+      {createPortal(
+        <div
+          ref={popoverRef}
+          className="staff-date-popover"
+          style={{ top, left }}
+          role="dialog"
+          aria-label="Chọn ngày chiếu"
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="staff-date-popover-header">
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month - 1, 1))}
+              aria-label="Tháng trước"
+            >
+              <FiChevronLeft />
+            </button>
+            <strong>Tháng {month + 1}, {year}</strong>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month + 1, 1))}
+              aria-label="Tháng sau"
+            >
+              <FiChevronRight />
+            </button>
+          </div>
+          <div className="staff-date-weekdays" aria-hidden="true">
+            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => <span key={label}>{label}</span>)}
+          </div>
+          <div className="staff-date-days">
+            {calendarCells.map((cell) => cell.blank ? <span key={cell.key} /> : (
+              <button
+                type="button"
+                className={cell.value === selectedDate ? "selected" : ""}
+                disabled={cell.disabled}
+                aria-pressed={cell.value === selectedDate}
+                key={cell.key}
+                onClick={() => onSelect(cell.value)}
+              >
+                {cell.day}
+              </button>
+            ))}
+          </div>
+          <div className="staff-date-popover-footer">
+            <button type="button" onClick={() => onSelect(minDate)}>Hôm nay</button>
+            <button type="button" onClick={onClose}>Đóng</button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
 function getRemainingHoldSeconds(expiresAt) { return expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0; }
 function formatHoldCountdown(totalSeconds) { const seconds = Math.max(0, Number(totalSeconds) || 0); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function dateTime(value) { return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }); }
