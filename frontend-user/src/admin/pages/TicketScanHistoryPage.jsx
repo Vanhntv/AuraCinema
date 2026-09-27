@@ -318,7 +318,7 @@ const ScanLogDetailModal = ({ log, onClose }) => {
             <DetailField label="Điện thoại" value={booking.customer_phone || "-"} />
             <DetailField label="Phim" value={booking.movie_snapshot?.title || log.movie?.title || "-"} />
             <DetailField label="Suất chiếu" value={formatDateTime(booking.showtime_snapshot?.start_time || log.showtime?.startTime)} />
-            <DetailField label="Rạp / phòng" value={[booking.showtime_snapshot?.cinema_name, booking.showtime_snapshot?.room_name || log.room?.name].filter(Boolean).join(" / ") || "-"} />
+            <DetailField label="Phòng chiếu" value={booking.showtime_snapshot?.room_name || log.room?.name || "-"} />
             <DetailField label="Trạng thái thanh toán" value={({ paid: "Đã thanh toán", pending: "Chờ thanh toán", failed: "Thất bại", cancelled: "Đã hủy", expired: "Hết hạn", review_required: "Cần kiểm tra", refund_pending: "Chờ hoàn tiền", refunded: "Đã hoàn tiền" })[booking.payment_status] || booking.payment_status || "-"} />
           </div>
           <h3>Vé và ghế</h3>
