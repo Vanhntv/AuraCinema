@@ -3,6 +3,15 @@ import { retryReadRequest } from "../utils/retryReadRequest";
 
 const API_URL = "/vouchers";
 
+export const uploadVoucherImage = async (file) => {
+  const form = new FormData();
+  form.append("image", file);
+  const response = await axiosClient.post(`${API_URL}/upload-image`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
 export const getVouchers = async (params = {}) => {
   const response = await retryReadRequest(() => axiosClient.get(API_URL, { params, timeout: 10000 }));
   return response.data;

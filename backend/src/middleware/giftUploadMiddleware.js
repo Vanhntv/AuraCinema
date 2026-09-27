@@ -16,7 +16,7 @@ const imageExtension = (buffer) => {
   return null;
 };
 
-export const uploadGiftImage = (req, res) => {
+export const createImageUpload = ({ folder, prefix, saveError }) => (req, res) => {
   upload.single("image")(req, res, async (error) => {
     if (error) {
       return res.status(400).json({
@@ -29,16 +29,19 @@ export const uploadGiftImage = (req, res) => {
       return res.status(400).json({ success: false, message: "Chỉ chấp nhận ảnh JPG, PNG, WEBP hoặc GIF." });
     }
     try {
-      const uploadRoot = path.resolve("uploads", "gifts");
-      const filename = `gift-${crypto.randomUUID()}${extension}`;
+      const uploadRoot = path.resolve("uploads", folder);
+      const filename = `${prefix}-${crypto.randomUUID()}${extension}`;
       await mkdir(uploadRoot, { recursive: true });
       await writeFile(path.join(uploadRoot, filename), req.file.buffer);
       return res.status(201).json({
         success: true,
-        data: { image_url: `${req.protocol}://${req.get("host")}/uploads/gifts/${filename}` },
+        data: { image_url: `${req.protocol}://${req.get("host")}/uploads/${folder}/${filename}` },
       });
     } catch {
-      return res.status(500).json({ success: false, message: "Không thể lưu ảnh quà tặng." });
+      return res.status(500).json({ success: false, message: saveError });
     }
   });
 };
+
+export const uploadGiftImage = createImageUpload({ folder: "gifts", prefix: "gift", saveError: "Không thể lưu ảnh quà tặng." });
+export const uploadVoucherImage = createImageUpload({ folder: "vouchers", prefix: "voucher", saveError: "Không thể lưu ảnh chương trình." });
