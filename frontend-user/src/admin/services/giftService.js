@@ -2,6 +2,15 @@ import axiosClient from "../../api/axiosClient";
 
 const API_URL = "/gifts";
 
+export const uploadGiftImage = async (file) => {
+  const data = new FormData();
+  data.append("image", file);
+  const response = await axiosClient.post(`${API_URL}/upload-image`, data, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
 export const getGifts = async (params = {}) => {
   const response = await axiosClient.get(API_URL, { params });
   return response.data;

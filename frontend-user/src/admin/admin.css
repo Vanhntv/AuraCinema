@@ -6898,6 +6898,16 @@ html.dark .admin-layout .showtime-conflict-range strong {
   font-size: 22px;
 }
 
+.gift-upload-preview {
+  display: block;
+  width: 140px;
+  height: 100px;
+  margin-top: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 .gifts-table td {
   vertical-align: middle;
 }

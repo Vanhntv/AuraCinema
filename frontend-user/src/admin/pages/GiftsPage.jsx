@@ -13,7 +13,7 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
-import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift } from "../services/giftService";
+import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift, uploadGiftImage } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -324,6 +324,9 @@ const buildGiftFormFromGift = (gift) => ({
 const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = null }) => {
   const [formData, setFormData] = useState(emptyGiftForm);
   const [errors, setErrors] = useState({});
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const isEditMode = Boolean(initialData?._id);
   const issuedQuantity = Number(initialData?.issued_quantity || 0);
   const isIssuedGift = isEditMode && issuedQuantity > 0;
@@ -332,7 +335,15 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     if (!isOpen) return;
     setFormData(initialData ? buildGiftFormFromGift(initialData) : emptyGiftForm);
     setErrors({});
+    setImageFile(null);
+    setImagePreview("");
   }, [initialData, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
 
   if (!isOpen) return null;
 
@@ -412,8 +423,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isLoading || imageUploading) return;
     if (!validate()) return;
 
     const issuedGiftPayload = {
@@ -467,7 +479,25 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       status: formData.status,
     };
 
-    onSubmit(isIssuedGift ? issuedGiftPayload : fullPayload);
+    const payload = isIssuedGift ? issuedGiftPayload : fullPayload;
+    try {
+      setImageUploading(true);
+      if (imageFile) {
+        const response = await uploadGiftImage(imageFile);
+        payload.image_url = response.data.image_url;
+        handleChange("image_url", payload.image_url);
+        setImageFile(null);
+        setImagePreview("");
+      }
+      await onSubmit(payload);
+    } catch (error) {
+      setErrors((previous) => ({
+        ...previous,
+        image_url: error.response?.data?.message || "Không thể tải ảnh lên. Vui lòng thử lại.",
+      }));
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   return (
@@ -508,7 +538,27 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Ảnh</label>
-                  <input className={`form-input ${errors.image_url ? "error" : ""}`} placeholder="https://..." value={formData.image_url} onChange={(event) => handleChange("image_url", event.target.value)} />
+                  <input
+                    className={`form-input ${errors.image_url ? "error" : ""}`}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    disabled={isLoading || imageUploading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                        setErrors((previous) => ({ ...previous, image_url: "Chọn ảnh JPG, PNG, WEBP hoặc GIF, tối đa 5 MB." }));
+                        event.target.value = "";
+                        return;
+                      }
+                      setImageFile(file);
+                      setImagePreview(URL.createObjectURL(file));
+                      setErrors((previous) => ({ ...previous, image_url: "" }));
+                    }}
+                  />
+                  <p className="voucher-cell-sub">JPG, PNG, WEBP hoặc GIF · tối đa 5 MB</p>
+                  {(imagePreview || formData.image_url) && <img className="gift-upload-preview" src={imagePreview || formData.image_url} alt="Xem trước ảnh quà tặng" />}
+                  {imageUploading && <p className="voucher-cell-sub">Đang lưu quà tặng...</p>}
                   {errors.image_url && <p className="form-error">{errors.image_url}</p>}
                 </div>
                 <div className="form-group">
@@ -651,7 +701,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Hủy bỏ</button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo quà tặng"}</button>
+            <button type="submit" className="btn btn-primary" disabled={isLoading || imageUploading}>{isLoading || imageUploading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo quà tặng"}</button>
           </div>
         </form>
       </div>
