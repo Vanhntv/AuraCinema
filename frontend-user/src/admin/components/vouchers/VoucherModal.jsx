@@ -33,6 +33,11 @@ const toDateTimeLocalValue = (value) => {
   return offsetDate.toISOString().slice(0, 16);
 };
 
+const getMinimumStartDateTime = () => {
+  const nextMinute = new Date(Math.ceil(Date.now() / 60000) * 60000);
+  return toDateTimeLocalValue(nextMinute);
+};
+
 const stringifyMovieIds = (value) => {
   if (!Array.isArray(value)) return "";
   return value
@@ -72,6 +77,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
   const isEditMode = Boolean(initialData?._id);
   const usageCount = Number(initialData?.usage_count || 0);
   const isUsedVoucher = isEditMode && usageCount > 0;
+  const minimumStartDate = getMinimumStartDateTime();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -139,10 +145,13 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     if (!isUsedVoucher && (!Number.isFinite(minOrder) || minOrder < 0)) {
       nextErrors.min_order = "Đơn hàng tối thiểu không hợp lệ";
     }
-    if (!isUsedVoucher && formData.discount_type !== "percent" && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
+    if (!isUsedVoucher && formData.discount_type === "percent" && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
       nextErrors.max_discount_amount = "Giảm tối đa không được nhỏ hơn 0";
     }
     if (!isUsedVoucher && !formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
+    if (!isEditMode && startDate && startDate < new Date()) {
+      nextErrors.start_date = "Ngày bắt đầu không được ở trong quá khứ";
+    }
     if (!formData.end_date) nextErrors.end_date = "Ngày kết thúc là bắt buộc";
     if (startDate && endDate && endDate <= startDate) {
       nextErrors.end_date = "Ngày kết thúc phải sau ngày bắt đầu";
@@ -206,7 +215,9 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
       image_url: formData.image_url.trim(),
       discount_type: formData.discount_type,
       discount_value: Number(formData.discount_value),
-      max_discount_amount: formData.discount_type === "percent" ? null : formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
+      max_discount_amount: formData.discount_type === "percent" && formData.max_discount_amount !== ""
+        ? Number(formData.max_discount_amount)
+        : null,
       min_order: Number(formData.min_order || 0),
       start_date: formData.start_date,
       end_date: formData.end_date,
@@ -314,9 +325,9 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
                   <input aria-label={formData.discount_type === "percent" ? "Giá trị giảm phần trăm" : "Giá trị giảm VNĐ"} className={`form-input ${errors.discount_value ? "error" : ""}`} type="number" min="1" max={formData.discount_type === "percent" ? "100" : undefined} placeholder={formData.discount_type === "percent" ? "Ví dụ: 10 (%)" : "Ví dụ: 20000 (VNĐ)"} value={formData.discount_value} onChange={(event) => handleChange("discount_value", event.target.value)} disabled={isUsedVoucher} />
                   {errors.discount_value && <p className="form-error">{errors.discount_value}</p>}
                 </div>
-                {formData.discount_type !== "percent" && <div className="form-group">
-                  <label className="form-label">Giảm tối đa</label>
-                  <input className={`form-input ${errors.max_discount_amount ? "error" : ""}`} type="number" min="0" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} disabled={isUsedVoucher} />
+                {formData.discount_type === "percent" && <div className="form-group">
+                  <label className="form-label">Giảm tối đa (VNĐ)</label>
+                  <input aria-label="Giảm tối đa VNĐ" className={`form-input ${errors.max_discount_amount ? "error" : ""}`} type="number" min="0" placeholder="Ví dụ: 50000 (VNĐ)" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} disabled={isUsedVoucher} />
                   {errors.max_discount_amount && <p className="form-error">{errors.max_discount_amount}</p>}
                 </div>}
                 <div className="form-group">
@@ -332,12 +343,12 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Ngày bắt đầu <span className="required">*</span></label>
-                  <input className={`form-input ${errors.start_date ? "error" : ""}`} type="datetime-local" value={formData.start_date} onChange={(event) => handleChange("start_date", event.target.value)} disabled={isUsedVoucher} />
+                  <input className={`form-input ${errors.start_date ? "error" : ""}`} type="datetime-local" min={isEditMode ? undefined : minimumStartDate} value={formData.start_date} onChange={(event) => handleChange("start_date", event.target.value)} disabled={isUsedVoucher} />
                   {errors.start_date && <p className="form-error">{errors.start_date}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Ngày kết thúc <span className="required">*</span></label>
-                  <input className={`form-input ${errors.end_date ? "error" : ""}`} type="datetime-local" value={formData.end_date} onChange={(event) => handleChange("end_date", event.target.value)} />
+                  <input className={`form-input ${errors.end_date ? "error" : ""}`} type="datetime-local" min={formData.start_date || (!isEditMode ? minimumStartDate : undefined)} value={formData.end_date} onChange={(event) => handleChange("end_date", event.target.value)} />
                   {errors.end_date && <p className="form-error">{errors.end_date}</p>}
                 </div>
               </div>

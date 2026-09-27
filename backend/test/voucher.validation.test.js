@@ -5,6 +5,8 @@ import {
   validateVoucherUpdatePayload,
 } from "../src/modules/vouchers/voucher.validation.js";
 
+const futureDate = (offsetMs) => new Date(Date.now() + offsetMs).toISOString();
+
 const validVoucher = {
   code: "WELCOME-2026",
   name: "Welcome 2026",
@@ -16,8 +18,8 @@ const validVoucher = {
   usage_limit: 100,
   usage_limit_per_user: 1,
   apply_scope: "order",
-  start_date: "2026-01-01T00:00:00.000Z",
-  end_date: "2026-12-31T23:59:59.000Z",
+  start_date: futureDate(60 * 60 * 1000),
+  end_date: futureDate(24 * 60 * 60 * 1000),
   status: true,
 };
 
@@ -40,8 +42,15 @@ test("validateVoucherPayload enforces discount, date, and usage rules", () => {
   assert.match(
     validateVoucherPayload({
       ...validVoucher,
-      start_date: "2026-12-31T00:00:00.000Z",
-      end_date: "2026-01-01T00:00:00.000Z",
+      start_date: futureDate(-60 * 60 * 1000),
+    }),
+    /qua khu/,
+  );
+  assert.match(
+    validateVoucherPayload({
+      ...validVoucher,
+      start_date: futureDate(2 * 60 * 60 * 1000),
+      end_date: futureDate(60 * 60 * 1000),
     }),
     /sau start_date/,
   );

@@ -316,6 +316,11 @@ export const validateVoucherPayload = (voucher, index = null) => {
   const dateError = validateVoucherDates(voucher.start_date, voucher.end_date, prefix, true);
   if (dateError) return dateError;
 
+  const startDate = parseDateValue(voucher.start_date);
+  if (startDate && startDate < new Date()) {
+    return `${prefix}start_date khong duoc o qua khu`;
+  }
+
   if (!isEmptyValue(voucher.status) && typeof voucher.status !== "boolean" && typeof voucher.status !== "string") {
     return `${prefix}status khong hop le`;
   }
