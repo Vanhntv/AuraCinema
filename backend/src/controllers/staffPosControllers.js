@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import mongoose from "mongoose";
+import { validateSeatSpacing } from "../../../shared/seatSpacing.mjs";
 import { lookupGiftQr, useGiftQr } from "../services/giftEntitlementService.js";
 
 export const lookupStaffGift = async (req, res) => {
@@ -280,6 +281,18 @@ export const createCounterSale = async (req, res) => {
         .session(session);
       if (seats.length !== requestedSeatIds.length || seats.some((item) => isBrokenSeatType(item.seat_id?.seat_type_id) || isSeatInMaintenance(item.seat_id))) throw Object.assign(new Error("Có ghế không hợp lệ hoặc đang bảo trì trong đơn."), { statusCode: 409 });
       validateCoupleSeatSelection(seats);
+
+      const allShowtimeSeats = await ShowtimeSeat.find({ showtime_id: showtime._id, deleted_at: null })
+        .populate({ path: "seat_id", select: "seat_row seat_number seat_type_id operational_status", populate: { path: "seat_type_id", select: "name" } })
+        .session(session);
+      const spacingError = validateSeatSpacing(requestedSeatIds, allShowtimeSeats.map((item) => ({
+        id: String(item._id),
+        row: item.seat_id?.seat_row,
+        number: Number(item.seat_id?.seat_number),
+        status: isSeatInMaintenance(item.seat_id) || isBrokenSeatType(item.seat_id?.seat_type_id) ? "maintenance" : item.status,
+        type: isCoupleSeat(item) ? "couple" : "regular",
+      })));
+      if (spacingError) throw Object.assign(new Error(spacingError), { statusCode: 409 });
 
       const bookingId = new mongoose.Types.ObjectId();
       const reserved = await ShowtimeSeat.updateMany({ _id: { $in: requestedSeatIds }, showtime_id: showtime._id, deleted_at: null, status: "held", held_by: req.user.id, hold_id: hold._id }, { $set: { status: "booked", held_by: null, hold_id: null, hold_expires_at: null, reserved_by_booking_id: bookingId } }, { session });
