@@ -139,7 +139,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     if (!isUsedVoucher && (!Number.isFinite(minOrder) || minOrder < 0)) {
       nextErrors.min_order = "Đơn hàng tối thiểu không hợp lệ";
     }
-    if (!isUsedVoucher && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
+    if (!isUsedVoucher && formData.discount_type !== "percent" && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
       nextErrors.max_discount_amount = "Giảm tối đa không được nhỏ hơn 0";
     }
     if (!isUsedVoucher && !formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
@@ -206,7 +206,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
       image_url: formData.image_url.trim(),
       discount_type: formData.discount_type,
       discount_value: Number(formData.discount_value),
-      max_discount_amount: formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
+      max_discount_amount: formData.discount_type === "percent" ? null : formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
       min_order: Number(formData.min_order || 0),
       start_date: formData.start_date,
       end_date: formData.end_date,
@@ -310,15 +310,15 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
               <h3>Điều kiện giá trị</h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Giá trị giảm <span className="required">*</span></label>
-                  <input className={`form-input ${errors.discount_value ? "error" : ""}`} type="number" min="1" value={formData.discount_value} onChange={(event) => handleChange("discount_value", event.target.value)} disabled={isUsedVoucher} />
+                  <label className="form-label">Giá trị giảm ({formData.discount_type === "percent" ? "%" : "VNĐ"}) <span className="required">*</span></label>
+                  <input aria-label={formData.discount_type === "percent" ? "Giá trị giảm phần trăm" : "Giá trị giảm VNĐ"} className={`form-input ${errors.discount_value ? "error" : ""}`} type="number" min="1" max={formData.discount_type === "percent" ? "100" : undefined} placeholder={formData.discount_type === "percent" ? "Ví dụ: 10 (%)" : "Ví dụ: 20000 (VNĐ)"} value={formData.discount_value} onChange={(event) => handleChange("discount_value", event.target.value)} disabled={isUsedVoucher} />
                   {errors.discount_value && <p className="form-error">{errors.discount_value}</p>}
                 </div>
-                <div className="form-group">
+                {formData.discount_type !== "percent" && <div className="form-group">
                   <label className="form-label">Giảm tối đa</label>
                   <input className={`form-input ${errors.max_discount_amount ? "error" : ""}`} type="number" min="0" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} disabled={isUsedVoucher} />
                   {errors.max_discount_amount && <p className="form-error">{errors.max_discount_amount}</p>}
-                </div>
+                </div>}
                 <div className="form-group">
                   <label className="form-label">Đơn hàng tối thiểu</label>
                   <input className={`form-input ${errors.min_order ? "error" : ""}`} type="number" min="0" value={formData.min_order} onChange={(event) => handleChange("min_order", event.target.value)} disabled={isUsedVoucher} />
