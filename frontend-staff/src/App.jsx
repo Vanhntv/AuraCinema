@@ -349,6 +349,43 @@ const normalizeTicketLookupCode = (value) =>
 
 const isAuraBookingCode = (value) => AURA_BOOKING_CODE_PATTERN.test(normalizeTicketLookupCode(value));
 
+const normalizeBookingPrintResult = (response, printed = false) => {
+  const printData = response?.data || {};
+  const booking = printData.booking || {};
+  const seats = Array.isArray(booking.seats) ? booking.seats : [];
+  const seatLabels = seats
+    .map((item) => item.seat_label || item.seatLabel || item.label || item.seat_code)
+    .filter(Boolean);
+  const seatTypes = [...new Set(seats
+    .map((item) => item.seat_type || item.seatType || item.type)
+    .filter(Boolean))];
+  const printableCount = printData.tickets?.length || 0;
+  const skippedTickets = printData.skippedTickets || [];
+  const allAlreadyPrinted = !printableCount
+    && skippedTickets.length > 0
+    && skippedTickets.every((item) => item.reason === "ALREADY_PRINTED");
+
+  return {
+    ...response,
+    data: {
+      qrType: "BOOKING",
+      ticketCode: booking.bookingCode,
+      status: "ORDER",
+      movie: { title: booking.movie?.title || "" },
+      showtime: { startTime: booking.showtime?.start_time || null },
+      room: { name: booking.showtime?.room_name || "" },
+      seat: { label: seatLabels.join(", "), type: seatTypes.join(", ") },
+      booking: {
+        bookingCode: booking.bookingCode,
+        combos: Array.isArray(booking.services) ? booking.services : [],
+      },
+      canPrint: !printed && printableCount > 0,
+      printedAt: printed || allAlreadyPrinted ? new Date().toISOString() : null,
+      printData,
+    },
+  };
+};
+
 function TicketScanner() {
   const scannerRef = useRef(null);
   const processingRef = useRef(false);
@@ -356,6 +393,7 @@ function TicketScanner() {
   const [cameraActive, setCameraActive] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc tra cứu bằng mã vé.");
   const [result, setResult] = useState(null);
   const [currentQrToken, setCurrentQrToken] = useState("");
@@ -386,9 +424,10 @@ function TicketScanner() {
     processingRef.current = true; setProcessing(true); setResult(null); setCurrentQrToken(token); setMessage("Đang xác minh vé...");
     await stopCamera();
     try {
-      const verifyPath = token.startsWith(BOOKING_QR_PREFIX) ? "/staff/pos/bookings/verify" : "/staff/pos/tickets/verify";
+      const isBookingQr = token.startsWith(BOOKING_QR_PREFIX);
+      const verifyPath = isBookingQr ? "/staff/pos/bookings/lookup-print" : "/staff/pos/tickets/verify";
       const response = await api(verifyPath, { method: "POST", body: JSON.stringify({ qrToken: token }), returnBody: true });
-      setResult(response); setMessage(response.message);
+      setResult(isBookingQr ? normalizeBookingPrintResult(response) : response); setMessage(response.message);
     } catch (err) {
       setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message);
     } finally { processingRef.current = false; setProcessing(false); }
@@ -428,12 +467,12 @@ function TicketScanner() {
     processingRef.current = true; setProcessing(true); setResult(null); setMessage("Đang tra cứu mã vé...");
     try {
       const bookingLookup = isAuraBookingCode(code);
-      const response = await api(bookingLookup ? "/staff/pos/bookings/verify" : "/staff/pos/tickets/lookup", {
+      const response = await api(bookingLookup ? "/staff/pos/bookings/lookup-print" : "/staff/pos/tickets/lookup", {
         method: "POST",
         body: JSON.stringify(bookingLookup ? { bookingCode: code } : { ticketCode: code }),
         returnBody: true,
       });
-      setResult(response); setCurrentQrToken(bookingLookup ? "" : response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
+      setResult(bookingLookup ? normalizeBookingPrintResult(response) : response); setCurrentQrToken(bookingLookup ? "" : response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
     } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setCurrentQrToken(""); setMessage(err.message); }
     finally { processingRef.current = false; setProcessing(false); }
   };
@@ -446,6 +485,40 @@ function TicketScanner() {
       setResult(response); setMessage(response.message);
     } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message); }
     finally { setCheckingIn(false); }
+  };
+
+  const printTicket = async () => {
+    if (!ticket || printing || ticket.canPrint === false || ticket.printedAt) return;
+    setPrinting(true);
+    try {
+      if (ticket.qrType === "BOOKING") {
+        const response = await api("/staff/pos/bookings/scan-print", {
+          method: "POST",
+          body: JSON.stringify({
+            ...(currentQrToken.startsWith(BOOKING_QR_PREFIX) ? { qrToken: currentQrToken } : {}),
+            bookingCode: ticket.booking?.bookingCode,
+          }),
+          returnBody: true,
+        });
+        setResult(normalizeBookingPrintResult(response, true));
+        const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js");
+        await printBookingOrder(response.data);
+        setMessage(`Đã ghi nhận và mở hộp thoại in ${response.data?.tickets?.length || 0} vé. Đơn vé không thể in lại.`);
+      } else {
+        const response = await api("/staff/pos/tickets/print", {
+          method: "POST",
+          body: JSON.stringify({ qrToken: currentQrToken }),
+          returnBody: true,
+        });
+        setResult(response);
+        const { printTicketPdf } = await import("../../frontend-user/src/utils/ticketPdf.js");
+        await printTicketPdf(response.data, currentQrToken);
+        setMessage("Đã ghi nhận và mở hộp thoại in vé. Vé không thể in lại.");
+      }
+    } catch (err) {
+      if (err.data) setResult({ success: false, message: err.message, data: err.data });
+      setMessage(err.message || "Không thể in vé.");
+    } finally { setPrinting(false); }
   };
 
   const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
@@ -513,6 +586,7 @@ function TicketScanner() {
               <Info label="Dịch vụ" value={services} />
             </>}
           </div>
+          <button type="button" className="print-ticket-button" onClick={printTicket} disabled={printing || ticket.canPrint === false || Boolean(ticket.printedAt)}>{printing ? "Đang chuẩn bị in..." : ticket.printedAt || ticket.canPrint === false ? "Đã in" : ticket.qrType === "BOOKING" ? "In đơn vé" : "In vé"}</button>
           {ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}
           <button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button>
         </> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}
