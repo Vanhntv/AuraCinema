@@ -1,190 +1,160 @@
 import { useEffect, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { NavLink, Navigate, useLocation } from "react-router-dom";
 import { getPublishedPolicies } from "../services/policyService";
+import { getSupportSamplePolicies, supportTopics } from "../data/supportInformation";
 
-const supportPages = {
-  "dieu-khoan-su-dung": {
-    eyebrow: "Aura Cinema",
-    title: "Điều khoản sử dụng",
-    description:
-      "Các quy định cơ bản khi truy cập website, đặt vé và sử dụng dịch vụ tại Aura Cinema.",
-    sections: [
-      {
-        title: "Tài khoản và thông tin cá nhân",
-        items: [
-          "Khách hàng cần cung cấp thông tin chính xác khi đăng ký, đặt vé hoặc cập nhật hồ sơ.",
-          "Bạn chịu trách nhiệm bảo mật tài khoản, mật khẩu và các giao dịch phát sinh từ tài khoản của mình.",
-          "Aura Cinema có thể tạm khóa tài khoản khi phát hiện dấu hiệu gian lận hoặc sử dụng sai mục đích.",
-        ],
-      },
-      {
-        title: "Đặt vé và thanh toán",
-        items: [
-          "Vé chỉ được giữ sau khi hệ thống xác nhận thanh toán hoặc xác nhận đặt vé thành công.",
-          "Giá vé, phụ thu và ưu đãi có thể thay đổi theo rạp, suất chiếu hoặc chương trình khuyến mãi.",
-          "Khách hàng cần kiểm tra phim, ngày chiếu, giờ chiếu, phòng chiếu và ghế trước khi xác nhận.",
-        ],
-      },
-    ],
-  },
-  "chinh-sach-bao-mat": {
-    eyebrow: "Bảo mật",
-    title: "Chính sách bảo mật",
-    description:
-      "Aura Cinema cam kết bảo vệ dữ liệu cá nhân và chỉ sử dụng thông tin trong phạm vi phục vụ trải nghiệm đặt vé.",
-    sections: [
-      {
-        title: "Thông tin được thu thập",
-        items: [
-          "Thông tin tài khoản như họ tên, email, số điện thoại, ngày sinh và địa chỉ.",
-          "Thông tin giao dịch như lịch sử đặt vé, điểm thưởng, hạng thành viên và trạng thái thanh toán.",
-          "Thông tin kỹ thuật cần thiết để duy trì bảo mật và cải thiện chất lượng dịch vụ.",
-        ],
-      },
-      {
-        title: "Cách sử dụng thông tin",
-        items: [
-          "Xác thực tài khoản, xử lý đặt vé, gửi thông báo liên quan đến giao dịch.",
-          "Quản lý ưu đãi, điểm thưởng, hạng thành viên và hỗ trợ chăm sóc khách hàng.",
-          "Không bán hoặc chia sẻ dữ liệu cá nhân cho bên thứ ba ngoài phạm vi vận hành dịch vụ.",
-        ],
-      },
-    ],
-  },
-  "huong-dan-dat-ve": {
-    eyebrow: "Hỗ trợ",
-    title: "Hướng dẫn đặt vé",
-    description:
-      "Các bước cơ bản để chọn phim, chọn suất chiếu, chọn ghế và hoàn tất đặt vé trực tuyến.",
-    sections: [
-      {
-        title: "Quy trình đặt vé",
-        items: [
-          "Vào trang Lịch chiếu hoặc chọn phim đang chiếu trên trang chủ.",
-          "Chọn rạp, ngày chiếu, suất chiếu phù hợp và bấm đặt vé.",
-          "Chọn ghế còn trống, kiểm tra thông tin vé và xác nhận thanh toán.",
-        ],
-      },
-      {
-        title: "Lưu ý khi đặt vé",
-        items: [
-          "Vui lòng đăng nhập trước khi đặt vé để lưu lịch sử giao dịch và tích điểm.",
-          "Kiểm tra kỹ thông tin trước khi thanh toán vì vé đã xác nhận có thể bị giới hạn đổi trả.",
-          "Nếu gặp lỗi, hãy chụp màn hình và liên hệ bộ phận hỗ trợ qua hotline hoặc email.",
-        ],
-      },
-    ],
-  },
-  "cau-hoi-thuong-gap": {
-    eyebrow: "FAQ",
-    title: "Câu hỏi thường gặp",
-    description:
-      "Một số câu hỏi phổ biến khi sử dụng website đặt vé và tài khoản thành viên Aura Cinema.",
-    sections: [
-      {
-        title: "Tôi có cần đăng nhập để đặt vé không?",
-        items: [
-          "Bạn nên đăng nhập để hệ thống lưu lịch sử mua vé, điểm thưởng và thông tin thành viên.",
-          "Một số ưu đãi hoặc chương trình thành viên có thể yêu cầu tài khoản đã đăng nhập.",
-        ],
-      },
-      {
-        title: "Tôi quên mật khẩu thì làm thế nào?",
-        items: [
-          "Vào trang Đăng nhập, chọn Quên mật khẩu và làm theo hướng dẫn khôi phục.",
-          "Nếu không nhận được thông báo, hãy kiểm tra lại email hoặc liên hệ bộ phận hỗ trợ.",
-        ],
-      },
-      {
-        title: "Tôi có thể đổi thông tin cá nhân không?",
-        items: [
-          "Bạn có thể cập nhật một số thông tin trong trang Tài khoản sau khi đăng nhập.",
-          "Các thông tin nhạy cảm hoặc dữ liệu giao dịch có thể cần hỗ trợ từ quản trị viên.",
-        ],
-      },
-    ],
-  },
-};
-
-const policySurfaceBySlug = {
-  "dieu-khoan-su-dung": "terms",
-  "chinh-sach-bao-mat": "privacy",
-};
-
-const splitPolicyParagraphs = (content = "") =>
-  String(content)
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+const splitParagraphs = (content = "") =>
+  String(content).split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
 
 function SupportInfoPage() {
   const { pathname } = useLocation();
-  const slug = pathname.split("/").filter(Boolean).at(-1);
-  const page = supportPages[slug];
-  const [publishedPolicies, setPublishedPolicies] = useState([]);
+  const topic = supportTopics.find((item) => item.path === pathname);
+  const policyId = pathname.startsWith("/thong-tin-chung/")
+    ? pathname.slice("/thong-tin-chung/".length)
+    : "";
+  const [result, setResult] = useState({ path: "", policies: [], failed: false });
 
   useEffect(() => {
-    const surface = policySurfaceBySlug[slug];
-    if (!surface) return undefined;
-
+    if (!topic && !policyId) return undefined;
     let active = true;
-    getPublishedPolicies(surface)
+
+    getPublishedPolicies()
       .then((response) => {
-        if (active) setPublishedPolicies(response.data || []);
+        if (active) setResult({ path: pathname, policies: response.data || [], failed: false });
       })
       .catch(() => {
-        if (active) setPublishedPolicies([]);
+        if (active) setResult({ path: pathname, policies: [], failed: true });
       });
 
-    return () => {
-      active = false;
-    };
-  }, [slug]);
+    return () => { active = false; };
+  }, [pathname, policyId, topic]);
 
-  if (!page) {
-    return <Navigate to="/" replace />;
-  }
+  if (!topic && !policyId) return <Navigate to="/dieu-khoan-su-dung" replace />;
+
+  const isLoading = result.path !== pathname;
+  const selectedPolicy = policyId
+    ? result.policies.find((policy) => String(policy._id) === policyId)
+    : null;
+  const publishedInTopic = topic
+    ? result.policies.filter((policy) => policy.surface === topic.surface)
+    : [];
+  const sections = isLoading
+    ? []
+    : selectedPolicy
+      ? [selectedPolicy]
+      : topic && publishedInTopic.length > 0
+        ? publishedInTopic
+        : topic
+          ? getSupportSamplePolicies(topic.surface)
+          : [];
+  const isFaq = topic?.surface === "faq";
+  const title = selectedPolicy?.title || topic?.title || "Không tìm thấy chính sách";
+  const description = selectedPolicy?.summary || topic?.description || "";
 
   return (
-    <main className="mx-auto w-[min(1040px,calc(100%_-_40px))] py-12 max-sm:w-[calc(100%_-_28px)]">
-      <section className="rounded-[28px] border border-white/10 bg-white/[0.035] p-8 shadow-[0_22px_90px_rgba(0,0,0,0.24)]">
-        <p className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm font-black uppercase tracking-[0.18em] text-[#ff6070]">
-          {page.eyebrow}
+    <main className="mx-auto w-[min(1180px,calc(100%_-_40px))] py-10 pb-20 max-sm:w-[calc(100%_-_28px)]">
+      <div className="mb-8 border-b border-white/10 pb-8">
+        <h1 className="text-3xl font-black text-white md:text-4xl">Thông tin chung</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300">
+          Tìm hiểu quy định, quyền riêng tư và cách đặt vé tại AuraCinema.
         </p>
-        <h1 className="mt-3 text-4xl font-black text-white max-sm:text-3xl">
-          {page.title}
-        </h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-slate-300">
-          {page.description}
-        </p>
-      </section>
+      </div>
 
-      <section className="mt-6 grid gap-5">
-        {(publishedPolicies.length > 0 ? publishedPolicies : page.sections).map((section) => (
-          <article
-            className="rounded-3xl border border-white/10 bg-[#141b26] p-6"
-            key={section._id || section.title}
-          >
-            <h2 className="text-xl font-black text-white">{section.title}</h2>
-            {section.summary && <p className="mt-3 text-sm font-semibold leading-6 text-slate-200">{section.summary}</p>}
-            {section.items ? (
-              <ul className="mt-4 grid gap-3 text-sm leading-6 text-slate-300">
-                {section.items.map((item) => (
-                  <li className="rounded-2xl bg-white/[0.035] px-4 py-3" key={item}>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="mt-4 grid gap-4 text-sm leading-7 text-slate-300">
-                {splitPolicyParagraphs(section.content).map((paragraph, index) => (
-                  <p className="whitespace-pre-line" key={`${section._id}-${index}`}>{paragraph}</p>
+      <div className="grid items-start gap-9 md:grid-cols-[245px_minmax(0,1fr)] lg:gap-14">
+        <nav aria-label="Mục thông tin chung" className="md:sticky md:top-24">
+          <h2 className="mb-3 text-sm font-bold uppercase text-slate-400">Hỗ trợ</h2>
+          <div className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
+            {supportTopics.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `shrink-0 rounded-xl px-4 py-3 text-sm font-semibold no-underline transition-colors md:w-full ${isActive
+                    ? "bg-[#ff5364] text-[#0a0e1a]"
+                    : "border border-white/10 bg-[#151b26] text-slate-300 hover:border-white/25 hover:text-white"}`
+                }
+              >
+                {item.title}
+              </NavLink>
+            ))}
+          </div>
+          {!isLoading && result.policies.length > 0 && (
+            <div className="mt-5 border-t border-white/10 pt-5">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-400">Chính sách đã xuất bản</h3>
+              <div className="flex gap-2 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
+                {result.policies.map((policy) => (
+                  <NavLink
+                    key={policy._id}
+                    to={`/thong-tin-chung/${policy._id}`}
+                    className={({ isActive }) =>
+                      `shrink-0 rounded-xl px-4 py-3 text-sm font-medium no-underline transition-colors md:w-full md:whitespace-normal ${isActive
+                        ? "bg-[#ff5364] text-[#0a0e1a]"
+                        : "text-slate-300 hover:bg-white/[0.06] hover:text-white"}`
+                    }
+                  >
+                    {policy.title}
+                  </NavLink>
                 ))}
               </div>
-            )}
-          </article>
-        ))}
-      </section>
+            </div>
+          )}
+        </nav>
+
+        <section aria-labelledby="support-topic-title" className="min-w-0">
+          <header className="mb-8 border-b border-white/10 pb-7">
+            <h2 id="support-topic-title" className="text-2xl font-black text-white md:text-3xl">
+              {title}
+            </h2>
+            {description && <p className="mt-3 max-w-[70ch] text-sm leading-7 text-slate-300">{description}</p>}
+          </header>
+
+          {result.failed && (
+            <p role="status" className="mb-6 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+              Chưa tải được nội dung đã xuất bản. Nội dung mẫu đang được hiển thị.
+            </p>
+          )}
+          {!isLoading && topic && publishedInTopic.length === 0 && !result.failed && (
+            <p className="mb-6 text-xs text-slate-400">Nội dung tham khảo · AuraCinema sẽ cập nhật chính sách chính thức tại đây.</p>
+          )}
+
+          {isLoading ? (
+            <p role="status" className="text-sm text-slate-300">Đang tải nội dung...</p>
+          ) : policyId && !selectedPolicy ? (
+            <p role="status" className="text-sm text-slate-300">Chính sách này chưa được xuất bản hoặc không còn tồn tại.</p>
+          ) : isFaq ? (
+            <div className="divide-y divide-white/10 border-y border-white/10">
+              {sections.map((section) => (
+                <details key={section._id || section.title} className="group py-5">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-bold text-white marker:hidden">
+                    {section.title}
+                    <span aria-hidden="true" className="text-xl text-[#ff7180] transition-transform group-open:rotate-45">+</span>
+                  </summary>
+                  {section.summary && <p className="mt-3 text-sm font-medium text-slate-300">{section.summary}</p>}
+                  <div className="mt-3 grid max-w-[72ch] gap-3 text-sm leading-7 text-slate-300">
+                    {splitParagraphs(section.content).map((paragraph, index) => (
+                      <p className="whitespace-pre-line" key={index}>{paragraph}</p>
+                    ))}
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : (
+            <div className="grid gap-9">
+              {sections.map((section) => (
+                <article key={section._id || section.title} className="border-b border-white/10 pb-8 last:border-0">
+                  <h3 className="text-lg font-bold text-white">{section.title}</h3>
+                  {section.summary && <p className="mt-2 max-w-[72ch] text-sm font-medium text-slate-200">{section.summary}</p>}
+                  <div className="mt-4 grid max-w-[72ch] gap-4 text-sm leading-7 text-slate-300">
+                    {splitParagraphs(section.content).map((paragraph, index) => (
+                      <p className="whitespace-pre-line" key={index}>{paragraph}</p>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }

@@ -22,7 +22,7 @@ const policySchema = new mongoose.Schema(
     },
     surface: {
       type: String,
-      enum: ["payment", "terms", "privacy", "booking", "general"],
+      enum: ["payment", "terms", "privacy", "booking", "faq", "general"],
       default: "general",
       index: true,
     },

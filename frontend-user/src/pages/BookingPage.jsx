@@ -16,6 +16,7 @@ function buildMovieFromShowtime(showtime) {
     poster: showtime.moviePoster || FALLBACK_POSTER,
     banner: showtime.moviePoster || FALLBACK_POSTER,
     duration: showtime.movieDuration,
+    age_limit: showtime.movieAgeLimit,
     status: showtime.movieStatus || "now_showing",
   };
 }

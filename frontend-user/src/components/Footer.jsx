@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
+import { supportTopics } from "../data/supportInformation";
 
 const quickLinks = [
   { label: "Lịch chiếu", to: "/lich-chieu" },
@@ -7,13 +8,6 @@ const quickLinks = [
   { label: "Khuyến mãi", to: "/khuyen-mai" },
   { label: "Giá vé", to: "/gia-ve" },
   { label: "Giới thiệu", to: "/gioi-thieu" },
-];
-
-const supportLinks = [
-  { label: "Điều khoản sử dụng", to: "/dieu-khoan-su-dung" },
-  { label: "Chính sách bảo mật", to: "/chinh-sach-bao-mat" },
-  { label: "Hướng dẫn đặt vé", to: "/huong-dan-dat-ve" },
-  { label: "Câu hỏi thường gặp", to: "/cau-hoi-thuong-gap" },
 ];
 
 function Footer() {
@@ -53,13 +47,13 @@ function Footer() {
             Hỗ trợ
           </h2>
           <ul className="mt-5 grid gap-3">
-            {supportLinks.map((item) => (
-              <li key={item.to}>
+            {supportTopics.map((item) => (
+              <li key={item.path}>
                 <Link
                   className="font-['Be_Vietnam_Pro',Montserrat,Arial,sans-serif] text-sm text-slate-400 no-underline transition-colors hover:text-[#ff6070]"
-                  to={item.to}
+                  to={item.path}
                 >
-                  {item.label}
+                  {item.title}
                 </Link>
               </li>
             ))}

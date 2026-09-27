@@ -616,7 +616,7 @@ export const createShowtime = async (req, res) => {
       await generateShowtimeSeatsForShowtimeService(showtime._id);
 
     const populatedShowtime = await Showtime.findById(showtime._id)
-      .populate("movie_id", "title poster duration release_date status")
+      .populate("movie_id", "title poster duration release_date status age_limit ageLimit")
       .populate({
         path: "room_id",
         select: "name capacity cinema_id room_type status",

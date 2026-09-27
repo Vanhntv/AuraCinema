@@ -17,6 +17,7 @@ import {
 import { getAvailableConcessions } from "../services/concessionService";
 import { getEligibleVouchers, verifyVoucher } from "../services/voucherService";
 import { getEligibleGifts } from "../services/giftService";
+import BookingPolicyDialog from "./BookingPolicyDialog";
 import { useAuth } from "../hooks/useAuth";
 import useCurrentTime from "../hooks/useCurrentTime";
 import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, getShowtimeStartDate, isShowtimeUpcoming } from "../utils/dateTime";
@@ -291,6 +292,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [eligibleGifts, setEligibleGifts] = useState([]);
   const [appliedGift, setAppliedGift] = useState(null);
   const [showLoginNotice, setShowLoginNotice] = useState(false);
+  const [showPolicyDialog, setShowPolicyDialog] = useState(false);
   const [releasedPaymentReturnBookingId, setReleasedPaymentReturnBookingId] = useState("");
   const [replacementPaymentExpiresAt, setReplacementPaymentExpiresAt] = useState(null);
   const [initialRequestedDate] = useState(
@@ -1546,6 +1548,16 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
 
   const ageLimit = Number(movie?.age_limit || movie?.ageLimit || 0);
   const ageClassification = ageLimit > 0 ? `T${ageLimit}` : "P";
+  const openPolicyDialog = () => {
+    if (!selectedSeats.length || !selectedShowtime) return;
+    if (!isAuthenticated) {
+      requestLoginNotice();
+      return;
+    }
+    setSeatError("");
+    setShowPolicyDialog(true);
+  };
+  const closePolicyDialog = useCallback(() => setShowPolicyDialog(false), []);
   const shellClassName = isPageVariant
     ? "mx-auto w-[min(1320px,calc(100%_-_40px))] py-10 max-sm:w-[calc(100%_-_28px)]"
     : isInlineVariant
@@ -1562,7 +1574,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   }, [onClose, releaseHeldSeats]);
 
   useEffect(() => {
-    if (isEmbeddedVariant) return undefined;
+    if (isEmbeddedVariant || showPolicyDialog) return undefined;
 
     previousFocusRef.current = document.activeElement;
     const dialog = dialogRef.current;
@@ -1601,7 +1613,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       document.removeEventListener("keydown", handleDialogKeyDown);
       previousFocusRef.current?.focus?.();
     };
-  }, [handleClose, isEmbeddedVariant]);
+  }, [handleClose, isEmbeddedVariant, showPolicyDialog]);
   const viewMyTickets = () => {
     navigate("/tai-khoan?tab=tickets");
   };
@@ -2001,11 +2013,23 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 Đăng nhập để đặt vé
               </button>
             )}
-            <button className="mt-6 h-12 w-full rounded-full bg-[var(--aura-coral)] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={submitBooking} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+            <button className="mt-6 h-12 w-full rounded-full bg-[var(--aura-coral)] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={openPolicyDialog} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
 	        </div>
         )}
       </div>
+      {showPolicyDialog && (
+        <BookingPolicyDialog
+          movieTitle={movie.title}
+          ageLimit={ageLimit}
+          remainingSeconds={remainingSeconds}
+          hasDeadline={Boolean(holdExpiresAt)}
+          isSubmitting={isSubmitting}
+          submitError={seatError}
+          onClose={closePolicyDialog}
+          onConfirm={() => void submitBooking()}
+        />
+      )}
       {showLoginNotice && (
         <div className="fixed inset-0 z-[80] grid place-items-center bg-black/80 px-4" role="dialog" aria-modal="true" aria-labelledby="login-notice-title">
           <section className="relative w-[min(420px,100%)] rounded-[var(--aura-radius-lg)] bg-[var(--aura-surface)] p-6 text-white shadow-[var(--aura-shadow-floating)]">
