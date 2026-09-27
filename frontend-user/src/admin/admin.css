@@ -2096,9 +2096,10 @@
   padding: 10px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--color-bg-input);
   color: var(--color-text-primary);
   font-size: 14px;
+  font-weight: 600;
   line-height: 1.45;
   overflow-wrap: anywhere;
 }

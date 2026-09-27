@@ -30,6 +30,8 @@ const paymentStatusLabels = {
   refunded: "Đã hoàn tiền (dữ liệu cũ)",
 };
 
+const paymentFilterStatuses = ["paid", "cancelled", "expired"];
+
 const editablePaymentStatuses = new Set(["pending", "paid", "failed", "cancelled"]);
 
 const bookingStatusLabels = {
@@ -37,6 +39,8 @@ const bookingStatusLabels = {
   confirmed: "Đã xác nhận",
   cancelled: "Đã hủy",
 };
+
+const bookingFilterStatuses = ["confirmed", "cancelled"];
 
 const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
@@ -300,14 +304,14 @@ const BookingsPage = () => {
         </div>
         <select className="form-input" onChange={(event) => setPaymentFilter(event.target.value)} value={paymentFilter}>
           <option value="">Tất cả thanh toán</option>
-          {Object.entries(paymentStatusLabels).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+          {paymentFilterStatuses.map((status) => (
+            <option key={status} value={status}>{paymentStatusLabels[status]}</option>
           ))}
         </select>
         <select className="form-input" onChange={(event) => setStatusFilter(event.target.value)} value={statusFilter}>
           <option value="">Tất cả trạng thái vé</option>
-          {Object.entries(bookingStatusLabels).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
+          {bookingFilterStatuses.map((status) => (
+            <option key={status} value={status}>{bookingStatusLabels[status]}</option>
           ))}
         </select>
       </div>

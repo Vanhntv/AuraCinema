@@ -44,19 +44,6 @@ const formatCurrency = (value) =>
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
 
-const formatPercent = (value) => `${Math.round(Number(value || 0) * 100)}%`;
-
-const formatDate = (value) => {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-};
-
 const VouchersPage = () => {
   const [vouchers, setVouchers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -335,30 +322,6 @@ const VouchersPage = () => {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-card-icon green">
-            <HiOutlineTicket />
-          </div>
-          <div>
-            <div className="stat-card-value">
-              {statsLoading ? "..." : stats.active_voucher_count}
-            </div>
-            <div className="stat-card-label">Đang hoạt động</div>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-card-icon orange">
-            <HiOutlineTrendingUp />
-          </div>
-          <div>
-            <div className="stat-card-value">
-              {statsLoading
-                ? "..."
-                : Number(stats.total_usage || 0).toLocaleString("vi-VN")}
-            </div>
-            <div className="stat-card-label">Lượt sử dụng</div>
-          </div>
-        </div>
-        <div className="stat-card">
           <div className="stat-card-icon blue">
             <HiOutlineTag />
           </div>
@@ -396,73 +359,6 @@ const VouchersPage = () => {
           </div>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-card-icon orange">
-            <HiOutlineRefresh />
-          </div>
-          <div>
-            <div className="stat-card-value">
-              {statsLoading ? "..." : Number(stats.low_remaining?.length || 0)}
-            </div>
-            <div className="stat-card-label">Sắp hết lượt</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-card-icon blue">
-            <HiOutlineTrendingUp />
-          </div>
-          <div>
-            <div className="stat-card-value">
-              {statsLoading ? "..." : formatPercent(stats.usage_rate)}
-            </div>
-            <div className="stat-card-label">Tỷ lệ sử dụng</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="voucher-analytics-grid">
-        <div className="table-container">
-          <div className="table-toolbar">
-            <div className="table-toolbar-left">
-              <span className="table-toolbar-title">Mã sắp hết hạn</span>
-              <span className="table-toolbar-count">7 ngày tới</span>
-            </div>
-          </div>
-          <div className="voucher-mini-list">
-            {(stats.expiring_soon || []).length === 0 ? (
-              <div className="voucher-mini-empty">Không có mã sắp hết hạn</div>
-            ) : (
-              stats.expiring_soon.map((item) => (
-                <div className="voucher-mini-row" key={item.id}>
-                  <span className="voucher-code">{item.code}</span>
-                  <strong>{formatDate(item.end_date)}</strong>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="table-container">
-          <div className="table-toolbar">
-            <div className="table-toolbar-left">
-              <span className="table-toolbar-title">Mã sắp hết lượt</span>
-              <span className="table-toolbar-count">Còn ít lượt</span>
-            </div>
-          </div>
-          <div className="voucher-mini-list">
-            {(stats.low_remaining || []).length === 0 ? (
-              <div className="voucher-mini-empty">Không có mã sắp hết lượt</div>
-            ) : (
-              stats.low_remaining.map((item) => (
-                <div className="voucher-mini-row" key={item.id}>
-                  <span className="voucher-code">{item.code}</span>
-                  <strong>{Number(item.remaining_quantity || 0)} lượt</strong>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       </div>
 
       <div className="table-container">
@@ -549,7 +445,6 @@ const VouchersPage = () => {
               <option value="">Tất cả trạng thái</option>
               <option value="active">Đang hoạt động</option>
               <option value="paused">Tạm dừng</option>
-              <option value="upcoming">Sắp diễn ra</option>
               <option value="expired">Hết hạn</option>
               <option value="out_of_usage">Đã hết lượt</option>
               <option value="cancelled">Đã hủy</option>
@@ -585,8 +480,6 @@ const VouchersPage = () => {
             >
               <option value="created_at:desc">Ngày tạo mới nhất</option>
               <option value="created_at:asc">Ngày tạo cũ nhất</option>
-              <option value="end_date:asc">Sắp hết hạn</option>
-              <option value="end_date:desc">Hết hạn xa nhất</option>
               <option value="usage_count:desc">Lượt dùng cao nhất</option>
               <option value="usage_count:asc">Lượt dùng thấp nhất</option>
             </select>
