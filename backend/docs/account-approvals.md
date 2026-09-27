@@ -8,4 +8,8 @@ Admin xem hàng chờ tại `/admin/account-approvals`. Người tạo đề xu�
 
 Hệ thống cần MongoDB hỗ trợ transaction để áp dụng thay đổi, lưu trạng thái yêu cầu và audit cùng nhau. Cần ít nhất hai admin hoạt động nếu admin tự đề xuất thay đổi tài khoản của mình; nếu admin A đề xuất thay đổi admin B thì cần thêm admin C để duyệt. Không thể khóa hoặc hạ quyền khiến còn dưới hai admin hoạt động.
 
+Nếu phê duyệt hoặc từ chối trả `503 MONGODB_TRANSACTION_UNAVAILABLE`, kiểm tra log backend để xem lỗi MongoDB gốc. Lúc khởi động, backend báo `transaction: sẵn sàng` hoặc `transaction: không hỗ trợ`. Với MongoDB standalone, hãy chuyển sang replica set hoặc Atlas, rồi khởi động lại backend. `MONGODB_URI` được ưu tiên hơn `MONGODB_TARGET` và `MONGODB_ATLAS_URI`; kiểm tra biến môi trường của tiến trình backend nếu cấu hình trong `.env` trông đúng mà lỗi vẫn xảy ra. Không bỏ transaction ở luồng này vì trạng thái yêu cầu và audit phải được ghi cùng nhau.
+
+Không chạy `Promise.all` với các truy vấn dùng cùng một session trong transaction. MongoDB có thể trả lỗi `ConflictingOperationInProgress` (mã 117); đó là lỗi thao tác đồng thời, không phải bằng chứng MongoDB thiếu replica set.
+
 API hàng chờ (chỉ admin): `GET /api/users/approval-requests`, `POST /api/users/approval-requests/:id/approve`, `POST /api/users/approval-requests/:id/reject`, `POST /api/users/approval-requests/:id/send-reset`. Phê duyệt yêu cầu trường `current_password`; từ chối yêu cầu trường `reason`.

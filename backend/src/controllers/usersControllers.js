@@ -409,14 +409,14 @@ export const approveAccountChangeRequest = async (req, res) => {
       catch { deliveryMessage = " Yêu cầu đã được duyệt nhưng chưa gửi được OTP; hãy thử nút Gửi lại OTP."; }
     }
     return res.json({ success: true, message: `Admin khác đã phê duyệt đề xuất.${deliveryMessage}`, data: request });
-  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message, ...(error.code ? { code: error.code } : {}) }); }
 };
 
 export const rejectAccountChangeRequest = async (req, res) => {
   try {
     const request = await rejectAccountChange({ requestId: req.params.id, reviewerId: req.user.id, reason: req.body?.reason });
     return res.json({ success: true, message: "Đã từ chối yêu cầu", data: request });
-  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message, ...(error.code ? { code: error.code } : {}) }); }
 };
 
 export const resendApprovedPasswordReset = async (req, res) => {

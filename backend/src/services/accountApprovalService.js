@@ -90,10 +90,8 @@ export const approveAccountChange = async ({ requestId, reviewerId, passwordVali
     if (request.status !== "pending") throw error("Yêu cầu không còn chờ phê duyệt", 409);
     if (request.expires_at <= new Date()) throw error("Yêu cầu đã hết hạn", 410);
 
-    const [reviewer, target] = await Promise.all([
-      User.findOne({ _id: reviewerId, ...activeAdmin }).session(session),
-      User.findOne({ _id: request.target_user_id, deleted_at: null }).session(session),
-    ]);
+    const reviewer = await User.findOne({ _id: reviewerId, ...activeAdmin }).session(session);
+    const target = await User.findOne({ _id: request.target_user_id, deleted_at: null }).session(session);
     if (!reviewer) throw error("Bạn không còn quyền admin", 403);
     if (!target) throw error("Tài khoản đích không còn tồn tại", 409);
     if (id(request.requested_by) === id(reviewer)) throw error("Admin tạo đề xuất không thể tự phê duyệt", 403);
@@ -168,10 +166,8 @@ export const rejectAccountChange = async ({ requestId, reviewerId, reason }) => 
   const rejectionReason = String(reason || "").trim();
   if (!rejectionReason) throw error("Vui lòng nhập lý do từ chối");
   return withTransaction(async (session) => {
-    const [request, reviewer] = await Promise.all([
-      AccountChangeRequest.findById(requestId).session(session),
-      User.findOne({ _id: reviewerId, ...activeAdmin }).session(session),
-    ]);
+    const request = await AccountChangeRequest.findById(requestId).session(session);
+    const reviewer = await User.findOne({ _id: reviewerId, ...activeAdmin }).session(session);
     if (!request) throw error("Không tìm thấy yêu cầu", 404);
     if (!reviewer) throw error("Bạn không còn quyền admin", 403);
     if (request.status !== "pending") throw error("Yêu cầu không còn chờ phê duyệt", 409);

@@ -58,8 +58,14 @@ export const connectDB = async () => {
     await mongoose.connect(mongoUri);
     await reconcileTicketAllocationIndex();
 
+    const topology = await mongoose.connection.db.admin().command({ hello: 1 });
+    const transactionCapable = Boolean(topology.setName || topology.msg === "isdbgrid");
+    if (!transactionCapable) {
+      console.warn("MongoDB đang chạy standalone; phê duyệt tài khoản và các thao tác dùng transaction sẽ trả 503. Hãy dùng replica set hoặc MongoDB Atlas.");
+    }
+
     // mongoose.connect("mongodb://localhost:27017/nodejs");
-    console.log("Liên kết csdl thành công");
+    console.log(`Liên kết csdl thành công (transaction: ${transactionCapable ? "sẵn sàng" : "không hỗ trợ"})`);
   } catch (error) {
     console.error("lỗi kết lỗi csdl", error);
     process.exit(1);

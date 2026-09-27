@@ -61,7 +61,9 @@ test("automatic gifts require a concrete trigger", async () => {
   assert.match(error, /chọn sự kiện phát/);
 });
 
-test("gift transactions explain the replica set requirement", async (t) => {
+test("unsupported transactions return an actionable 503 and log the original error", async (t) => {
+  let logged = false;
+  t.mock.method(console, "error", () => { logged = true; });
   t.mock.method(mongoose, "startSession", async () => ({
     withTransaction: async () => {
       throw new Error("Transaction numbers are only allowed on a replica set member or mongos");
@@ -70,6 +72,16 @@ test("gift transactions explain the replica set requirement", async (t) => {
   }));
   await assert.rejects(
     withTransaction(async () => null),
-    (error) => error.statusCode === 503 && /quà tặng/.test(error.message),
+    (error) => error.statusCode === 503 && error.code === "MONGODB_TRANSACTION_UNAVAILABLE" && /replica set/.test(error.message),
   );
+  assert.equal(logged, true);
+});
+
+test("transaction conflicts are not mislabeled as unsupported MongoDB", async (t) => {
+  const conflict = Object.assign(new Error("Only servers in a sharded cluster can start a new transaction at the active transaction number"), { code: 117 });
+  t.mock.method(mongoose, "startSession", async () => ({
+    withTransaction: async () => { throw conflict; },
+    endSession: async () => {},
+  }));
+  await assert.rejects(withTransaction(async () => null), (error) => error === conflict);
 });

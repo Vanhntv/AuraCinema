@@ -5,7 +5,7 @@ import AccountChangeRequest from "../src/models/AccountChangeRequest.js";
 import AuditLog from "../src/models/AuditLog.js";
 import RewardPointLog from "../src/models/RewardPointLog.js";
 import User from "../src/models/User.js";
-import { approveAccountChange, requestAccountChange } from "../src/services/accountApprovalService.js";
+import { approveAccountChange, rejectAccountChange, requestAccountChange } from "../src/services/accountApprovalService.js";
 import { authMiddleware } from "../src/middleware/authMiddleware.js";
 import { signJwt } from "../src/utils/jwt.js";
 import { forgotPassword, resetPassword } from "../src/controllers/authControllers.js";
@@ -13,6 +13,19 @@ import { forgotPassword, resetPassword } from "../src/controllers/authController
 const ids = Array.from({ length: 4 }, () => new mongoose.Types.ObjectId());
 const [adminA, adminB, , targetId] = ids;
 const sessionQuery = (value) => ({ session: async () => value });
+const serialSessionQuery = () => {
+  let active = 0;
+  return (value) => ({ session: async () => {
+    active += 1;
+    try {
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(active, 1, "transaction queries must run sequentially");
+      return value;
+    } finally {
+      active -= 1;
+    }
+  } });
+};
 const patch = async (patches, work) => {
   const old = patches.map(([object, key, value]) => { const previous = object[key]; object[key] = value; return [object, key, previous]; });
   try { return await work(); } finally { old.reverse().forEach(([object, key, value]) => { object[key] = value; }); }
@@ -57,10 +70,11 @@ test("one admin other than the proposer applies a pending user profile change on
   };
   let applied = 0;
   let audited = 0;
+  const query = serialSessionQuery();
   await patch([
     [mongoose, "startSession", async () => ({ async withTransaction(work) { return work(); }, async endSession() {} })],
-    [AccountChangeRequest, "findById", () => sessionQuery(request)],
-    [User, "findOne", ({ _id }) => sessionQuery(String(_id) === String(targetId) ? target : { _id, role: "admin" })],
+    [AccountChangeRequest, "findById", () => query(request)],
+    [User, "findOne", ({ _id }) => query(String(_id) === String(targetId) ? target : { _id, role: "admin" })],
     [User, "updateOne", async (_filter, update) => { applied += 1; assert.equal(update.$set.full_name, "Tên mới"); return { matchedCount: 1 }; }],
     [AuditLog, "create", async () => { audited += 1; }],
   ], async () => {
@@ -148,6 +162,28 @@ test("proposer cannot approve their own proposal for another user", async () => 
       approveAccountChange({ requestId: request._id, reviewerId: adminA, passwordValid: true }),
       (error) => error.statusCode === 403 && /tạo đề xuất/.test(error.message),
     );
+  });
+});
+
+test("a different admin rejects a pending request and records an audit in the same transaction", async () => {
+  const request = {
+    _id: new mongoose.Types.ObjectId(), requested_by: adminA, target_user_id: targetId,
+    status: "pending", async save({ session }) { assert.equal(session, activeSession); },
+  };
+  const activeSession = { async withTransaction(work) { return work(); }, async endSession() {} };
+  let audit;
+  const query = serialSessionQuery();
+  await patch([
+    [mongoose, "startSession", async () => activeSession],
+    [AccountChangeRequest, "findById", () => query(request)],
+    [User, "findOne", () => query({ _id: adminB, role: "admin" })],
+    [AuditLog, "create", async ([entry], { session }) => { assert.equal(session, activeSession); audit = entry; }],
+  ], async () => {
+    const result = await rejectAccountChange({ requestId: request._id, reviewerId: adminB, reason: "Không phù hợp" });
+    assert.equal(result.status, "rejected");
+    assert.equal(String(result.rejected_by), String(adminB));
+    assert.equal(audit.action, "REJECT_ACCOUNT_CHANGE");
+    assert.equal(audit.reason, "Không phù hợp");
   });
 });
 
