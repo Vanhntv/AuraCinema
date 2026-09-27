@@ -5,15 +5,11 @@ import { scanHistoryGrouping } from "../src/modules/tickets/scanHistoryGrouping.
 import { bookingScanHistoryUnion } from "../src/modules/tickets/bookingScanHistory.js";
 import { getAdminTicketScanLogs } from "../src/controllers/adminTicketControllers.js";
 
-test("grouping keeps different scan times, results and operators separate", () => {
+test("grouping uses only booking identity so repeated scans, prints and seats share one row", () => {
   const group = scanHistoryGrouping().find((step) => step.$group).$group;
-  assert.deepEqual(group._id.booking, { $ifNull: ["$booking._id", "$_id"] });
-  assert.equal(group._id.time.$dateToString.format, "%Y-%m-%dT%H:%M:%S");
-  assert.equal(group._id.action, "$action");
-  assert.equal(group._id.result, "$result");
-  assert.equal(group._id.admin, "$adminId");
+  assert.deepEqual(group._id, { $ifNull: ["$booking._id", { source: "$source", logId: "$_id" }] });
+  assert.deepEqual(group.latest, { $first: "$$ROOT" });
   assert.deepEqual(group.scannedSeats, { $addToSet: "$ticket.seatLabel" });
-  assert.deepEqual(group._id.orderEvent, { $cond: [{ $eq: ["$source", "booking"] }, "$_id", null] });
 });
 
 test("order scan history reads pre-existing lookup and print logs, not complaint notes", () => {
@@ -47,6 +43,7 @@ test("order lookup links booking and seats without requiring an individual ticke
     assert.equal(body.data[0].bookingCode, "ORDER-1");
     assert.equal(body.data[0].seatLabel, "A1, A2");
     assert.equal(body.data[0].scanCount, 2);
+    assert.equal(body.data[0].ticketCount, 2);
     assert.equal(body.data[0].movie.title, "Phim của đơn");
     assert.equal(body.data[0].room.name, "Phòng 1");
   } finally { TicketScanLog.aggregate = original; }
@@ -61,6 +58,7 @@ test("history groups before pagination, searches order codes and returns booking
     if (pipeline.some((step) => step.$project)) return [{
       _id: "log-1", scannedAt, booking: { _id: "order-1", booking_code: "AURA-ORDER" },
       ticket: { ticketCode: "AURA-ORDER-A1", seatLabel: "A1" },
+      bookingTickets: [{ seatLabel: "A1" }, { seatLabel: "A2" }, { seatLabel: "A3" }],
       scannedSeats: ["A2", "A1"], scanCount: 2, action: "VERIFY", result: "SUCCESS",
     }];
     if (pipeline.at(-1)?.$count === "totalItems") return [{ totalItems: 1 }];
@@ -75,8 +73,10 @@ test("history groups before pagination, searches order codes and returns booking
     assert.equal(body.success, true);
     assert.equal(body.data[0].bookingId, "order-1");
     assert.equal(body.data[0].bookingCode, "AURA-ORDER");
-    assert.equal(body.data[0].seatLabel, "A1, A2");
+    assert.equal(body.data[0].seatLabel, "A1, A2, A3");
     assert.equal(body.data[0].scanCount, 2);
+    assert.equal(body.data[0].ticketCount, 3);
+    assert.equal(body.data[0].historyCount, 2);
     assert.equal(body.pagination.totalItems, 1);
     assert.equal(body.stats.totalScans, 4);
     const list = pipelines[0];

@@ -178,15 +178,15 @@ const TicketScanHistoryPage = () => {
       <div className="table-container ticket-scan-table-container">
         <div className="table-toolbar">
           <div className="table-toolbar-left">
-            <span className="table-toolbar-title">Lượt quét theo đơn</span>
-            <span className="table-toolbar-count">{totalItems} lượt</span>
+            <span className="table-toolbar-title">Danh sách đơn đã quét</span>
+            <span className="table-toolbar-count">{totalItems} kết quả</span>
           </div>
         </div>
         <div className="table-wrapper">
           <table className="data-table ticket-scan-table">
             <thead>
               <tr>
-                <th>Thời gian</th>
+                <th>Quét gần nhất</th>
                 <th>Mã đơn</th>
                 <th>Phim</th>
                 <th>Suất chiếu</th>
@@ -299,7 +299,7 @@ const ScanLogDetailModal = ({ log, onClose }) => {
     <div className="modal modal-large ticket-scan-detail-modal" onClick={(event) => event.stopPropagation()}>
       <div className="modal-header">
         <div>
-          <h2 className="modal-title">Chi tiết lượt quét</h2>
+          <h2 className="modal-title">Chi tiết đơn đã quét</h2>
           <p className="modal-subtitle">{log.bookingCode || "Không xác định được đơn"}</p>
         </div>
         <button className="modal-close" onClick={onClose} type="button">×</button>
@@ -343,11 +343,12 @@ const ScanLogDetailModal = ({ log, onClose }) => {
             <DetailField label="Tổng thanh toán" value={currency(booking.total_price)} />
           </div>
         </>}
-        <h3>Thông tin lượt quét</h3>
+        <h3>Lượt quét gần nhất</h3>
         <div className="ticket-scan-detail-grid">
-          <DetailField label="Thời gian quét" value={formatDateTime(log.scannedAt)} />
+          <DetailField label="Quét gần nhất" value={formatDateTime(log.scannedAt)} />
           <DetailField label="Mã đơn" value={log.bookingCode || "-"} />
-          <DetailField label="Số vé trong lượt quét" value={log.scanCount || 1} />
+          <DetailField label="Số ghế đã đặt" value={log.ticketCount ?? log.scanCount ?? 0} />
+          <DetailField label="Số bản ghi quét / in của đơn" value={log.historyCount || 1} />
           <DetailField label="Phim" value={log.movie?.title || "-"} />
           <DetailField label="Suất chiếu" value={formatDateTime(log.showtime?.startTime)} />
           <DetailField label="Phòng" value={log.room?.name || "-"} />

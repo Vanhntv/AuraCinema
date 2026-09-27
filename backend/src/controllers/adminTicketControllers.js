@@ -184,10 +184,19 @@ const buildScanLogAggregation = (query = {}) => {
   return pipeline;
 };
 
+const getOrderSeatLabels = (log) => {
+  const snapshotSeats = (log.booking?.seat_items || []).map((seat) => seat.seat_label).filter(Boolean);
+  const ticketSeats = (log.bookingTickets || []).map((ticket) => ticket.seatLabel).filter(Boolean);
+  const seats = snapshotSeats.length ? snapshotSeats : ticketSeats.length ? ticketSeats : log.scannedSeats?.filter(Boolean) || [log.ticket?.seatLabel].filter(Boolean);
+  return [...new Set(seats)].sort((first, second) => first.localeCompare(second, "vi", { numeric: true }));
+};
+
 const formatScanLogRow = (log) => ({
   id: `${log.source || "ticket"}-${log._id}`,
   bookingId: log.booking?._id || log.ticket?.bookingId || null,
   bookingCode: log.booking?.booking_code || "",
+  historyCount: log.scanCount || 1,
+  ticketCount: getOrderSeatLabels(log).length,
   scanCount: log.source === "booking" ? log.ticketIds?.length || log.booking?.seat_items?.length || 0 : log.scanCount || 1,
   scannedAt: log.scannedAt,
   ticketCode: log.ticket?.ticketCode || "",
@@ -211,7 +220,7 @@ const formatScanLogRow = (log) => ({
       name: log.room.name,
     }
     : log.booking?.showtime_snapshot?.room_name ? { id: log.booking.showtime_snapshot.room_id, name: log.booking.showtime_snapshot.room_name } : null,
-  seatLabel: log.source === "booking" ? (log.booking?.seat_items || []).map((seat) => seat.seat_label).filter(Boolean).join(", ") : log.scannedSeats?.filter(Boolean).sort().join(", ") || log.ticket?.seatLabel || "",
+  seatLabel: getOrderSeatLabels(log).join(", "),
   admin: log.admin?._id
     ? {
       id: log.admin._id,
@@ -609,6 +618,7 @@ export const getAdminTicketScanLogs = async (req, res) => {
         { $sort: { scannedAt: -1, _id: -1 } },
         { $skip: skip },
         { $limit: limit },
+        { $lookup: { from: "tickets", localField: "booking._id", foreignField: "bookingId", as: "bookingTickets", pipeline: [{ $project: { seatLabel: 1 } }] } },
         {
           $project: {
             qrTokenHash: 0,
