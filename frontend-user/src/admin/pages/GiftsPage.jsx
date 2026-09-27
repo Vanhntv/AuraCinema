@@ -14,6 +14,8 @@ import {
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
 import { resolveGiftFormValue } from "../utils/giftFormValue";
+import { getMovies } from "../services/movieService";
+import { getConcessions } from "../services/concessionService";
 import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift, uploadGiftImage } from "../services/giftService";
 
 const PAGE_SIZE = 10;
@@ -318,12 +320,34 @@ const buildGiftFormFromGift = (gift) => ({
   status: gift?.status || "active",
 });
 
+const GiftConditionSelect = ({ label, options, value, onChange, disabled, loading, loadError, error }) => {
+  const selectedIds = parseDelimitedList(value);
+  const remaining = options.filter((item) => !selectedIds.includes(item._id));
+  return <>
+    <select aria-label={label} className={`form-input ${error ? "error" : ""}`} value="" disabled={disabled || loading || Boolean(loadError)} onChange={(event) => {
+      if (event.target.value) onChange([...new Set([...selectedIds, event.target.value])].join(", "));
+    }}>
+      <option value="">{loading ? "Đang tải danh sách..." : loadError ? "Không tải được danh sách" : remaining.length ? `Chọn ${label.toLowerCase()}` : "Không có mục để chọn"}</option>
+      {remaining.map((item) => <option key={item._id} value={item._id}>{item.title || item.name}</option>)}
+    </select>
+    {selectedIds.length > 0 && <div className="gift-condition-selections">{selectedIds.map((id) => {
+      const item = options.find((entry) => entry._id === id);
+      const name = item?.title || item?.name || `Mục đã chọn (${id})`;
+      return <span key={id} className="gift-condition-selection">{name}<button type="button" aria-label={`Bỏ chọn ${name}`} disabled={disabled} onClick={() => onChange(selectedIds.filter((entry) => entry !== id).join(", "))}><HiOutlineX /></button></span>;
+    })}</div>}
+    <p className="form-helper">Có thể chọn nhiều mục; bỏ trống để không giới hạn.</p>
+    {loadError && <p className="form-error">{loadError}</p>}
+    {error && <p className="form-error">{error}</p>}
+  </>;
+};
+
 const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = null }) => {
   const [formData, setFormData] = useState(emptyGiftForm);
   const [errors, setErrors] = useState({});
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [conditionOptions, setConditionOptions] = useState({ movies: [], combos: [], loading: true, movieError: "", comboError: "" });
   const isEditMode = Boolean(initialData?._id);
   const issuedQuantity = Number(initialData?.issued_quantity || 0);
   const isIssuedGift = isEditMode && issuedQuantity > 0;
@@ -341,6 +365,35 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       if (imagePreview) URL.revokeObjectURL(imagePreview);
     };
   }, [imagePreview]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadMovies = async () => {
+      const movies = [];
+      let page = 1;
+      let totalPages;
+      do {
+        const response = await getMovies("", page, 100);
+        if (cancelled) return [];
+        movies.push(...(response.data || []));
+        totalPages = response.pagination?.totalPages || response.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      return movies;
+    };
+    Promise.allSettled([loadMovies(), getConcessions()]).then(([movies, combos]) => {
+      if (cancelled) return;
+      setConditionOptions({
+        movies: movies.status === "fulfilled" ? movies.value : [],
+        combos: combos.status === "fulfilled" ? (Array.isArray(combos.value.data) ? combos.value.data : combos.value.data?.data || []) : [],
+        loading: false,
+        movieError: movies.status === "rejected" ? "Không tải được phim. Hãy đóng và mở lại form để thử lại." : "",
+        comboError: combos.status === "rejected" ? "Không tải được combo. Hãy đóng và mở lại form để thử lại." : "",
+      });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -614,13 +667,11 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phim chỉ định</label>
-                  <input className={`form-input ${errors.movie_ids ? "error" : ""}`} placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.movie_ids} onChange={(event) => handleChange("movie_ids", event.target.value)} disabled={isIssuedGift} />
-                  {errors.movie_ids && <p className="form-error">{errors.movie_ids}</p>}
+                  <GiftConditionSelect label="Phim chỉ định" options={conditionOptions.movies} value={formData.movie_ids} onChange={(value) => handleChange("movie_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.movieError} error={errors.movie_ids} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Combo chỉ định</label>
-                  <input className={`form-input ${errors.combo_ids ? "error" : ""}`} placeholder="Nhập ID combo, cách nhau bằng dấu phẩy" value={formData.combo_ids} onChange={(event) => handleChange("combo_ids", event.target.value)} disabled={isIssuedGift} />
-                  {errors.combo_ids && <p className="form-error">{errors.combo_ids}</p>}
+                  <GiftConditionSelect label="Combo chỉ định" options={conditionOptions.combos} value={formData.combo_ids} onChange={(value) => handleChange("combo_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.comboError} error={errors.combo_ids} />
                 </div>
               </div>
               <div className="segmented-options">

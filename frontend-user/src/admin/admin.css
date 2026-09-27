@@ -6908,6 +6908,40 @@ html.dark .admin-layout .showtime-conflict-range strong {
   object-fit: contain;
 }
 
+.gift-condition-selections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.gift-condition-selection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.gift-condition-selection button {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.gift-condition-selection button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .form-row.gift-receiving-fields {
   grid-template-columns: minmax(0, 1fr) 120px;
   align-items: start;
