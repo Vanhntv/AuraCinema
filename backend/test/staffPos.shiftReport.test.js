@@ -93,6 +93,47 @@ test("staff booking QR lookup returns every booked seat", async () => {
   assert.equal(typeof bookingFilter["order_qr.token_hash"], "string");
 });
 
+test("staff booking code lookup returns every booked seat", async () => {
+  const originalBookingFindOne = Booking.findOne;
+  const originalTicketFind = Ticket.find;
+  let bookingFilter;
+  Booking.findOne = (filter) => {
+    bookingFilter = filter;
+    return {
+      select: () => ({
+        lean: async () => ({
+          _id: "booking-1",
+          booking_code: "AURA790641104155",
+          status: "confirmed",
+          payment_status: "paid",
+          movie_snapshot: { title: "Dune" },
+          showtime_snapshot: { start_time: new Date("2030-01-01T10:00:00.000Z"), room_name: "Phòng 1" },
+          seat_items: [
+            { seat_label: "A1", seat_type: "VIP" },
+            { seat_label: "A2", seat_type: "VIP" },
+          ],
+          combos: [],
+        }),
+      }),
+    };
+  };
+  Ticket.find = () => ({ select: () => ({ lean: async () => [] }) });
+
+  const res = makeResponse();
+  try {
+    await lookupStaffBookingOrder({ body: { bookingCode: "aura790641104155" }, user: { id: "staff-1" } }, res);
+  } finally {
+    Booking.findOne = originalBookingFindOne;
+    Ticket.find = originalTicketFind;
+  }
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.data.qrType, "BOOKING");
+  assert.equal(res.body.data.seat.label, "A1, A2");
+  assert.deepEqual(bookingFilter, { booking_code: "AURA790641104155" });
+});
+
 test("shift report totals only the current staff counter sales for the Vietnam calendar day", async () => {
   const originalBookingFind = Booking.find;
   const originalTicketCountDocuments = Ticket.countDocuments;

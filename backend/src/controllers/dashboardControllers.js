@@ -104,6 +104,24 @@ export const getMonthRange = (monthValue, yearValue) => {
   return { start, end, days, month, year };
 };
 
+export const getYearRange = (yearValue) => {
+  const yearText = String(yearValue || "");
+  if (!/^\d{4}$/.test(yearText)) return null;
+
+  const year = Number(yearText);
+  if (year < 1000 || year > 9999) return null;
+
+  return {
+    start: new Date(Date.UTC(year, 0, 1, -7)),
+    end: new Date(Date.UTC(year + 1, 0, 1, -7)),
+    months: Array.from({ length: 12 }, (_, index) => ({
+      month: index + 1,
+      label: `T${index + 1}`,
+    })),
+    year,
+  };
+};
+
 const shiftLocalDate = (date, days) => {
   const match = DATE_PATTERN.exec(String(date || ""));
   if (!match) return null;
@@ -112,6 +130,34 @@ const shiftLocalDate = (date, days) => {
     Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days),
   );
   return shifted.toISOString().slice(0, 10);
+};
+
+export const getCustomDateRange = (from, to) => {
+  const startRange = getDateRange(from);
+  const endRange = getDateRange(to);
+  if (!startRange || !endRange || startRange.start > endRange.start) {
+    return null;
+  }
+
+  const dayCount = Math.round(
+    (endRange.start.getTime() - startRange.start.getTime()) / (24 * 60 * 60 * 1000),
+  ) + 1;
+  const days = Array.from({ length: dayCount }, (_, index) => {
+    const date = shiftLocalDate(from, index);
+    return {
+      date,
+      label: date.slice(8, 10) + "/" + date.slice(5, 7),
+    };
+  });
+
+  return {
+    start: startRange.start,
+    end: endRange.end,
+    from,
+    to,
+    days,
+    label: from === to ? from : `${from} - ${to}`,
+  };
 };
 
 const toLocalDate = (instant) => instant.toLocaleDateString("en-CA", {
@@ -173,7 +219,45 @@ const getComparisonRanges = (period, selectedDate) => {
     };
   }
 
+  if (normalizedPeriod === "year") {
+    const match = DATE_PATTERN.exec(String(selectedDate || ""));
+    if (!match) return null;
+    const year = Number(match[1]);
+    const current = getYearRange(year);
+    const previous = getYearRange(year - 1);
+    if (!current || !previous) return null;
+
+    return {
+      period: normalizedPeriod,
+      current: { ...current, label: `Năm ${year}` },
+      previous: { ...previous, label: `Năm ${year - 1}` },
+    };
+  }
+
   return null;
+};
+
+const getCustomComparisonRanges = (from, to) => {
+  const current = getCustomDateRange(from, to);
+  if (!current) return null;
+
+  const duration = current.end.getTime() - current.start.getTime();
+  const previousStart = new Date(current.start.getTime() - duration);
+  const previousEnd = current.start;
+  const previousFrom = toLocalDate(previousStart);
+  const previousTo = shiftLocalDate(from, -1);
+
+  return {
+    period: "range",
+    current,
+    previous: {
+      start: previousStart,
+      end: previousEnd,
+      label: previousFrom === previousTo
+        ? previousFrom
+        : `${previousFrom} - ${previousTo}`,
+    },
+  };
 };
 
 const formatTime = (value) => {
@@ -685,10 +769,138 @@ export const getMonthlyRevenue = async (req, res) => {
   }
 };
 
+export const getYearlyRevenue = async (req, res) => {
+  const yearRange = getYearRange(req.query?.year);
+  if (!yearRange) {
+    return res.status(400).json({
+      success: false,
+      message: "Năm không hợp lệ.",
+    });
+  }
+
+  try {
+    const groupedRevenue = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: { $gte: yearRange.start, $lt: yearRange.end },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $month: { date: "$created_at", timezone: DASHBOARD_TIME_ZONE },
+          },
+          revenue: { $sum: "$total_price" },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const revenueByMonth = new Map(
+      groupedRevenue.map((item) => [item._id, item.revenue]),
+    );
+    const months = yearRange.months.map((month) => ({
+      ...month,
+      revenue: revenueByMonth.get(month.month) ?? 0,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        year: yearRange.year,
+        totalRevenue: months.reduce((sum, month) => sum + month.revenue, 0),
+        months,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const getRangeRevenue = async (req, res) => {
+  const range = getCustomDateRange(req.query?.from, req.query?.to);
+  if (!range) {
+    return res.status(400).json({
+      success: false,
+      message: "Khoảng ngày không hợp lệ. Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.",
+    });
+  }
+
+  try {
+    const result = await Booking.aggregate([
+      {
+        $match: {
+          payment_status: "paid",
+          status: { $in: REVENUE_BOOKING_STATUSES },
+          created_at: { $gte: range.start, $lt: range.end },
+        },
+      },
+      {
+        $facet: {
+          summary: [
+            {
+              $group: {
+                _id: null,
+                revenue: { $sum: "$total_price" },
+                ticketsSold: {
+                  $sum: { $size: { $ifNull: ["$showtime_seat_ids", []] } },
+                },
+                bookingCount: { $sum: 1 },
+              },
+            },
+          ],
+          dailyRevenue: [
+            {
+              $group: {
+                _id: {
+                  $dateToString: {
+                    format: "%Y-%m-%d",
+                    date: "$created_at",
+                    timezone: DASHBOARD_TIME_ZONE,
+                  },
+                },
+                revenue: { $sum: "$total_price" },
+              },
+            },
+            { $sort: { _id: 1 } },
+          ],
+        },
+      },
+    ]);
+
+    const summary = result?.[0]?.summary?.[0] ?? {};
+    const revenueByDate = new Map(
+      (result?.[0]?.dailyRevenue || []).map((item) => [item._id, item.revenue]),
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        from: range.from,
+        to: range.to,
+        timezone: DASHBOARD_TIME_ZONE,
+        totalRevenue: summary.revenue ?? 0,
+        ticketsSold: summary.ticketsSold ?? 0,
+        bookingCount: summary.bookingCount ?? 0,
+        days: range.days.map((day) => ({
+          ...day,
+          revenue: revenueByDate.get(day.date) ?? 0,
+        })),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const getRevenueComparison = async (req, res) => {
   const period = String(req.query?.period || "month").toLowerCase();
   const selectedDate = req.query?.date || getTodayRange().localDay;
-  const ranges = getComparisonRanges(period, selectedDate);
+  const ranges = period === "range"
+    ? getCustomComparisonRanges(req.query?.from, req.query?.to)
+    : getComparisonRanges(period, selectedDate);
 
   if (!ranges) {
     return res.status(400).json({
@@ -770,9 +982,11 @@ export const getTopMoviesRevenue = async (req, res) => {
   try {
     const requestedPeriod = String(req.query?.period || "").toLowerCase();
     const selectedDate = req.query?.date || getTodayRange().localDay;
-    const ranges = requestedPeriod
-      ? getComparisonRanges(requestedPeriod, selectedDate)
-      : null;
+    const ranges = requestedPeriod === "range"
+      ? getCustomComparisonRanges(req.query?.from, req.query?.to)
+      : requestedPeriod
+        ? getComparisonRanges(requestedPeriod, selectedDate)
+        : null;
 
     if (requestedPeriod && !ranges) {
       return res.status(400).json({
@@ -859,9 +1073,11 @@ export const getTopSellingCombos = async (req, res) => {
   try {
     const requestedPeriod = String(req.query?.period || "").toLowerCase();
     const selectedDate = req.query?.date || getTodayRange().localDay;
-    const ranges = requestedPeriod
-      ? getComparisonRanges(requestedPeriod, selectedDate)
-      : null;
+    const ranges = requestedPeriod === "range"
+      ? getCustomComparisonRanges(req.query?.from, req.query?.to)
+      : requestedPeriod
+        ? getComparisonRanges(requestedPeriod, selectedDate)
+        : null;
 
     if (requestedPeriod && !ranges) {
       return res.status(400).json({
