@@ -38,6 +38,11 @@ export const scanPrintBookingOrder = async (input = {}) => {
   return res.data;
 };
 
+export const confirmBookingOrderPrint = async (bookingCode, printClaimId, success, reason = "", attemptReason = "") => {
+  const res = await axiosClient.post(`${API_URL}/print-confirm`, { bookingCode, printClaimId, success, reason, attemptReason });
+  return res.data;
+};
+
 export const reprintBookingTickets = async (id, ticketIds, reason) => {
   const res = await axiosClient.post(`${API_URL}/${id}/reprint`, { ticketIds, reason });
   return res.data;

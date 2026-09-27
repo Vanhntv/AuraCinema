@@ -5,12 +5,14 @@ import { cancelBooking } from "../src/controllers/bookingsControllers.js";
 import { formatTicketForOwner, getMyTicketsByBooking } from "../src/controllers/ticketControllers.js";
 import {
   claimTicketPrintOnce,
+  confirmAdminTicketPrint,
   evaluateTicketForCheckIn,
   formatTicketForAdmin,
 } from "../src/controllers/adminTicketControllers.js";
 import Booking from "../src/models/Booking.js";
 import ShowtimeSeat from "../src/models/ShowtimeSeat.js";
 import Ticket from "../src/models/Ticket.js";
+import BookingActionLog from "../src/models/BookingActionLog.js";
 import VoucherUsage from "../src/models/VoucherUsage.js";
 import {
   buildTicketQrPayload,
@@ -405,11 +407,11 @@ test("ticket print claim is atomic and permits only an unprinted ticket", async 
   let capturedOptions;
 
   await withPatched([
-    [Ticket, "findOneAndUpdate", async (filter, update, options) => {
+    [Ticket, "findOneAndUpdate", (filter, update, options) => {
       capturedFilter = filter;
       capturedUpdate = update;
       capturedOptions = options;
-      return { _id: new mongoose.Types.ObjectId(), printedAt: now, printedBy: adminId };
+      return { select: async () => ({ _id: new mongoose.Types.ObjectId(), printPendingAt: now, printPendingBy: adminId, printClaimId: update.$set.printClaimId }) };
     }],
   ], async () => {
     await claimTicketPrintOnce({
@@ -420,11 +422,49 @@ test("ticket print claim is atomic and permits only an unprinted ticket", async 
   });
 
   assert.equal(capturedFilter.printedAt, null);
+  assert.equal(capturedFilter.printPendingAt, null);
   assert.equal(typeof capturedFilter.qrTokenHash, "string");
   assert.equal(capturedFilter.qrTokenHash.length, 64);
-  assert.equal(capturedUpdate.$set.printedAt, now);
-  assert.equal(capturedUpdate.$set.printedBy, adminId);
+  assert.equal(capturedUpdate.$set.printPendingAt, now);
+  assert.equal(capturedUpdate.$set.printPendingBy, adminId);
+  assert.ok(capturedUpdate.$set.printClaimId);
   assert.equal(capturedOptions.new, true);
+});
+
+test("ticket print is locked only after successful staff confirmation", async () => {
+  const adminId = new mongoose.Types.ObjectId();
+  const ticketId = new mongoose.Types.ObjectId();
+  const bookingId = new mongoose.Types.ObjectId();
+  const token = buildTicketQrPayload("print-confirm-token");
+  const updates = [];
+  const logs = [];
+  const ticket = { _id: ticketId, bookingId, status: "VALID", ticketCode: "AURA-PRINT-1", seatLabel: "A1", printedAt: null, printPendingAt: new Date() };
+  await withPatched([
+    [Ticket, "findOneAndUpdate", async (filter, update) => {
+      updates.push({ filter, update });
+      Object.assign(ticket, update.$set);
+      return ticket;
+    }],
+    [Ticket, "findById", () => ({ select() { return this; }, populate() { return this; }, then(resolve, reject) { return Promise.resolve(ticket).then(resolve, reject); } })],
+    [BookingActionLog, "create", async (payload) => { logs.push(payload); return payload; }],
+  ], async () => {
+    const failed = makeResponse();
+    await confirmAdminTicketPrint({ body: { qrToken: token, printClaimId: "claim-1", success: false, reason: "Kẹt giấy" }, user: { id: adminId } }, failed);
+    assert.equal(failed.statusCode, 200);
+    assert.equal(ticket.printedAt, null);
+    assert.equal(ticket.printPendingAt, null);
+    assert.equal(logs[0].result, "ERROR");
+
+    ticket.printPendingAt = new Date();
+    const succeeded = makeResponse();
+    await confirmAdminTicketPrint({ body: { qrToken: token, printClaimId: "claim-2", success: true }, user: { id: adminId } }, succeeded);
+    assert.equal(succeeded.statusCode, 200);
+    assert.ok(ticket.printedAt instanceof Date);
+    assert.equal(ticket.printPendingAt, null);
+    assert.equal(logs[1].result, "SUCCESS");
+  });
+  assert.equal(updates[0].filter.printClaimId, "claim-1");
+  assert.equal(updates[1].filter.printClaimId, "claim-2");
 });
 
 test("cinema cancellation invalidates only still-valid tickets", async () => {

@@ -5,12 +5,10 @@ import {
   HiOutlineFilm,
   HiOutlineGift,
   HiOutlineNewspaper,
-  HiOutlineQrcode,
   HiOutlineShoppingBag,
   HiOutlineTag,
   HiOutlineTicket,
   HiOutlineUsers,
-  HiOutlineVideoCamera,
   HiOutlineViewGrid,
 } from "react-icons/hi";
 import { useAuth } from "../../../hooks/useAuth";
@@ -44,11 +42,6 @@ const menuItems = [
       },
       { path: "/admin/bookings", icon: <HiOutlineTicket />, label: "Đơn vé" },
       {
-        path: "/admin/ticket-scanner",
-        icon: <HiOutlineQrcode />,
-        label: "Quét vé QR",
-      },
-      {
         path: "/admin/ticket-scan-history",
         icon: <HiOutlineClipboardList />,
         label: "Lịch sử quét QR",
@@ -70,11 +63,6 @@ const menuItems = [
         label: "Nội dung",
       },
       { path: "/admin/gifts", icon: <HiOutlineGift />, label: "Quà tặng" },
-      {
-        path: "/admin/trailers",
-        icon: <HiOutlineVideoCamera />,
-        label: "Trailer",
-      },
     ],
   },
   {

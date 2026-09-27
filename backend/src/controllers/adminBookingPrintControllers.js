@@ -56,6 +56,7 @@ const getSkipReason = (ticket) => {
   if (ticket.status === "CANCELLED") return "CANCELLED";
   if (ticket.status === "EXPIRED") return "EXPIRED";
   if (ticket.printedAt) return "ALREADY_PRINTED";
+  if (ticket.printPendingAt) return "PRINT_PENDING";
   return "NOT_ELIGIBLE";
 };
 
@@ -68,9 +69,9 @@ export const getInitialPrintEligibility = (tickets = []) => {
   const sortedTickets = [...tickets].sort((first, second) =>
     String(first.seatLabel || "").localeCompare(String(second.seatLabel || "")));
   return {
-    eligible: sortedTickets.filter((ticket) => ticket.status === "VALID" && !ticket.printedAt),
+    eligible: sortedTickets.filter((ticket) => ticket.status === "VALID" && !ticket.printedAt && !ticket.printPendingAt),
     skipped: sortedTickets
-      .filter((ticket) => ticket.status !== "VALID" || ticket.printedAt)
+      .filter((ticket) => ticket.status !== "VALID" || ticket.printedAt || ticket.printPendingAt)
       .map((ticket) => ({
         id: ticket._id,
         ticketCode: ticket.ticketCode,
@@ -205,6 +206,13 @@ export const scanPrintBookingOrder = async (req, res) => {
       }
 
       const { eligible, skipped } = getInitialPrintEligibility(allTickets);
+      const pending = allTickets.filter((ticket) => ticket.printPendingAt);
+      if (pending.length) {
+        if (pending.some((ticket) => String(ticket.printPendingBy) !== String(req.user.id) || ticket.printClaimId !== pending[0].printClaimId)) {
+          throw Object.assign(new Error("Đơn vé đang chờ nhân viên khác xác nhận kết quả in"), { statusCode: 409, code: "PRINT_PENDING" });
+        }
+        return { booking, claimedTickets: pending, skippedTickets: skipped.filter((ticket) => !pending.some((item) => String(item._id) === String(ticket.id))), claimId: pending[0].printClaimId };
+      }
       if (!eligible.length) {
         return { booking, claimedTickets: [], skippedTickets: skipped };
       }
@@ -217,8 +225,9 @@ export const scanPrintBookingOrder = async (req, res) => {
           bookingId: booking._id,
           status: "VALID",
           printedAt: null,
+          printPendingAt: null,
         },
-        { $set: { printedAt: now, printedBy: req.user.id, printClaimId: claimId } },
+        { $set: { printPendingAt: now, printPendingBy: req.user.id, printClaimId: claimId } },
         { session },
       );
 
@@ -240,6 +249,7 @@ export const scanPrintBookingOrder = async (req, res) => {
         booking,
         claimedTickets,
         skippedTickets: [...skipped, ...concurrentSkips],
+        claimId,
       };
     });
 
@@ -266,22 +276,63 @@ export const scanPrintBookingOrder = async (req, res) => {
       skippedTickets: result.skippedTickets,
       printedBy: getPrintOperator(req),
     });
-    await createBookingActionLogSafe({
-      bookingId: result.booking._id,
-      ticketIds: result.claimedTickets.map((ticket) => ticket._id),
-      action: "PRINT_INITIAL",
-      result: result.skippedTickets.length ? "PARTIAL" : "SUCCESS",
-      metadata: { skippedTickets: result.skippedTickets },
-      ...getRequestMeta(req),
-    });
-
-    return res.json({ success: true, message: "Đã chuẩn bị in các vé trong đơn", data: printPayload });
+    return res.json({ success: true, message: "Đã chuẩn bị in các vé trong đơn. Hãy xác nhận kết quả sau khi đóng hộp thoại in.", printClaimId: result.claimId, data: printPayload });
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       success: false,
       code: error.code || "ERROR",
       message: error.statusCode ? error.message : "Không thể xử lý QR đơn vé",
     });
+  }
+};
+
+export const confirmBookingOrderPrint = async (req, res) => {
+  const bookingCode = String(req.body?.bookingCode || "").trim().toUpperCase();
+  const claimId = String(req.body?.printClaimId || "").trim();
+  const success = req.body?.success;
+  const reason = String(req.body?.reason || "").trim();
+  const attemptReason = String(req.body?.attemptReason || "").trim();
+  if (!bookingCode || !claimId || typeof success !== "boolean" || (!success && reason.length < 3)) {
+    return res.status(400).json({ success: false, message: "Vui lòng xác nhận kết quả in và nhập lý do nếu in lỗi." });
+  }
+
+  try {
+    const booking = await Booking.findOne({ booking_code: bookingCode });
+    if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé." });
+    const filter = {
+      bookingId: booking._id,
+      printClaimId: claimId,
+      printPendingBy: req.user.id,
+      printPendingAt: { $ne: null },
+      printedAt: null,
+    };
+    const pending = await Ticket.find(filter).select("+printClaimId");
+    if (!pending.length) return res.status(409).json({ success: false, message: "Lượt in không còn chờ xác nhận. Hãy tra cứu lại đơn vé." });
+    const now = new Date();
+    const update = success
+      ? { $set: { printedAt: now, printedBy: req.user.id, printPendingAt: null, printPendingBy: null } }
+      : { $set: { printPendingAt: null, printPendingBy: null, printClaimId: "" } };
+    const result = await Ticket.updateMany(filter, update);
+    if (result.modifiedCount !== pending.length) {
+      return res.status(409).json({ success: false, message: "Trạng thái vé đã thay đổi. Hãy tra cứu lại đơn vé." });
+    }
+    await createBookingActionLogSafe({
+      bookingId: booking._id,
+      ticketIds: pending.map((ticket) => ticket._id),
+      action: attemptReason ? "REPRINT" : "PRINT_INITIAL",
+      result: success ? "SUCCESS" : "ERROR",
+      reason: success ? attemptReason : reason,
+      metadata: { printClaimId: claimId, confirmedAt: now, ...(attemptReason ? { attemptReason } : {}) },
+      ...getRequestMeta(req),
+    });
+    return res.json({
+      success: true,
+      message: success
+        ? `Đã xác nhận in thành công ${pending.length} vé. Các vé này không thể in tiếp.`
+        : `Đã ghi nhận in lỗi ${pending.length} vé. Có thể in lại các vé này.`,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Không thể xác nhận kết quả in đơn vé." });
   }
 };
 
@@ -325,11 +376,13 @@ export const lookupAdminBookingOrderPrint = async (req, res) => {
     }
 
     const { eligible, skipped } = getInitialPrintEligibility(allTickets);
+    const ownPending = allTickets.filter((ticket) => ticket.printPendingAt && String(ticket.printPendingBy) === String(req.user.id));
+    const printableTickets = ownPending.length ? ownPending : eligible;
     const printPayload = buildBookingPrintPayload({
       booking,
-      tickets: eligible,
-      qrPayloadByTicketId: createQrPayloadMap(eligible),
-      skippedTickets: skipped,
+      tickets: printableTickets,
+      qrPayloadByTicketId: createQrPayloadMap(printableTickets),
+      skippedTickets: skipped.filter((ticket) => !ownPending.some((item) => String(item._id) === String(ticket.id))),
       printedBy: getPrintOperator(req),
     });
 
@@ -347,7 +400,9 @@ export const lookupAdminBookingOrderPrint = async (req, res) => {
 
     return res.json({
       success: true,
-      message: eligible.length
+      message: ownPending.length
+        ? "Đơn vé đang chờ bạn xác nhận kết quả in. Bấm In đơn vé để mở lại hộp thoại in."
+        : eligible.length
         ? "Đã tải đơn vé. Bấm In đơn vé để in các vé hợp lệ chưa in."
         : "Đơn vé không còn vé hợp lệ chưa in.",
       data: printPayload,
@@ -411,13 +466,25 @@ export const reprintBookingTickets = async (req, res) => {
       _id: { $in: input.ticketIds },
       bookingId: booking._id,
       status: "VALID",
+      printedAt: null,
+      printPendingAt: null,
     }).select("+qrTokenEncrypted").sort({ seatLabel: 1 });
     if (tickets.length !== input.ticketIds.length) {
       return res.status(409).json({
         success: false,
         code: "TICKETS_NOT_REPRINTABLE",
-        message: "Một hoặc nhiều vé không thuộc đơn hoặc không còn hợp lệ",
+        message: "Một hoặc nhiều vé đã in thành công, đang chờ xác nhận hoặc không còn hợp lệ",
       });
+    }
+
+    const claimId = crypto.randomUUID();
+    const claimResult = await Ticket.updateMany(
+      { _id: { $in: input.ticketIds }, bookingId: booking._id, status: "VALID", printedAt: null, printPendingAt: null },
+      { $set: { printPendingAt: new Date(), printPendingBy: req.user.id, printClaimId: claimId } },
+    );
+    if (claimResult.modifiedCount !== input.ticketIds.length) {
+      await Ticket.updateMany({ bookingId: booking._id, printClaimId: claimId }, { $set: { printPendingAt: null, printPendingBy: null, printClaimId: "" } });
+      return res.status(409).json({ success: false, code: "PRINT_CONFLICT", message: "Trạng thái vé đã thay đổi. Hãy tải lại đơn vé." });
     }
 
     const printPayload = buildBookingPrintPayload({
@@ -426,15 +493,7 @@ export const reprintBookingTickets = async (req, res) => {
       qrPayloadByTicketId: createQrPayloadMap(tickets),
       printedBy: getPrintOperator(req),
     });
-    await createBookingActionLogSafe({
-      bookingId: booking._id,
-      ticketIds: tickets.map((ticket) => ticket._id),
-      action: "REPRINT",
-      result: "SUCCESS",
-      reason: input.reason,
-      ...getRequestMeta(req),
-    });
-    return res.json({ success: true, message: "Đã chuẩn bị in lại vé", data: printPayload });
+    return res.json({ success: true, message: "Đã chuẩn bị in vé. Hãy xác nhận kết quả sau khi đóng hộp thoại in.", printClaimId: claimId, data: printPayload });
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       success: false,

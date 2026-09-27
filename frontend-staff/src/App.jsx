@@ -387,6 +387,11 @@ const normalizeBookingPrintResult = (response, printed = false) => {
   };
 };
 
+const finishPrintDialogManually = async () => {
+  const { finishPendingPrintDialog } = await import("../../frontend-user/src/utils/ticketPdf.js");
+  finishPendingPrintDialog();
+};
+
 function TicketScanner() {
   const scannerRef = useRef(null);
   const processingRef = useRef(false);
@@ -395,6 +400,10 @@ function TicketScanner() {
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
   const [printing, setPrinting] = useState(false);
+  const [waitingForPrintDialog, setWaitingForPrintDialog] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(null);
+  const [printFailureReason, setPrintFailureReason] = useState("");
+  const [confirmingPrint, setConfirmingPrint] = useState(false);
   const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc tra cứu bằng mã vé.");
   const [result, setResult] = useState(null);
   const [currentQrToken, setCurrentQrToken] = useState("");
@@ -489,8 +498,9 @@ function TicketScanner() {
   };
 
   const printTicket = async () => {
-    if (!ticket || printing || ticket.canPrint === false || ticket.printedAt) return;
+    if (!ticket || printing || pendingPrint || ticket.printedAt || (ticket.qrType === "BOOKING" && ticket.canPrint === false)) return;
     setPrinting(true);
+    let activeClaim = null;
     try {
       if (ticket.qrType === "BOOKING") {
         const response = await api("/staff/pos/bookings/scan-print", {
@@ -501,28 +511,69 @@ function TicketScanner() {
           }),
           returnBody: true,
         });
-        setResult(normalizeBookingPrintResult(response, true));
+        if (!response.printClaimId) throw new Error("Không nhận được mã xác nhận lượt in.");
+        activeClaim = { kind: "booking", bookingCode: response.data?.booking?.bookingCode, claimId: response.printClaimId, count: response.data?.tickets?.length || 0 };
         const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js");
+        setWaitingForPrintDialog(true);
         await printBookingOrder(response.data);
-        setMessage(`Đã ghi nhận và mở hộp thoại in ${response.data?.tickets?.length || 0} vé. Đơn vé không thể in lại.`);
       } else {
         const response = await api("/staff/pos/tickets/print", {
           method: "POST",
           body: JSON.stringify({ qrToken: currentQrToken }),
           returnBody: true,
         });
-        setResult(response);
+        if (!response.printClaimId) throw new Error("Không nhận được mã xác nhận lượt in.");
+        activeClaim = { kind: "ticket", qrToken: currentQrToken, claimId: response.printClaimId, count: 1 };
         const { printTicketPdf } = await import("../../frontend-user/src/utils/ticketPdf.js");
+        setWaitingForPrintDialog(true);
         await printTicketPdf(response.data, currentQrToken);
-        setMessage("Đã ghi nhận và mở hộp thoại in vé. Vé không thể in lại.");
       }
+      setPendingPrint(activeClaim);
+      setPrintFailureReason("");
+      setMessage("Hãy kiểm tra vé và xác nhận kết quả in.");
     } catch (err) {
+      if (activeClaim) {
+        const path = activeClaim.kind === "booking" ? "/staff/pos/bookings/print-confirm" : "/staff/pos/tickets/print/confirm";
+        const payload = activeClaim.kind === "booking" ? { bookingCode: activeClaim.bookingCode } : { qrToken: activeClaim.qrToken };
+        await api(path, { method: "POST", body: JSON.stringify({ ...payload, printClaimId: activeClaim.claimId, success: false, reason: "Không mở được hộp thoại in" }) }).catch(() => {});
+      }
       if (err.data) setResult({ success: false, message: err.message, data: err.data });
       setMessage(err.message || "Không thể in vé.");
-    } finally { setPrinting(false); }
+    } finally { setWaitingForPrintDialog(false); setPrinting(false); }
   };
 
-  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+  const confirmPrint = async (success) => {
+    if (!pendingPrint || confirmingPrint || (!success && printFailureReason.trim().length < 3)) return;
+    setConfirmingPrint(true);
+    try {
+      const isBooking = pendingPrint.kind === "booking";
+      const response = await api(isBooking ? "/staff/pos/bookings/print-confirm" : "/staff/pos/tickets/print/confirm", {
+        method: "POST",
+        body: JSON.stringify({
+          ...(isBooking ? { bookingCode: pendingPrint.bookingCode } : { qrToken: pendingPrint.qrToken }),
+          printClaimId: pendingPrint.claimId,
+          success,
+          reason: printFailureReason,
+        }),
+        returnBody: true,
+      });
+      setPendingPrint(null);
+      setPrintFailureReason("");
+      setMessage(response.message);
+      if (isBooking) {
+        setResult((current) => current ? {
+          ...current,
+          message: response.message,
+          data: { ...current.data, canPrint: !success, printedAt: success ? new Date().toISOString() : null },
+        } : current);
+      } else {
+        setResult(response);
+      }
+    } catch (err) { setMessage(err.message || "Không thể xác nhận kết quả in. Vui lòng thử lại."); }
+    finally { setConfirmingPrint(false); }
+  };
+
+  const reset = async () => { if (pendingPrint || printing) return; await stopCamera(); setResult(null); setCurrentQrToken(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
 
   return (
     <div className="staff-scanner">
@@ -534,8 +585,8 @@ function TicketScanner() {
         <div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} />
         <div id="staff-ticket-file-reader" className="scanner-file-reader" />
         <div className="scanner-controls">
-          <button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button>
-          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button>
+          <button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing || printing || pendingPrint}>{cameraActive ? "Dừng camera" : "Bật camera"}</button>
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing || printing || pendingPrint}>Tải ảnh QR</button>
           <input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden />
         </div>
         <form className="scanner-token-form" onSubmit={lookupTicket}>
@@ -550,10 +601,10 @@ function TicketScanner() {
               maxLength={64}
               autoComplete="off"
               spellCheck="false"
-              disabled={processing}
+              disabled={processing || printing || pendingPrint}
               required
             />
-            <button disabled={!ticketCode.trim() || processing}>{processing ? "Đang tìm..." : "Tra cứu"}</button>
+            <button disabled={!ticketCode.trim() || processing || printing || pendingPrint}>{processing ? "Đang tìm..." : "Tra cứu"}</button>
           </div>
         </form>
         <p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang tra cứu mã vé..." : message}</p>
@@ -587,16 +638,39 @@ function TicketScanner() {
               <Info label="Dịch vụ" value={services} />
             </>}
           </div>
-          <button type="button" className="print-ticket-button" onClick={printTicket} disabled={printing || ticket.canPrint === false || Boolean(ticket.printedAt)}>{printing ? "Đang chuẩn bị in..." : ticket.printedAt || ticket.canPrint === false ? "Đã in" : ticket.qrType === "BOOKING" ? "In đơn vé" : "In vé"}</button>
-          {ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}
-          <button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button>
+          <button type="button" className="print-ticket-button" onClick={printTicket} disabled={printing || pendingPrint || (ticket.qrType === "BOOKING" && ticket.canPrint === false) || Boolean(ticket.printedAt)}>{printing ? "Đang chờ hộp thoại in..." : ticket.printedAt || (ticket.qrType === "BOOKING" && ticket.canPrint === false) ? "Đã in" : ticket.qrType === "BOOKING" ? "In đơn vé" : "In vé"}</button>
+          {waitingForPrintDialog && <button type="button" className="staff-print-dialog-fallback" onClick={finishPrintDialogManually}>Đã đóng hộp thoại in? Tiếp tục xác nhận</button>}
+          {ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || printing || pendingPrint || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}
+          <button type="button" className="scan-next-button" onClick={reset} disabled={printing || pendingPrint}>Quét vé tiếp theo</button>
         </> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}
       </section>
+      <PrintConfirmationDialog count={pendingPrint?.count} reason={printFailureReason} onReasonChange={setPrintFailureReason} onConfirm={confirmPrint} busy={confirmingPrint} />
     </div>
   );
 }
 
 function Info({ label, value }) { return <div><span>{label}</span><strong>{value || "—"}</strong></div>; }
+
+function PrintConfirmationDialog({ count, reason, onReasonChange, onConfirm, busy }) {
+  const headingRef = useRef(null);
+  useEffect(() => { if (count) headingRef.current?.focus(); }, [count]);
+  if (!count) return null;
+  return createPortal(
+    <div className="staff-print-confirm-backdrop">
+      <section className="staff-print-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="staff-print-confirm-title" aria-describedby="staff-print-confirm-description">
+        <h2 id="staff-print-confirm-title" ref={headingRef} tabIndex={-1}>Đã in vé thành công?</h2>
+        <p id="staff-print-confirm-description">Hãy kiểm tra {count} vé đã ra khỏi máy in và khách hàng đã nhận được vé. Chỉ xác nhận thành công khi vé rõ, đủ thông tin và mã QR đọc được.</p>
+        <label htmlFor="staff-print-failure-reason">Nếu in lỗi hoặc khách chưa nhận vé, nhập lý do để được in lại</label>
+        <textarea id="staff-print-failure-reason" rows={3} placeholder="Ví dụ: Kẹt giấy, bản in mờ, khách chưa nhận vé" value={reason} onChange={(event) => onReasonChange(event.target.value)} />
+        <div className="staff-print-confirm-actions">
+          <button type="button" className="staff-print-failed" disabled={busy || reason.trim().length < 3} onClick={() => onConfirm(false)}>In thất bại · cho phép in lại</button>
+          <button type="button" className="staff-print-succeeded" disabled={busy} onClick={() => onConfirm(true)}>{busy ? "Đang xác nhận..." : "In thành công · khóa in"}</button>
+        </div>
+      </section>
+    </div>,
+    document.body,
+  );
+}
 
 function ShiftReport() {
   const [report, setReport] = useState(null);
@@ -743,13 +817,18 @@ function CounterSale() {
   const [combos, setCombos] = useState([]), [comboQuantities, setComboQuantities] = useState({}), [comboLoading, setComboLoading] = useState(true), [comboError, setComboError] = useState("");
   const [holdToken, setHoldToken] = useState(""), [holdExpiresAt, setHoldExpiresAt] = useState(null), [remainingHoldSeconds, setRemainingHoldSeconds] = useState(0);
   const [printing, setPrinting] = useState(false);
+  const [printNotice, setPrintNotice] = useState("");
+  const [waitingForPrintDialog, setWaitingForPrintDialog] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(null);
+  const [printFailureReason, setPrintFailureReason] = useState("");
+  const [confirmingPrint, setConfirmingPrint] = useState(false);
   const holdIdRef = useRef("");
   const seatBusyRef = useRef(false);
   const [clock, setClock] = useState(() => Date.now());
   const [selectedDate, setSelectedDate] = useState(() => getVietnamDateValue());
   const [selectedMovieId, setSelectedMovieId] = useState("");
   const [datePickerAnchor, setDatePickerAnchor] = useState(null);
-  const resetOrder = () => { setSeatError(""); holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
+  const resetOrder = () => { setSeatError(""); setPrintNotice(""); holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
   const changeDate = (date) => {
     if (date === "__date_picker__") {
       const calendarButton = document.activeElement?.closest?.(".pos-date-tabs > button:last-child");
@@ -917,8 +996,54 @@ function CounterSale() {
   };
   const updateComboQuantity = (combo, nextQuantity) => { setSale(null); const quantity = Math.min(Math.max(Number(nextQuantity) || 0, 0), Number(combo.stock || 0)); setComboQuantities((current) => { const next = { ...current }; if (quantity) next[combo._id] = quantity; else delete next[combo._id]; return next; }); };
   const pay = async () => { if (!current || !selected.length || !holdToken) return; setBusy(true); setError(""); try { const data = await api("/staff/pos/sales", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: selected, hold_token: holdToken, combos: selectedCombos.map((item) => ({ combo_id: item._id, quantity: item.quantity })), payment_method: "cash" }) }); const soldSeatIds = [...selected]; holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setSale(data); setSeats((list) => list.map((seat) => soldSeatIds.includes(seat.id) ? { ...seat, status: "booked", holdId: "" } : seat)); setCombos((list) => list.map((combo) => ({ ...combo, stock: Math.max(Number(combo.stock || 0) - Number(comboQuantities[combo._id] || 0), 0) }))); setSelected([]); setComboQuantities({}); } catch (err) { setError(err.message); choose(current); } finally { setBusy(false); } };
-  const print = async () => { if (!sale || sale.printed || printing) return; setPrinting(true); setError(""); try { const printData = await api(`/staff/pos/sales/${sale.booking_id}/print`, { method: "POST" }); setSale((currentSale) => currentSale ? { ...currentSale, printed: true } : currentSale); const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js"); await printBookingOrder(printData); } catch (err) { setError(err.message); } finally { setPrinting(false); } };
-  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" error={seatError} text={holdExpiresAt && selected.length ? `Ghế đang được giữ trong ${formatHoldCountdown(remainingHoldSeconds)}.` : "Chọn ghế còn trống để bán vé. Thời gian giữ ghế là 5 phút."} />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <><SeatMap seats={seats} selected={selected} toggle={toggle} /><Step number="5" title="Chọn combo bắp nước" text="Có thể bỏ qua nếu khách hàng chỉ mua vé." /><ComboPicker combos={combos} quantities={comboQuantities} loading={comboLoading} error={comboError} updateQuantity={updateComboQuantity} /></>}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div>{selectedCombos.length > 0 && <div className="order-combos"><span>Combo bắp nước</span>{selectedCombos.map((item) => <div key={item._id}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.price || 0) * item.quantity)}</strong></div>)}</div>}<div className="order-breakdown"><span>Tiền vé <strong>{money.format(sale?.pricing?.ticket_subtotal ?? seatTotal)}</strong></span><span>Bắp nước <strong>{money.format(sale?.pricing?.service_subtotal ?? comboTotal)}</strong></span></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(sale?.total_price ?? total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span>{sale.combos?.length > 0 && <span>Combo: {sale.combos.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</span>}<button onClick={print} disabled={printing || sale.printed}>{printing ? "Đang chuẩn bị in..." : sale.printed ? "Đã in" : "In vé"}</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
+  const print = async () => {
+    if (!sale || sale.printed || printing || pendingPrint) return;
+    setPrinting(true);
+    setError("");
+    setPrintNotice("");
+    let activeClaim = null;
+    try {
+      const response = await api("/staff/pos/bookings/scan-print", {
+        method: "POST",
+        body: JSON.stringify({ bookingCode: sale.booking_code }),
+        returnBody: true,
+      });
+      if (!response.printClaimId) throw new Error("Không nhận được mã xác nhận lượt in.");
+      activeClaim = { bookingCode: sale.booking_code, claimId: response.printClaimId, count: response.data?.tickets?.length || 0 };
+      const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js");
+      setWaitingForPrintDialog(true);
+      await printBookingOrder(response.data);
+      setPendingPrint(activeClaim);
+      setPrintFailureReason("");
+    } catch (err) {
+      if (activeClaim) {
+        await api("/staff/pos/bookings/print-confirm", {
+          method: "POST",
+          body: JSON.stringify({ bookingCode: activeClaim.bookingCode, printClaimId: activeClaim.claimId, success: false, reason: "Không mở được hộp thoại in" }),
+        }).catch(() => {});
+      }
+      setError(err.message || "Không thể in vé.");
+    } finally { setWaitingForPrintDialog(false); setPrinting(false); }
+  };
+
+  const confirmPrint = async (success) => {
+    if (!pendingPrint || confirmingPrint || (!success && printFailureReason.trim().length < 3)) return;
+    setConfirmingPrint(true);
+    try {
+      const response = await api("/staff/pos/bookings/print-confirm", {
+        method: "POST",
+        body: JSON.stringify({ bookingCode: pendingPrint.bookingCode, printClaimId: pendingPrint.claimId, success, reason: printFailureReason }),
+        returnBody: true,
+      });
+      setSale((currentSale) => currentSale ? { ...currentSale, printed: success } : currentSale);
+      setPendingPrint(null);
+      setPrintFailureReason("");
+      setError("");
+      setPrintNotice(response.message);
+    } catch (err) { setError(err.message || "Không thể xác nhận kết quả in."); }
+    finally { setConfirmingPrint(false); }
+  };
+  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" error={seatError} text={holdExpiresAt && selected.length ? `Ghế đang được giữ trong ${formatHoldCountdown(remainingHoldSeconds)}.` : "Chọn ghế còn trống để bán vé. Thời gian giữ ghế là 5 phút."} />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <><SeatMap seats={seats} selected={selected} toggle={toggle} /><Step number="5" title="Chọn combo bắp nước" text="Có thể bỏ qua nếu khách hàng chỉ mua vé." /><ComboPicker combos={combos} quantities={comboQuantities} loading={comboLoading} error={comboError} updateQuantity={updateComboQuantity} /></>}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div>{selectedCombos.length > 0 && <div className="order-combos"><span>Combo bắp nước</span>{selectedCombos.map((item) => <div key={item._id}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.price || 0) * item.quantity)}</strong></div>)}</div>}<div className="order-breakdown"><span>Tiền vé <strong>{money.format(sale?.pricing?.ticket_subtotal ?? seatTotal)}</strong></span><span>Bắp nước <strong>{money.format(sale?.pricing?.service_subtotal ?? comboTotal)}</strong></span></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(sale?.total_price ?? total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span>{sale.combos?.length > 0 && <span>Combo: {sale.combos.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</span>}<button onClick={print} disabled={printing || pendingPrint || sale.printed}>{printing ? "Đang chờ hộp thoại in..." : sale.printed ? "Đã in" : "In vé"}</button>{waitingForPrintDialog && <button className="staff-print-dialog-fallback" type="button" onClick={finishPrintDialogManually}>Đã đóng hộp thoại in? Tiếp tục xác nhận</button>}{printNotice && <p className="staff-print-notice">{printNotice}</p>}</div>}</aside>{error && <div className="pos-alert">{error}</div>}<PrintConfirmationDialog count={pendingPrint?.count} reason={printFailureReason} onReasonChange={setPrintFailureReason} onConfirm={confirmPrint} busy={confirmingPrint} /></div>;
 }
 
 function Step({ number, title, text, error }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p>{error && <p className="seat-selection-error" role="alert">{error}</p>}</div></div>; }

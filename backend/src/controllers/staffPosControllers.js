@@ -342,12 +342,25 @@ export const printCounterSale = async (req, res) => {
     if (req.user.role !== "admin") filter.sold_by = req.user.id;
     const booking = await Booking.findOne(filter);
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn bán tại quầy." });
-    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt").sort({ seatLabel: 1 });
+    const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt printPendingAt printPendingBy status +printClaimId").sort({ seatLabel: 1 });
     if (!existingTickets.length) return res.status(404).json({ success: false, message: "Đơn chưa có vé để in." });
     if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé của đơn này đã được in trước đó và không thể in lại tại quầy." });
-    const now = new Date();
-    const printClaim = await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
-    if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé của đơn này đã được in hoặc không còn đủ điều kiện in." });
+    if (existingTickets.some((ticket) => ticket.status !== "VALID")) return res.status(409).json({ success: false, message: "Một hoặc nhiều vé không còn hợp lệ để in." });
+    const pending = existingTickets.filter((ticket) => ticket.printPendingAt);
+    if (pending.length && (pending.length !== existingTickets.length || pending.some((ticket) => String(ticket.printPendingBy) !== String(req.user.id) || ticket.printClaimId !== pending[0].printClaimId))) {
+      return res.status(409).json({ success: false, message: "Đơn vé đang chờ xác nhận kết quả in từ một lượt khác." });
+    }
+    const claimId = pending.length ? pending[0].printClaimId : crypto.randomUUID();
+    if (!pending.length) {
+      const printClaim = await Ticket.updateMany(
+        { bookingId: booking._id, printedAt: null, printPendingAt: null, status: "VALID" },
+        { $set: { printPendingAt: new Date(), printPendingBy: req.user.id, printClaimId: claimId } },
+      );
+      if (printClaim.modifiedCount !== existingTickets.length) {
+        await Ticket.updateMany({ bookingId: booking._id, printClaimId: claimId }, { $set: { printPendingAt: null, printPendingBy: null, printClaimId: "" } });
+        return res.status(409).json({ success: false, message: "Vé của đơn này đã được in hoặc không còn đủ điều kiện in." });
+      }
+    }
     const tickets = await Ticket.find({ bookingId: booking._id })
       .select("+qrTokenEncrypted")
       .sort({ seatLabel: 1 });
@@ -364,6 +377,6 @@ export const printCounterSale = async (req, res) => {
         accountName: String(req.user.full_name || req.user.email || req.user.id),
       },
     });
-    return res.json({ success: true, message: "Đã ghi nhận lượt in vé.", data: printPayload });
+    return res.json({ success: true, message: "Đã chuẩn bị vé. Hãy xác nhận kết quả sau khi đóng hộp thoại in.", printClaimId: claimId, data: printPayload });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
 };

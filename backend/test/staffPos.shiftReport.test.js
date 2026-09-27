@@ -5,6 +5,7 @@ import Ticket from "../src/models/Ticket.js";
 import TicketScanLog from "../src/models/TicketScanLog.js";
 import User from "../src/models/User.js";
 import { createCounterSale, getShiftReport, lookupStaffBookingOrder, printCounterSale } from "../src/controllers/staffPosControllers.js";
+import { encryptQrToken } from "../src/services/ticketService.js";
 
 const makeResponse = () => ({
   statusCode: 200,
@@ -46,6 +47,31 @@ test("counter tickets cannot be printed a second time", async () => {
   assert.equal(res.statusCode, 409);
   assert.match(res.body.message, /đã được in trước đó/i);
   assert.equal(updateCalled, false);
+});
+
+test("counter print waits for staff confirmation before locking tickets", async () => {
+  const originalBookingFindOne = Booking.findOne;
+  const originalTicketFind = Ticket.find;
+  const originalTicketUpdateMany = Ticket.updateMany;
+  const booking = { _id: "booking-1", booking_code: "AURA000000000001", seat_items: [{ seat_label: "A1" }], total_price: 50000 };
+  const ticket = { _id: "ticket-1", bookingId: booking._id, ticketCode: "AURA000000000001-A1", seatLabel: "A1", status: "VALID", printedAt: null, printPendingAt: null, qrTokenEncrypted: encryptQrToken("staff-ticket-token") };
+  let update;
+  Booking.findOne = async () => booking;
+  Ticket.find = () => ({ select: () => ({ sort: async () => [ticket] }) });
+  Ticket.updateMany = async (_filter, value) => { update = value; return { modifiedCount: 1 }; };
+  const res = makeResponse();
+  try {
+    await printCounterSale({ params: { id: booking._id }, user: { id: "staff-1", role: "staff", full_name: "Nhân viên" } }, res);
+  } finally {
+    Booking.findOne = originalBookingFindOne;
+    Ticket.find = originalTicketFind;
+    Ticket.updateMany = originalTicketUpdateMany;
+  }
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body.printClaimId);
+  assert.ok(update.$set.printPendingAt instanceof Date);
+  assert.equal(update.$set.printedAt, undefined);
+  assert.equal(ticket.printedAt, null);
 });
 
 test("staff booking QR lookup returns every booked seat", async () => {
