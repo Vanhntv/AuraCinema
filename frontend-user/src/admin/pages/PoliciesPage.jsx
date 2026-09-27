@@ -10,7 +10,9 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
+import { supportSamplePolicies } from "../../data/supportInformation";
 import {
+  createAdminPolicy,
   deleteAdminPolicy,
   getAdminPolicies,
   importAdminPolicyFromWord,
@@ -19,6 +21,7 @@ import {
 
 const emptyForm = {
   title: "",
+  summary: "",
   content: "",
   surface: "payment",
   status: "draft",
@@ -32,7 +35,8 @@ const surfaceLabels = {
   payment: "Trang thanh toán",
   terms: "Điều khoản sử dụng",
   privacy: "Chính sách bảo mật",
-  booking: "Luồng đặt vé",
+  booking: "Hướng dẫn đặt vé",
+  faq: "Câu hỏi thường gặp",
   general: "Chính sách chung",
 };
 
@@ -63,6 +67,7 @@ const formatDateTime = (value) => {
 
 const formFromPolicy = (policy) => ({
   title: policy?.title || "",
+  summary: policy?.summary || "",
   content: policy?.content || "",
   surface: policy?.surface || "general",
   status: policy?.status || "draft",
@@ -81,6 +86,7 @@ function PoliciesPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingSamples, setImportingSamples] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [surfaceFilter, setSurfaceFilter] = useState("");
@@ -131,6 +137,7 @@ function PoliciesPage() {
   const editPolicy = (policy) => {
     setEditingPolicy(policy);
     setFormData(formFromPolicy(policy));
+    setSelectedFile(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -152,11 +159,9 @@ function PoliciesPage() {
         const response = await updateAdminPolicy(editingPolicy._id, payload);
         addToast("success", response.message || "Đã cập nhật chính sách.");
       } else {
-        if (!selectedFile) {
-          addToast("error", "Vui lòng tải lên file .docx hoặc .pdf.");
-          return;
-        }
-        const response = await importAdminPolicyFromWord(selectedFile, payload);
+        const response = selectedFile
+          ? await importAdminPolicyFromWord(selectedFile, payload)
+          : await createAdminPolicy(payload);
         addToast("success", response.message || "Đã tạo chính sách.");
       }
 
@@ -207,6 +212,51 @@ function PoliciesPage() {
     }
   };
 
+  const handleImportSamples = async () => {
+    try {
+      setImportingSamples(true);
+      const existingKeys = new Set();
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const response = await getAdminPolicies({ limit: 100, page });
+        (response.data || []).forEach((policy) => {
+          existingKeys.add(`${policy.surface}:${policy.title}`);
+        });
+        totalPages = response.pagination?.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      const missing = supportSamplePolicies.filter(
+        (policy) => !existingKeys.has(`${policy.surface}:${policy.title}`),
+      );
+      if (missing.length === 0) {
+        addToast("success", "Các nội dung mẫu đã có trong danh sách.");
+        return;
+      }
+
+      let created = 0;
+      for (const policy of missing) {
+        await createAdminPolicy({
+          ...policy,
+          status: "draft",
+          source_type: "manual",
+          requires_confirmation: false,
+          display_order: supportSamplePolicies
+            .filter((item) => item.surface === policy.surface)
+            .findIndex((item) => item.title === policy.title) + 1,
+        });
+        created += 1;
+      }
+      addToast("success", `Đã tạo ${created} bản nháp mẫu. Hãy kiểm tra trước khi xuất bản.`);
+      await fetchPolicies();
+    } catch (error) {
+      addToast("error", error.response?.data?.message || "Chưa tạo đủ nội dung mẫu. Bấm lại để tiếp tục.");
+      await fetchPolicies();
+    } finally {
+      setImportingSamples(false);
+    }
+  };
+
   return (
     <div className="policies-page">
       <Toast toasts={toasts} onRemove={removeToast} />
@@ -214,9 +264,18 @@ function PoliciesPage() {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Chính sách</h1>
-          <p>Quản lý chính sách bằng file DOCX hoặc PDF</p>
+          <p>Biên soạn thủ công hoặc nhập từ DOCX/PDF; xuất bản để hiển thị trên website.</p>
         </div>
         <div className="policy-header-actions">
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={importingSamples}
+            onClick={() => void handleImportSamples()}
+          >
+            <HiOutlineDocumentText />
+            {importingSamples ? "Đang tạo mẫu..." : "Thêm nội dung mẫu"}
+          </button>
           <input
             ref={fileInputRef}
             className="policy-file-input"
@@ -245,7 +304,7 @@ function PoliciesPage() {
           <div className="policy-editor-heading">
             <div>
               <h2>{editingPolicy ? "Chỉnh sửa chính sách" : "Chính sách mới"}</h2>
-              <p>{editingPolicy?.source_file_name ? `Đã nhập từ ${editingPolicy.source_file_name}` : "Tải lên file để tạo chính sách"}</p>
+              <p>{editingPolicy?.source_file_name ? `Đã nhập từ ${editingPolicy.source_file_name}` : "Soạn nội dung trực tiếp hoặc nhập từ file"}</p>
             </div>
             {editingPolicy && (
               <button className="policy-text-button" type="button" onClick={resetEditor}>
@@ -266,6 +325,17 @@ function PoliciesPage() {
             />
           </label>
 
+          <label className="policy-field">
+            <span>Mô tả ngắn</span>
+            <input
+              className="form-input"
+              maxLength="500"
+              value={formData.summary}
+              onChange={(event) => updateField("summary", event.target.value)}
+              placeholder="Tóm tắt nội dung cho khách hàng"
+            />
+          </label>
+
           <div className="policy-form-row">
             <label className="policy-field">
               <span>Vị trí áp dụng</span>
@@ -281,17 +351,28 @@ function PoliciesPage() {
             </label>
           </div>
 
+          <label className="policy-field policy-content-field">
+            <span>Nội dung</span>
+            <textarea
+              className="form-input policy-content-input"
+              rows="10"
+              required={!selectedFile}
+              value={formData.content}
+              onChange={(event) => updateField("content", event.target.value)}
+              placeholder="Nhập nội dung; cách dòng để tách các đoạn văn."
+            />
+          </label>
+
           <label className="policy-field policy-upload-field">
-            <span>Nội dung chính sách</span>
+            <span>Hoặc nhập nội dung từ file</span>
             <input
               className="form-input"
               type="file"
               accept=".docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              required={!editingPolicy}
               disabled={Boolean(editingPolicy)}
               onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
             />
-            <small>{selectedFile ? `Đã chọn: ${selectedFile.name}` : editingPolicy ? `Nguồn hiện tại: ${editingPolicy.source_file_name || "file đã nhập"}` : "Bắt buộc tải lên .docx hoặc .pdf (tối đa 10 MB)."}</small>
+            <small>{selectedFile ? `Đã chọn: ${selectedFile.name}` : "Tùy chọn .docx hoặc .pdf (tối đa 10 MB); khi tạo mới, nội dung file sẽ thay nội dung nhập tay."}</small>
           </label>
 
           <div className="policy-form-footer">
@@ -350,7 +431,7 @@ function PoliciesPage() {
             <div className="policy-empty-state">
               <HiOutlineDocumentText />
               <strong>Chưa có chính sách phù hợp</strong>
-              <span>Tạo mới bằng cách tải lên file DOCX hoặc PDF.</span>
+              <span>Soạn nội dung, nhập file hoặc thêm các bản nháp mẫu.</span>
             </div>
           ) : (
             <div className="policy-list">
@@ -364,7 +445,7 @@ function PoliciesPage() {
                     <p>{policy.content?.slice(0, 220) || "Chưa có nội dung"}</p>
                     <div className="policy-list-meta">
                       <span>{surfaceLabels[policy.surface]}</span>
-              <span>{policy.source_file_name ? `File: ${policy.source_file_name}` : "Chưa có file nguồn"}</span>
+                      <span>{policy.source_file_name ? `File: ${policy.source_file_name}` : "Soạn thủ công"}</span>
                       <span>Cập nhật {formatDateTime(policy.updated_at)}</span>
                     </div>
                   </div>

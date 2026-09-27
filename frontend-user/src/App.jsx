@@ -124,6 +124,7 @@ function App() {
         <Route path="/chinh-sach-bao-mat" element={<SupportInfoPage />} />
         <Route path="/huong-dan-dat-ve" element={<SupportInfoPage />} />
         <Route path="/cau-hoi-thuong-gap" element={<SupportInfoPage />} />
+        <Route path="/thong-tin-chung/:policyId" element={<SupportInfoPage />} />
         <Route path="/xac-minh-email" element={<VerifyEmailPage />} />
         <Route path="/dang-ky" element={<RegisterPage />} />
         <Route path="/register" element={<RegisterPage />} />

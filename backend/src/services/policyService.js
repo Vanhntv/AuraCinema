@@ -6,7 +6,7 @@ import { PDFParse } from "pdf-parse";
 const require = createRequire(import.meta.url);
 const WordExtractor = require("word-extractor");
 
-export const POLICY_SURFACES = ["payment", "terms", "privacy", "booking", "general"];
+export const POLICY_SURFACES = ["payment", "terms", "privacy", "booking", "faq", "general"];
 export const POLICY_STATUSES = ["draft", "published", "archived"];
 
 const escapeRegex = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
