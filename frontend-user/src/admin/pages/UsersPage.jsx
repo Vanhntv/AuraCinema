@@ -389,11 +389,11 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
           </button>
           {user ? (
             <>
+              <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
+                <HiOutlineKey />
+                Yêu cầu đặt lại mật khẩu
+              </button>
               {user.role !== "admin" && <>
-                <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
-                  <HiOutlineKey />
-                  Reset mật khẩu
-                </button>
                 <button className="btn btn-secondary" type="button" onClick={() => onReward(user)}>
                   <HiOutlinePlus />
                   Điểm thưởng
@@ -425,7 +425,6 @@ const createUserEditForm = (user) => ({
 
 const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
   const [formData, setFormData] = useState(() => createUserEditForm(user));
-  const isAdminAccount = user.role === "admin";
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -434,12 +433,7 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    onSubmit(isAdminAccount ? {
-      full_name: formData.full_name,
-      phone: formData.phone,
-      birth_date: formData.birth_date,
-      gender: formData.gender,
-    } : formData);
+    onSubmit(formData);
   };
 
   return (
@@ -478,7 +472,6 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
                 </select>
               </div>
             </div>
-            {!isAdminAccount && <>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Email đăng nhập</label>
@@ -511,12 +504,11 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
                 </select>
               </div>
             </div>
-            </>}
-            {!isAdminAccount && <div className="form-group">
+            <div className="form-group">
               <label className="form-label">Lý do thay đổi</label>
-              <textarea className="form-input form-textarea" name="reason" value={formData.reason} onChange={handleChange} rows={3} />
-              <span className="form-hint">Lý do sẽ được lưu vào audit log.</span>
-            </div>}
+              <textarea className="form-input form-textarea" name="reason" value={formData.reason} onChange={handleChange} rows={3} required />
+              <span className="form-hint">Yêu cầu chỉ có hiệu lực sau khi đủ hai admin phê duyệt.</span>
+            </div>
           </div>
           <div className="modal-footer">
             <button className="btn btn-secondary" type="button" onClick={onClose}>
@@ -607,6 +599,7 @@ const UsersPage = () => {
   const [rewardUser, setRewardUser] = useState(null);
   const [statusTarget, setStatusTarget] = useState(null);
   const [resetTarget, setResetTarget] = useState(null);
+  const [approvalReason, setApprovalReason] = useState("");
   const hasLoadedInitialUsersRef = useRef(false);
   const lastToastRef = useRef({ key: "", timestamp: 0 });
 
@@ -698,10 +691,8 @@ const UsersPage = () => {
     try {
       setSubmitting(true);
       const response = await updateUserBasicInfo(editingUser._id, formData);
-      addToast("success", response.message || "Đã cập nhật người dùng");
+      addToast("success", response.message || "Đã gửi yêu cầu phê duyệt");
       setEditingUser(null);
-      setDetail((prev) => (prev ? { ...prev, user: response.data } : prev));
-      fetchUsers(currentPage);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật người dùng");
     } finally {
@@ -713,11 +704,8 @@ const UsersPage = () => {
     try {
       setSubmitting(true);
       const response = await adjustRewardPoints(rewardUser._id, formData);
-      addToast("success", response.message || "Đã cập nhật điểm thưởng");
+      addToast("success", response.message || "Đã tạo yêu cầu điều chỉnh điểm thưởng");
       setRewardUser(null);
-      setDetail((prev) => (prev ? { ...prev, user: response.data } : prev));
-      if (detail?.user?._id === response.data._id) await reloadDetail(response.data._id);
-      fetchUsers(currentPage);
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật điểm thưởng");
     } finally {
@@ -727,13 +715,13 @@ const UsersPage = () => {
 
   const handleConfirmStatus = async () => {
     if (!statusTarget) return;
+    if (!approvalReason.trim()) { addToast("error", "Vui lòng nhập lý do thay đổi trạng thái."); return; }
     try {
       const nextStatus = isActiveUser(statusTarget) ? "banned" : "active";
-      const response = await updateUserAccountStatus(statusTarget._id, nextStatus, "Thao tác nhanh từ danh sách người dùng");
-      addToast("success", response.message || "Đã cập nhật trạng thái người dùng");
+      const response = await updateUserAccountStatus(statusTarget._id, nextStatus, approvalReason.trim());
+      addToast("success", response.message || "Đã gửi yêu cầu phê duyệt");
       setStatusTarget(null);
-      setDetail((prev) => (prev?.user?._id === response.data._id ? { ...prev, user: response.data } : prev));
-      fetchUsers(currentPage);
+      setApprovalReason("");
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể cập nhật trạng thái");
     }
@@ -741,11 +729,12 @@ const UsersPage = () => {
 
   const handleConfirmForceReset = async () => {
     if (!resetTarget) return;
+    if (!approvalReason.trim()) { addToast("error", "Vui lòng nhập lý do đặt lại mật khẩu."); return; }
     try {
-      const response = await forceResetPassword(resetTarget._id, "Admin hỗ trợ force reset password");
-      addToast("success", response.message || "Đã gửi email đặt lại mật khẩu");
+      const response = await forceResetPassword(resetTarget._id, approvalReason.trim());
+      addToast("success", response.message || "Đã gửi yêu cầu phê duyệt");
       setResetTarget(null);
-      if (detail?.user?._id === resetTarget._id) await reloadDetail(resetTarget._id);
+      setApprovalReason("");
     } catch (error) {
       addToast("error", error.response?.data?.message || "Không thể reset mật khẩu");
     }
@@ -902,21 +891,21 @@ const UsersPage = () => {
                               <button className="btn btn-icon btn-ghost" title="Cập nhật" onClick={() => setEditingUser(user)}>
                                 <HiOutlinePencil />
                               </button>
-                              {user.role !== "admin" && <>
+                              {user.role !== "admin" && (
                                 <button className="btn btn-icon btn-ghost" title="Điểm thưởng" onClick={() => setRewardUser(user)}>
                                   <HiOutlinePlus />
                                 </button>
+                              )}
                                 <button
                                   className="btn btn-icon btn-ghost"
                                   title={isActiveUser(user) ? "Khóa tài khoản" : "Mở khóa tài khoản"}
-                                  onClick={() => setStatusTarget(user)}
+                                  onClick={() => { setApprovalReason(""); setStatusTarget(user); }}
                                 >
                                   {isActiveUser(user) ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
                                 </button>
-                                <button className="btn btn-icon btn-ghost" title="Force reset password" onClick={() => setResetTarget(user)}>
+                                <button className="btn btn-icon btn-ghost" title="Yêu cầu đặt lại mật khẩu" onClick={() => { setApprovalReason(""); setResetTarget(user); }}>
                                   <HiOutlineKey />
                                 </button>
-                              </>}
                             </div>
                           </td>
                         </tr>
@@ -972,20 +961,24 @@ const UsersPage = () => {
         title={isActiveUser(statusTarget) ? "Khóa người dùng" : "Mở khóa người dùng"}
         message={
           isActiveUser(statusTarget)
-            ? `Bạn có chắc chắn muốn khóa tài khoản "${statusTarget?.full_name}"? Người dùng sẽ không thể đăng nhập hoặc tiếp tục dùng token hiện tại.`
-            : `Bạn có chắc chắn muốn mở khóa tài khoản "${statusTarget?.full_name}"?`
+            ? `Tạo yêu cầu khóa tài khoản "${statusTarget?.full_name}"? Tài khoản chỉ bị khóa sau khi đủ hai admin phê duyệt.`
+            : `Tạo yêu cầu mở khóa tài khoản "${statusTarget?.full_name}"? Thay đổi cần hai admin phê duyệt.`
         }
         onConfirm={handleConfirmStatus}
-        onCancel={() => setStatusTarget(null)}
-      />
+        onCancel={() => { setStatusTarget(null); setApprovalReason(""); }}
+        confirmLabel="Tạo yêu cầu"
+        confirmClassName="btn-primary"
+      ><label className="form-label" htmlFor="status-approval-reason">Lý do</label><textarea id="status-approval-reason" className="form-input form-textarea" rows={3} value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} /></ConfirmDialog>
 
       <ConfirmDialog
         isOpen={Boolean(resetTarget)}
-        title="Force reset password"
-        message={`Tạo yêu cầu đặt lại mật khẩu cho "${resetTarget?.full_name}"? Admin không thể xem mật khẩu hiện tại của user.`}
+        title="Yêu cầu đặt lại mật khẩu"
+        message={`Tạo yêu cầu đặt lại mật khẩu cho "${resetTarget?.full_name}"? OTP chỉ được gửi sau khi đủ hai admin phê duyệt.`}
         onConfirm={handleConfirmForceReset}
-        onCancel={() => setResetTarget(null)}
-      />
+        onCancel={() => { setResetTarget(null); setApprovalReason(""); }}
+        confirmLabel="Tạo yêu cầu"
+        confirmClassName="btn-primary"
+      ><label className="form-label" htmlFor="reset-approval-reason">Lý do</label><textarea id="reset-approval-reason" className="form-input form-textarea" rows={3} value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} /></ConfirmDialog>
 
       <Toast toasts={toasts} onRemove={removeToast} />
     </div>

@@ -13,6 +13,7 @@
     "seed:gifts": "node src/scripts/seedGiftDemo.js",
     "seed:support-policies": "node src/scripts/importSupportPolicies.js",
     "migrate:gifts": "node src/scripts/migrateGifts.js",
+    "migrate:roles": "node src/scripts/migrateCanonicalRoles.js",
     "reconcile:gifts": "node src/scripts/reconcileGifts.js",
     "test": "node --test"
   },

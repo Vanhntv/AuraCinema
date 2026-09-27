@@ -27,6 +27,7 @@ const pageTitles = {
   "/admin/marketing": "Nội dung marketing",
   "/admin/gifts": "Quà tặng",
   "/admin/users": "Người dùng",
+  "/admin/account-approvals": "Phê duyệt tài khoản",
   "/admin/policies": "Chính sách",
 };
 
@@ -334,7 +335,7 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
           )}
         </div>
 
-        <div className="header-user dark:border-slate-700 dark:bg-slate-900">
+        <button className="header-user dark:border-slate-700 dark:bg-slate-900" type="button" onClick={() => navigate("/tai-khoan?tab=account")} title="Thông tin tài khoản admin">
           <div className="header-user-avatar">
             {(user?.full_name || user?.email || "A").charAt(0).toUpperCase()}
           </div>
@@ -344,7 +345,7 @@ const Header = ({ isCollapsed, onToggleSidebar, onToggleMobile }) => {
             </span>
             <span className="header-user-role dark:!text-slate-400">Quản trị viên</span>
           </div>
-        </div>
+        </button>
 
         <button
           className="header-icon-btn dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
