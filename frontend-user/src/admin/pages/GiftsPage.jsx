@@ -335,7 +335,6 @@ const GiftConditionSelect = ({ label, options, value, onChange, disabled, loadin
       const name = item?.title || item?.name || `Mục đã chọn (${id})`;
       return <span key={id} className="gift-condition-selection">{name}<button type="button" aria-label={`Bỏ chọn ${name}`} disabled={disabled} onClick={() => onChange(selectedIds.filter((entry) => entry !== id).join(", "))}><HiOutlineX /></button></span>;
     })}</div>}
-    <p className="form-helper">Có thể chọn nhiều mục; bỏ trống để không giới hạn.</p>
     {loadError && <p className="form-error">{loadError}</p>}
     {error && <p className="form-error">{error}</p>}
   </>;
