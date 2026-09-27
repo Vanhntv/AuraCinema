@@ -964,13 +964,11 @@ const GiftsPage = () => {
             </select>
             <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "status")}>
               <option value="">Tất cả trạng thái</option>
-              <option value="draft">Nháp</option>
               <option value="upcoming">Sắp diễn ra</option>
               <option value="active">Đang hoạt động</option>
               <option value="paused">Tạm dừng</option>
               <option value="out_of_stock">Hết quà</option>
               <option value="expired">Hết hạn</option>
-              <option value="cancelled">Đã hủy</option>
             </select>
             <select className="user-filter-select" value={stockFilter} onChange={handleFilterChange(setStockFilter, "stock")}>
               <option value="">Tất cả tồn quà</option>
