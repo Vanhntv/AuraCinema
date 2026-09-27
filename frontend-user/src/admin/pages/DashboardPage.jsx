@@ -232,7 +232,6 @@ const DashboardPage = () => {
   }, [fetchSelectedMovie]);
 
   const handleRefresh = () => { fetchDashboard(); fetchRevenue(); fetchRankings(); fetchSelectedMovie(); };
-  const chooseDate = (date) => { setRevenuePeriod("day"); setSelectedDate(date); };
   const formatDisplayDate = (value) => displayDateFormatter.format(new Date(`${value}T12:00:00+07:00`));
   const selectedPeriodLabel = comparison.current.label || (periodRange.from === periodRange.to
     ? formatDisplayDate(periodRange.from)
@@ -282,9 +281,6 @@ const DashboardPage = () => {
         <div className="dashboard-revenue-toolbar">
           <div><h2>Phân tích doanh thu</h2><p>Xem doanh thu theo ngày, tuần, tháng, năm hoặc khoảng ngày tùy chọn</p></div>
           <div className="dashboard-revenue-controls">
-            <div className="dashboard-date-shortcuts" aria-label="Chọn ngày nhanh">
-              <button className={selectedDate === currentDate && revenuePeriod === "day" ? "active" : ""} onClick={() => chooseDate(currentDate)} type="button">Hôm nay</button>
-            </div>
             <label className="dashboard-date-filter"><span>Kiểu xem</span><select className="form-input dashboard-period-select" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value)}><option value="day">Theo ngày</option><option value="week">Theo tuần</option><option value="month">Theo tháng</option><option value="year">Theo năm</option><option value="range">Khoảng ngày</option></select></label>
             {(revenuePeriod === "day" || revenuePeriod === "week") && <label className="dashboard-date-filter"><span>{revenuePeriod === "day" ? "Chọn ngày" : "Ngày thuộc tuần"}</span><input className="form-input dashboard-date-input" type="date" max={currentDate} value={selectedDate} onChange={(event) => event.target.value && setSelectedDate(event.target.value)} /></label>}
             {revenuePeriod === "month" && <label className="dashboard-date-filter"><span>Chọn tháng</span><input className="form-input dashboard-date-input" type="month" max={currentDate.slice(0, 7)} value={selectedDate.slice(0, 7)} onChange={(event) => event.target.value && setSelectedDate(`${event.target.value}-01`)} /></label>}
