@@ -320,7 +320,7 @@ const buildGiftFormFromGift = (gift) => ({
   status: gift?.status || "active",
 });
 
-const GiftConditionSelect = ({ label, options, value, onChange, disabled, loading, loadError, error, selectAllLabel, compact = false }) => {
+const GiftConditionSelect = ({ label, options, value, onChange, disabled, loading, loadError, error, selectAllLabel, compact = false, itemLabel = "phim" }) => {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   const selectedIds = parseDelimitedList(value);
@@ -340,15 +340,15 @@ const GiftConditionSelect = ({ label, options, value, onChange, disabled, loadin
       }
       if (event.target.value) onChange([...new Set([...selectedIds, event.target.value])].join(", "));
     }}>
-      <option value="">{loading ? "Đang tải danh sách..." : loadError ? "Không tải được danh sách" : remaining.length ? `Chọn ${label.toLowerCase()}` : compact && allSelected ? "Đã chọn tất cả phim" : "Không có mục để chọn"}</option>
+      <option value="">{loading ? "Đang tải danh sách..." : loadError ? "Không tải được danh sách" : remaining.length ? `Chọn ${label.toLowerCase()}` : compact && allSelected ? `Đã chọn tất cả ${itemLabel}` : "Không có mục để chọn"}</option>
       {selectAllLabel && options.length > 0 && <option value="select-all" disabled={remaining.length === 0}>{selectAllLabel}</option>}
       {remaining.map((item) => <option key={item._id} value={item._id}>{item.title || item.name}</option>)}
     </select>
     {selectedIds.length > 0 && <>
-      {compact && allSelected && <p className="gift-condition-summary">Đã chọn tất cả {options.length} phim</p>}
+      {compact && allSelected && <p className="gift-condition-summary">Đã chọn tất cả {options.length} {itemLabel}</p>}
       <div id={listId} className={`gift-condition-selections${compact ? " gift-condition-selections-compact" : ""}${compact && expanded ? " gift-condition-selections-expanded" : ""}`}>
         {visibleIds.map(renderSelection)}
-        {compact && !expanded && !allSelected && selectedIds.length > 2 && <button type="button" className="gift-condition-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(true)}>+{selectedIds.length - 2} phim</button>}
+        {compact && !expanded && !allSelected && selectedIds.length > 2 && <button type="button" className="gift-condition-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(true)}>+{selectedIds.length - 2} {itemLabel}</button>}
       </div>
       {compact && <div className="gift-condition-actions">
         {(allSelected || selectedIds.length > 2 || expanded) && <button type="button" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((prev) => !prev)}>{expanded ? "Thu gọn" : "Xem danh sách"}</button>}
@@ -690,7 +690,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 </div>
                 <div className="form-group">
                   <label className="form-label">Combo chỉ định</label>
-                  <GiftConditionSelect label="Combo chỉ định" options={conditionOptions.combos} value={formData.combo_ids} onChange={(value) => handleChange("combo_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.comboError} error={errors.combo_ids} />
+                  <GiftConditionSelect label="Combo chỉ định" compact itemLabel="combo" selectAllLabel="Chọn tất cả combo" options={conditionOptions.combos} value={formData.combo_ids} onChange={(value) => handleChange("combo_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.comboError} error={errors.combo_ids} />
                 </div>
               </div>
               <div className="segmented-options">
