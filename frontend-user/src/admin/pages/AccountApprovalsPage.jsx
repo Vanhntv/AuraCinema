@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { changePassword } from "../../api/authApi";
 import { useAuth } from "../../hooks/useAuth";
+import "./AccountApprovalsPage.css";
 import {
   approveAccountChangeRequest,
   getAccountChangeRequests,
@@ -18,11 +19,14 @@ const kindLabels = {
 const statusLabels = { pending: "Chờ duyệt", approved: "Đã duyệt", applied: "Đã áp dụng", rejected: "Đã từ chối", expired: "Hết hạn" };
 const fieldLabels = { full_name: "Họ tên", email: "Email", phone: "Số điện thoại", birth_date: "Ngày sinh", gender: "Giới tính", role: "Vai trò", member_tier: "Hạng thành viên", account_status: "Trạng thái", address: "Địa chỉ", avatar: "Ảnh đại diện", type: "Thao tác", points: "Số điểm" };
 const formatValue = (value) => value == null || value === "" ? "—" : typeof value === "boolean" ? (value ? "Có" : "Không") : String(value);
+const identity = (value) => String(value?._id || value?.id || value || "");
+const visibleChanges = (request) => Object.entries(request.changes || {}).filter(([key]) => key !== "role_id" && key !== "status");
 
 export default function AccountApprovalsPage() {
   const { user, logout } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("pending");
   const [busyId, setBusyId] = useState("");
   const [selected, setSelected] = useState(null);
   const [action, setAction] = useState("");
@@ -90,40 +94,69 @@ export default function AccountApprovalsPage() {
     }
   };
 
+  const currentId = identity(user);
+  const pendingCount = requests.filter((request) => ["pending", "approved"].includes(request.status)).length;
+  const displayed = requests.filter((request) => filter === "all" || (filter === "pending" ? ["pending", "approved"].includes(request.status) : !["pending", "approved"].includes(request.status)));
+
   return (
-    <div className="p-6 text-slate-900">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div><h1 className="text-2xl font-black">Phê duyệt tài khoản</h1><p className="mt-1 text-sm text-slate-500">Hai tài khoản admin độc lập phải xác nhận trước khi thay đổi có hiệu lực.</p></div>
-        <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-bold" type="button" onClick={() => void reload()}>Làm mới</button>
+    <div className="approval-page">
+      <header className="approval-page-header">
+        <div>
+          <h1>Phê duyệt tài khoản</h1>
+          <p>Người tạo đề xuất không thể tự duyệt. Một admin khác xác nhận thì thay đổi mới có hiệu lực.</p>
+        </div>
+        <button className="approval-button approval-button-secondary" type="button" onClick={() => void reload()} disabled={loading}>Làm mới</button>
+      </header>
+      {message && <p role="status" className="approval-alert approval-alert-success">{message}</p>}
+      {error && !selected && <p role="alert" className="approval-alert approval-alert-error">{error}</p>}
+      <div className="approval-toolbar">
+        <div className="approval-filters" role="group" aria-label="Lọc yêu cầu phê duyệt">
+          <button type="button" className={filter === "pending" ? "is-active" : ""} aria-pressed={filter === "pending"} onClick={() => setFilter("pending")}>Chờ duyệt <span>{pendingCount}</span></button>
+          <button type="button" className={filter === "processed" ? "is-active" : ""} aria-pressed={filter === "processed"} onClick={() => setFilter("processed")}>Đã xử lý</button>
+          <button type="button" className={filter === "all" ? "is-active" : ""} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>Tất cả</button>
+        </div>
+        <span className="approval-count">{displayed.length} yêu cầu</span>
       </div>
-      {message && <p role="status" className="mb-4 rounded-lg bg-emerald-50 p-3 text-emerald-800">{message}</p>}
-      {error && <p role="alert" className="mb-4 rounded-lg bg-rose-50 p-3 text-rose-800">{error}</p>}
-      {loading ? <p>Đang tải yêu cầu...</p> : requests.length === 0 ? <p>Chưa có yêu cầu nào.</p> : (
-        <div className="grid gap-4">
-          {requests.map((request) => {
+      {loading ? <div className="approval-empty" role="status">Đang tải yêu cầu...</div> : displayed.length === 0 ? (
+        <div className="approval-empty">{filter === "pending" ? "Không có yêu cầu nào đang chờ duyệt." : "Chưa có yêu cầu trong mục này."}</div>
+      ) : (
+        <div className="approval-list">
+          {displayed.map((request) => {
             const target = request.target_user_id || {};
-            const targetId = String(target._id || target);
-            const currentId = String(user?._id || user?.id || "");
-            const approvedByMe = request.approvals?.some((item) => String(item.admin_id?._id || item.admin_id) === currentId);
-            const canApprove = request.status === "pending" && new Date(request.expires_at) > new Date() && targetId !== currentId && !approvedByMe;
-            const canFinish = request.status === "approved" && request.kind === "password_change" && targetId === currentId && new Date(request.expires_at) > new Date();
+            const targetId = identity(target);
+            const requesterId = identity(request.requested_by);
+            const isRequester = requesterId === currentId;
+            const isTarget = targetId === currentId;
+            const reviewers = request.approvals?.filter((item) => identity(item.admin_id) !== requesterId) || [];
+            const reviewNames = reviewers.map((item) => item.admin_id?.full_name || item.admin_id?.email || "Admin");
+            const isPending = request.status === "pending" && new Date(request.expires_at) > new Date();
+            const canReview = isPending && !isRequester && !isTarget && !reviewers.length;
+            const canFinish = request.status === "approved" && request.kind === "password_change" && isTarget && new Date(request.expires_at) > new Date();
+            const changes = visibleChanges(request);
             return (
-              <article key={request._id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div><h2 className="font-black">{kindLabels[request.kind] || request.kind}</h2><p className="mt-1 text-sm text-slate-600">{target.full_name || "Tài khoản"} · {target.email || targetId}</p></div>
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{statusLabels[request.status] || request.status} · {request.approvals?.length || 0}/2</span>
+              <article className="approval-card" key={request._id}>
+                <div className="approval-card-top">
+                  <div><h2>{kindLabels[request.kind] || request.kind}</h2><p>{target.full_name || "Tài khoản"} <span>·</span> {target.email || targetId}</p></div>
+                  <span className={`approval-status approval-status-${request.status}`}>{statusLabels[request.status] || request.status}</span>
                 </div>
-                <p className="mt-3 text-sm text-slate-600">Người yêu cầu: {request.requested_by?.full_name || request.requested_by?.email || "Admin"} · Lý do: {request.reason}</p>
-                <p className="mt-1 text-xs text-slate-500">Hạn duyệt: {new Date(request.expires_at).toLocaleString("vi-VN")}</p>
-                {Object.keys(request.changes || {}).filter((key) => key !== "role_id" && key !== "status").length > 0 && (
-                  <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b"><th className="py-2">Trường</th><th>Hiện tại</th><th>Đề xuất</th></tr></thead><tbody>{Object.entries(request.changes).filter(([key]) => key !== "role_id" && key !== "status").map(([key, value]) => <tr className="border-b border-slate-100" key={key}><td className="py-2 font-semibold">{fieldLabels[key] || key}</td><td>{formatValue(request.before?.[key])}</td><td>{formatValue(value)}</td></tr>)}</tbody></table></div>
-                )}
-                <p className="mt-3 text-xs text-slate-500">Đã duyệt: {request.approvals?.map((item) => item.admin_id?.full_name || item.admin_id?.email || "Admin").join(", ") || "Chưa có"}</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {canApprove && <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white" type="button" onClick={() => openAction(request, "approve")}>Phê duyệt</button>}
-                  {request.status === "pending" && targetId !== currentId && <button className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-bold text-rose-700" type="button" onClick={() => openAction(request, "reject")}>Từ chối</button>}
-                  {canFinish && <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white" type="button" onClick={() => openAction(request, "finish")}>Hoàn tất đổi mật khẩu</button>}
-                  {request.status === "approved" && request.kind === "password_reset" && <button className="rounded-lg border border-blue-300 px-4 py-2 text-sm font-bold text-blue-700" type="button" onClick={() => openAction(request, "resend")}>Gửi lại OTP</button>}
+                <dl className="approval-meta">
+                  <div><dt>Người đề xuất</dt><dd>{request.requested_by?.full_name || request.requested_by?.email || "Admin"}{isRequester ? " (bạn)" : ""}</dd></div>
+                  <div><dt>Lý do</dt><dd>{request.reason}</dd></div>
+                  <div><dt>Hạn xử lý</dt><dd>{new Date(request.expires_at).toLocaleString("vi-VN")}</dd></div>
+                </dl>
+                {changes.length > 0 && <div className="approval-diff-wrap"><table className="approval-diff"><thead><tr><th scope="col">Thông tin</th><th scope="col">Hiện tại</th><th scope="col">Đề xuất</th></tr></thead><tbody>{changes.map(([key, value]) => <tr key={key}><th scope="row">{fieldLabels[key] || key}</th><td>{formatValue(request.before?.[key])}</td><td className="approval-proposed">{formatValue(value)}</td></tr>)}</tbody></table></div>}
+                <div className="approval-card-bottom">
+                  <p className="approval-review-note">
+                    {request.status === "pending" && isRequester ? "Bạn đã tạo đề xuất này. Đang chờ admin khác xác nhận." :
+                      request.status === "pending" && isTarget ? "Yêu cầu liên quan đến tài khoản của bạn. Bạn không thể tự duyệt." :
+                        request.status === "pending" ? "Cần một admin khác người đề xuất xác nhận." :
+                          reviewNames.length ? `Đã xác nhận bởi ${reviewNames.join(", ")}.` : statusLabels[request.status]}
+                  </p>
+                  <div className="approval-actions">
+                    {canReview && <><button className="approval-button approval-button-primary" type="button" onClick={() => openAction(request, "approve")}>Phê duyệt</button><button className="approval-button approval-button-danger" type="button" onClick={() => openAction(request, "reject")}>Từ chối</button></>}
+                    {canFinish && <button className="approval-button approval-button-primary" type="button" onClick={() => openAction(request, "finish")}>Hoàn tất đổi mật khẩu</button>}
+                    {request.status === "approved" && request.kind === "password_reset" && <button className="approval-button approval-button-secondary" type="button" onClick={() => openAction(request, "resend")}>Gửi lại OTP</button>}
+                  </div>
                 </div>
               </article>
             );
@@ -131,23 +164,16 @@ export default function AccountApprovalsPage() {
         </div>
       )}
       {selected && (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4" role="presentation">
-          <form onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="approval-action-title" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 id="approval-action-title" className="text-lg font-black">{action === "approve" ? "Xác nhận phê duyệt" : action === "reject" ? "Từ chối yêu cầu" : action === "finish" ? "Hoàn tất đổi mật khẩu" : "Gửi lại OTP"}</h2>
-            <p className="mt-2 text-sm text-slate-600">{kindLabels[selected.kind]} · {selected.target_user_id?.email}</p>
-            <p className="mt-1 text-sm text-slate-600">Lý do: {selected.reason}</p>
-            {Object.keys(selected.changes || {}).filter((key) => key !== "role_id" && key !== "status").length > 0 && (
-              <div className="mt-4 max-h-40 overflow-y-auto rounded-lg border p-3 text-sm">
-                {Object.entries(selected.changes).filter(([key]) => key !== "role_id" && key !== "status").map(([key, value]) => (
-                  <p key={key} className="py-1"><strong>{fieldLabels[key] || key}:</strong> {formatValue(selected.before?.[key])} → {formatValue(value)}</p>
-                ))}
-              </div>
-            )}
-            {action === "reject" && <label className="mt-4 block text-sm font-semibold">Lý do từ chối<textarea className="mt-2 w-full rounded-lg border p-3" value={reason} onChange={(event) => setReason(event.target.value)} required /></label>}
-            {["approve", "finish"].includes(action) && <label className="mt-4 block text-sm font-semibold">Mật khẩu hiện tại<input autoFocus className="mt-2 w-full rounded-lg border p-3" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}
-            {action === "finish" && <><label className="mt-4 block text-sm font-semibold">Mật khẩu mới<input className="mt-2 w-full rounded-lg border p-3" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} /></label><label className="mt-4 block text-sm font-semibold">Nhập lại mật khẩu mới<input className="mt-2 w-full rounded-lg border p-3" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label></>}
-            {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
-            <div className="mt-6 flex justify-end gap-3"><button type="button" className="rounded-lg border px-4 py-2" onClick={() => setSelected(null)}>Hủy</button><button disabled={Boolean(busyId)} className="rounded-lg bg-blue-600 px-4 py-2 font-bold text-white disabled:opacity-50" type="submit">{busyId ? "Đang xử lý..." : "Xác nhận"}</button></div>
+        <div className="approval-modal-backdrop" role="presentation">
+          <form className="approval-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="approval-action-title" onKeyDown={(event) => { if (event.key === "Escape" && !busyId) setSelected(null); }}>
+            <div className="approval-modal-heading"><div><h2 id="approval-action-title">{action === "approve" ? "Xác nhận phê duyệt" : action === "reject" ? "Từ chối đề xuất" : action === "finish" ? "Hoàn tất đổi mật khẩu" : "Gửi lại OTP"}</h2><p>{kindLabels[selected.kind]} · {selected.target_user_id?.email}</p></div><button className="approval-close" type="button" onClick={() => setSelected(null)} disabled={Boolean(busyId)}>Đóng</button></div>
+            <p className="approval-modal-reason"><strong>Lý do đề xuất:</strong> {selected.reason}</p>
+            {visibleChanges(selected).length > 0 && <div className="approval-modal-diff">{visibleChanges(selected).map(([key, value]) => <p key={key}><strong>{fieldLabels[key] || key}</strong><span>{formatValue(selected.before?.[key])} → {formatValue(value)}</span></p>)}</div>}
+            {action === "reject" && <label className="approval-field">Lý do từ chối<textarea value={reason} onChange={(event) => setReason(event.target.value)} required rows={3} /></label>}
+            {["approve", "finish"].includes(action) && <label className="approval-field">Mật khẩu hiện tại<input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}
+            {action === "finish" && <><label className="approval-field">Mật khẩu mới<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} /></label><label className="approval-field">Nhập lại mật khẩu mới<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label></>}
+            {error && <p role="alert" className="approval-alert approval-alert-error">{error}</p>}
+            <div className="approval-modal-actions"><button className="approval-button approval-button-secondary" type="button" onClick={() => setSelected(null)} disabled={Boolean(busyId)}>Hủy</button><button className="approval-button approval-button-primary" type="submit" disabled={Boolean(busyId)}>{busyId ? "Đang xử lý..." : "Xác nhận"}</button></div>
           </form>
         </div>
       )}

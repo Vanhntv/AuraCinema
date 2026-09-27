@@ -299,7 +299,7 @@ export const updateUserBasicInfo = async (req, res) => {
     ));
     if (!Object.keys(changed).length) return res.status(400).json({ success: false, message: "Thông tin không thay đổi" });
     const request = await requestAccountChange({ targetId: currentUser._id, requesterId: req.user.id, kind: "profile", changes: changed, reason: req.body.reason });
-    return res.status(202).json({ success: true, message: "Đã tạo yêu cầu, chờ hai admin phê duyệt", data: request });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({ success: false, message: "Email hoặc số điện thoại đã được sử dụng" });
@@ -328,7 +328,7 @@ export const updateUserStatus = async (req, res) => {
     }
     if (resolveAccountStatus(currentUser) === nextStatus) return res.status(400).json({ success: false, message: "Trạng thái không thay đổi" });
     const request = await requestAccountChange({ targetId: currentUser._id, requesterId: req.user.id, kind: "status", changes: { account_status: nextStatus, status: statusToLegacyBoolean(nextStatus) }, reason: req.body.reason });
-    return res.status(202).json({ success: true, message: "Đã tạo yêu cầu khóa/mở khóa, chờ hai admin phê duyệt", data: request });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất khóa/mở khóa, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
@@ -360,7 +360,7 @@ export const adjustRewardPoints = async (req, res) => {
       targetId: req.params.id, requesterId: req.user.id, kind: "reward_adjustment",
       changes: { type, points }, reason,
     });
-    return res.status(202).json({ success: true, message: "Đã tạo yêu cầu điều chỉnh điểm, chờ hai admin phê duyệt", data: request });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất điều chỉnh điểm, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
@@ -380,7 +380,7 @@ export const forceResetPassword = async (req, res) => {
       return res.status(409).json({ success: false, message: "Tài khoản đang bị khóa." });
     }
     const request = await requestAccountChange({ targetId: user._id, requesterId: req.user.id, kind: "password_reset", reason: req.body.reason });
-    return res.status(202).json({ success: true, message: "Đã tạo yêu cầu đặt lại mật khẩu, email OTP chỉ gửi sau khi đủ hai phê duyệt", data: request });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất đặt lại mật khẩu. OTP chỉ được gửi sau khi một admin khác phê duyệt", data: request });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || (error.statusCode ? error.message : "Không thể tạo yêu cầu đặt lại mật khẩu.") });
   }
@@ -408,7 +408,7 @@ export const approveAccountChangeRequest = async (req, res) => {
       try { await issueEmailOtp({ userId: request.target_user_id, purpose: "recovery" }); }
       catch { deliveryMessage = " Yêu cầu đã được duyệt nhưng chưa gửi được OTP; hãy thử nút Gửi lại OTP."; }
     }
-    return res.json({ success: true, message: request.status === "pending" ? "Đã ghi nhận phê duyệt thứ nhất" : `Đã đủ hai admin phê duyệt.${deliveryMessage}`, data: request });
+    return res.json({ success: true, message: `Admin khác đã phê duyệt đề xuất.${deliveryMessage}`, data: request });
   } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
 };
 

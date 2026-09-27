@@ -29,13 +29,9 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
   if (kind === "reward_adjustment" && target.role === "admin") throw error("Không được điều chỉnh điểm của tài khoản admin", 403);
 
   const targetIsAdmin = target.role === "admin";
-  const eligibleCount = await User.countDocuments({
-    ...activeAdmin,
-    ...(targetIsAdmin ? { _id: { $ne: target._id } } : {}),
-  });
-  if (eligibleCount < 2) throw error(targetIsAdmin
-    ? "Cần ít nhất hai admin khác tài khoản này đang hoạt động để phê duyệt"
-    : "Cần ít nhất hai admin đang hoạt động để phê duyệt", 409);
+  const excludedIds = targetIsAdmin ? [requester._id, target._id] : [requester._id];
+  const eligibleCount = await User.countDocuments({ ...activeAdmin, _id: { $nin: excludedIds } });
+  if (eligibleCount < 1) throw error("Cần ít nhất một admin khác đang hoạt động để phê duyệt yêu cầu", 409);
 
   await AccountChangeRequest.updateMany(
     { target_user_id: target._id, kind, status: { $in: ["pending", "approved"] }, expires_at: { $lte: new Date() } },
@@ -54,9 +50,6 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
     : kind === "password_change" || kind === "password_reset"
     ? snapshot(target, ["password_changed_at", "role", "account_status"])
     : snapshot(target, [...Object.keys(changes), "role", "account_status"]);
-  const initialApprovals = id(requester) === id(target)
-    ? []
-    : [{ admin_id: requester._id, approved_at: new Date() }];
   try {
     return await AccountChangeRequest.create({
       target_user_id: target._id,
@@ -64,7 +57,7 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
       kind,
       changes,
       before,
-      approvals: initialApprovals,
+      approvals: [],
       reason: requestReason,
       expires_at: new Date(Date.now() + APPROVAL_TTL_MS),
     });
@@ -103,75 +96,69 @@ export const approveAccountChange = async ({ requestId, reviewerId, passwordVali
     ]);
     if (!reviewer) throw error("Bạn không còn quyền admin", 403);
     if (!target) throw error("Tài khoản đích không còn tồn tại", 409);
+    if (id(request.requested_by) === id(reviewer)) throw error("Admin tạo đề xuất không thể tự phê duyệt", 403);
     if (target.role === "admin" && id(target) === id(reviewer)) throw error("Không thể tự phê duyệt thay đổi tài khoản admin", 403);
     if (request.approvals.some((item) => id(item.admin_id) === id(reviewer))) throw error("Admin này đã phê duyệt yêu cầu", 409);
     if (Object.entries(request.before || {}).some(([key, value]) => !same(target[key], value))) {
       throw error("Thông tin tài khoản đã thay đổi; vui lòng tạo yêu cầu mới", 409);
     }
 
+    const proposer = await User.findOne({ _id: request.requested_by, ...activeAdmin }).session(session);
+    if (!proposer) throw error("Admin tạo đề xuất không còn quyền admin; vui lòng tạo yêu cầu mới", 409);
     request.approvals.push({ admin_id: reviewer._id, approved_at: new Date() });
-    if (request.approvals.length >= 2) {
-      const approvers = await User.find({
-        _id: { $in: request.approvals.map((item) => item.admin_id) },
-        ...activeAdmin,
-      }).session(session);
-      if (approvers.length !== 2) throw error("Một trong hai admin không còn quyền phê duyệt", 409);
-      if (target.role === "admin" && approvers.some((admin) => id(admin) === id(target))) throw error("Không thể tự phê duyệt", 403);
-
-      if (request.kind === "reward_adjustment") {
-        if (target.role === "admin") throw error("Không được điều chỉnh điểm của tài khoản admin", 403);
-        const { type, points } = request.changes;
-        const currentPoints = Number(target.reward_points || 0);
-        const nextPoints = type === "add" ? currentPoints + points : currentPoints - points;
-        if (!Number.isSafeInteger(nextPoints) || nextPoints < 0) throw error("Số dư điểm không hợp lệ hoặc không đủ điểm để trừ", 409);
-        const result = await User.updateOne({ _id: target._id, deleted_at: null, reward_points: target.reward_points }, { $set: { reward_points: nextPoints } }, { session, runValidators: true });
-        if (result.matchedCount !== 1) throw error("Số dư điểm đã thay đổi; vui lòng tạo yêu cầu mới", 409);
-        await RewardPointLog.create([{
-          user_id: target._id, admin_id: reviewer._id, event_key: `account-approval:${request._id}`,
-          type, points, balance_after: nextPoints, reason: request.reason,
-        }], { session });
-        request.status = "applied";
-        request.applied_at = new Date();
-      } else if (["profile", "status"].includes(request.kind)) {
-        const changes = { ...request.changes };
-        if (changes.role === "admin" && target.role !== "admin" && (target.account_status !== "active" || target.status === false || !target.email_verified_at || (changes.email && changes.email !== target.email))) {
-          throw error("Chỉ có thể cấp quyền admin cho tài khoản đang hoạt động và đã xác minh email", 409);
-        }
-        if (changes.account_status === "active" && target.email_verification_required) {
-          throw error("Tài khoản phải xác minh email trước khi được kích hoạt", 409);
-        }
-        if (target.role === "admin" && (changes.role && changes.role !== "admin" || changes.account_status && changes.account_status !== "active")) {
-          const activeCount = await User.countDocuments(activeAdmin).session(session);
-          if (activeCount < 3) throw error("Cần giữ ít nhất hai admin hoạt động sau thay đổi này", 409);
-        }
-        if (changes.role && changes.role !== target.role) changes.password_changed_at = new Date(Date.now() + 1000);
-        if (changes.email && changes.email !== target.email) {
-          Object.assign(changes, {
-            email_verified_at: null,
-            email_verification_required: true,
-            email_verification: null,
-            password_recovery: null,
-            password_changed_at: new Date(Date.now() + 1000),
-          });
-          if (changes.account_status !== "banned") Object.assign(changes, { account_status: "unverified", status: false });
-        }
-        const result = await User.updateOne({ _id: target._id, deleted_at: null }, { $set: changes }, { session, runValidators: true });
-        if (result.matchedCount !== 1) throw error("Không thể cập nhật tài khoản", 409);
-        request.status = "applied";
-        request.applied_at = new Date();
-      } else {
-        request.status = "approved";
-      }
-      await AuditLog.create([{
-        admin_id: reviewer._id,
-        target_user_id: target._id,
-        action: `APPROVE_${request.kind.toUpperCase()}`,
-        before: request.before,
-        after: request.kind === "password_change" || request.kind === "password_reset" ? null : request.changes,
-        changes: { request_id: request._id, approver_ids: request.approvals.map((item) => item.admin_id) },
-        reason: request.reason,
+    if (request.kind === "reward_adjustment") {
+      if (target.role === "admin") throw error("Không được điều chỉnh điểm của tài khoản admin", 403);
+      const { type, points } = request.changes;
+      const currentPoints = Number(target.reward_points || 0);
+      const nextPoints = type === "add" ? currentPoints + points : currentPoints - points;
+      if (!Number.isSafeInteger(nextPoints) || nextPoints < 0) throw error("Số dư điểm không hợp lệ hoặc không đủ điểm để trừ", 409);
+      const result = await User.updateOne({ _id: target._id, deleted_at: null, reward_points: target.reward_points }, { $set: { reward_points: nextPoints } }, { session, runValidators: true });
+      if (result.matchedCount !== 1) throw error("Số dư điểm đã thay đổi; vui lòng tạo yêu cầu mới", 409);
+      await RewardPointLog.create([{
+        user_id: target._id, admin_id: reviewer._id, event_key: `account-approval:${request._id}`,
+        type, points, balance_after: nextPoints, reason: request.reason,
       }], { session });
+      request.status = "applied";
+      request.applied_at = new Date();
+    } else if (["profile", "status"].includes(request.kind)) {
+      const changes = { ...request.changes };
+      if (changes.role === "admin" && target.role !== "admin" && (target.account_status !== "active" || target.status === false || !target.email_verified_at || (changes.email && changes.email !== target.email))) {
+        throw error("Chỉ có thể cấp quyền admin cho tài khoản đang hoạt động và đã xác minh email", 409);
+      }
+      if (changes.account_status === "active" && target.email_verification_required) {
+        throw error("Tài khoản phải xác minh email trước khi được kích hoạt", 409);
+      }
+      if (target.role === "admin" && (changes.role && changes.role !== "admin" || changes.account_status && changes.account_status !== "active")) {
+        const activeCount = await User.countDocuments(activeAdmin).session(session);
+        if (activeCount < 3) throw error("Cần giữ ít nhất hai admin hoạt động sau thay đổi này", 409);
+      }
+      if (changes.role && changes.role !== target.role) changes.password_changed_at = new Date(Date.now() + 1000);
+      if (changes.email && changes.email !== target.email) {
+        Object.assign(changes, {
+          email_verified_at: null,
+          email_verification_required: true,
+          email_verification: null,
+          password_recovery: null,
+          password_changed_at: new Date(Date.now() + 1000),
+        });
+        if (changes.account_status !== "banned") Object.assign(changes, { account_status: "unverified", status: false });
+      }
+      const result = await User.updateOne({ _id: target._id, deleted_at: null }, { $set: changes }, { session, runValidators: true });
+      if (result.matchedCount !== 1) throw error("Không thể cập nhật tài khoản", 409);
+      request.status = "applied";
+      request.applied_at = new Date();
+    } else {
+      request.status = "approved";
     }
+    await AuditLog.create([{
+      admin_id: reviewer._id,
+      target_user_id: target._id,
+      action: `APPROVE_${request.kind.toUpperCase()}`,
+      before: request.before,
+      after: request.kind === "password_change" || request.kind === "password_reset" ? null : request.changes,
+      changes: { request_id: request._id, proposer_id: proposer._id, approver_ids: request.approvals.filter((item) => id(item.admin_id) !== id(proposer)).map((item) => item.admin_id) },
+      reason: request.reason,
+    }], { session });
     await request.save({ session });
     return request;
   });
@@ -188,7 +175,7 @@ export const rejectAccountChange = async ({ requestId, reviewerId, reason }) => 
     if (!request) throw error("Không tìm thấy yêu cầu", 404);
     if (!reviewer) throw error("Bạn không còn quyền admin", 403);
     if (request.status !== "pending") throw error("Yêu cầu không còn chờ phê duyệt", 409);
-    if (id(request.target_user_id) === id(reviewer)) throw error("Không thể tự xử lý yêu cầu của mình", 403);
+    if (id(request.requested_by) === id(reviewer) || id(request.target_user_id) === id(reviewer)) throw error("Không thể tự xử lý yêu cầu của mình", 403);
     request.status = "rejected";
     request.rejected_by = reviewer._id;
     request.rejected_at = new Date();
@@ -208,7 +195,7 @@ export const getApprovedPasswordRequest = async ({ requestId, targetId, kind }) 
     status: "approved",
     expires_at: { $gt: new Date() },
   });
-  if (!request) throw error("Chưa có yêu cầu đổi mật khẩu được hai admin phê duyệt hoặc yêu cầu đã hết hạn", 403);
+  if (!request) throw error("Chưa có yêu cầu đổi mật khẩu được admin khác phê duyệt hoặc yêu cầu đã hết hạn", 403);
   return request;
 };
 
@@ -217,7 +204,7 @@ export const applyApprovedPasswordChange = async ({ requestId, targetId, passwor
     const request = await AccountChangeRequest.findOne({
       _id: requestId, target_user_id: targetId, kind: "password_change", status: "approved", expires_at: { $gt: new Date() },
     }).session(session);
-    if (!request) throw error("Yêu cầu đổi mật khẩu chưa được hai admin phê duyệt hoặc đã hết hạn", 403);
+    if (!request) throw error("Yêu cầu đổi mật khẩu chưa được admin khác phê duyệt hoặc đã hết hạn", 403);
     const user = await User.findOne({ _id: targetId, role: "admin", deleted_at: null }).session(session);
     if (!user || !same(user.password_changed_at, request.before?.password_changed_at)) throw error("Mật khẩu đã thay đổi; vui lòng tạo yêu cầu mới", 409);
     user.password = passwordHash;

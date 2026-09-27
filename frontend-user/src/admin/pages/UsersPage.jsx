@@ -507,7 +507,7 @@ const UserEditModal = ({ user, isLoading, onClose, onSubmit }) => {
             <div className="form-group">
               <label className="form-label">Lý do thay đổi</label>
               <textarea className="form-input form-textarea" name="reason" value={formData.reason} onChange={handleChange} rows={3} required />
-              <span className="form-hint">Yêu cầu chỉ có hiệu lực sau khi đủ hai admin phê duyệt.</span>
+              <span className="form-hint">Người tạo đề xuất không tự duyệt; một admin khác cần xác nhận.</span>
             </div>
           </div>
           <div className="modal-footer">
@@ -961,8 +961,8 @@ const UsersPage = () => {
         title={isActiveUser(statusTarget) ? "Khóa người dùng" : "Mở khóa người dùng"}
         message={
           isActiveUser(statusTarget)
-            ? `Tạo yêu cầu khóa tài khoản "${statusTarget?.full_name}"? Tài khoản chỉ bị khóa sau khi đủ hai admin phê duyệt.`
-            : `Tạo yêu cầu mở khóa tài khoản "${statusTarget?.full_name}"? Thay đổi cần hai admin phê duyệt.`
+            ? `Tạo đề xuất khóa tài khoản "${statusTarget?.full_name}"? Tài khoản chỉ bị khóa sau khi một admin khác phê duyệt.`
+            : `Tạo đề xuất mở khóa tài khoản "${statusTarget?.full_name}"? Thay đổi cần một admin khác phê duyệt.`
         }
         onConfirm={handleConfirmStatus}
         onCancel={() => { setStatusTarget(null); setApprovalReason(""); }}
@@ -973,7 +973,7 @@ const UsersPage = () => {
       <ConfirmDialog
         isOpen={Boolean(resetTarget)}
         title="Yêu cầu đặt lại mật khẩu"
-        message={`Tạo yêu cầu đặt lại mật khẩu cho "${resetTarget?.full_name}"? OTP chỉ được gửi sau khi đủ hai admin phê duyệt.`}
+        message={`Tạo đề xuất đặt lại mật khẩu cho "${resetTarget?.full_name}"? OTP chỉ được gửi sau khi một admin khác phê duyệt.`}
         onConfirm={handleConfirmForceReset}
         onCancel={() => { setResetTarget(null); setApprovalReason(""); }}
         confirmLabel="Tạo yêu cầu"

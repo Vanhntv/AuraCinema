@@ -390,7 +390,7 @@ export const forgotPassword = async (req, res) => {
 
     const responsePayload = {
       success: true,
-      message: "Nếu tài khoản đủ điều kiện, mã OTP đặt lại mật khẩu đã được gửi. Tài khoản admin cần hai admin khác phê duyệt yêu cầu trước khi nhận OTP.",
+      message: "Nếu tài khoản đủ điều kiện, mã OTP đặt lại mật khẩu đã được gửi. Tài khoản admin cần một admin khác phê duyệt yêu cầu trước khi nhận OTP.",
     };
 
     if (!user) {
@@ -523,7 +523,7 @@ export const updateProfile = async (req, res) => {
         targetId: req.user.id, requesterId: req.user.id, kind: "profile",
         changes: allowedFields, reason: req.body.reason || "Admin tự cập nhật hồ sơ",
       });
-      return res.status(202).json({ success: true, message: "Đã gửi thay đổi hồ sơ, chờ hai admin khác phê duyệt", data: request });
+      return res.status(202).json({ success: true, message: "Đã gửi thay đổi hồ sơ, chờ một admin khác phê duyệt", data: request });
     }
 
     const user = await User.findOneAndUpdate(
@@ -608,7 +608,7 @@ export const changePassword = async (req, res) => {
           targetId: user._id, requesterId: user._id, kind: "password_change",
           reason: "Admin yêu cầu tự đổi mật khẩu",
         });
-        return res.status(202).json({ success: true, message: "Đã gửi yêu cầu đổi mật khẩu. Sau khi hai admin khác duyệt, hãy nhập lại mật khẩu để hoàn tất.", data: request });
+        return res.status(202).json({ success: true, message: "Đã gửi yêu cầu đổi mật khẩu. Sau khi một admin khác duyệt, hãy nhập lại mật khẩu để hoàn tất.", data: request });
       }
       await applyApprovedPasswordChange({ requestId: req.body.approval_request_id, targetId: user._id, passwordHash: await hashPassword(password) });
     } else {

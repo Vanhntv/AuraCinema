@@ -324,7 +324,7 @@ function AccountPage() {
         avatar: profileForm.avatar,
       });
       if (user?.role === "admin") {
-        const message = response.message || "Đã gửi yêu cầu, chờ hai admin khác phê duyệt.";
+        const message = response.message || "Đã gửi đề xuất, chờ một admin khác phê duyệt.";
         setProfileMessage(message);
         showToast("success", message);
       } else {
@@ -369,7 +369,7 @@ function AccountPage() {
       const response = await changePassword(passwordForm);
       const isAdminRequest = user?.role === "admin";
       const message = isAdminRequest
-        ? response.message || "Đã gửi yêu cầu đổi mật khẩu, chờ hai admin khác phê duyệt. Hoàn tất trong mục Phê duyệt tài khoản."
+        ? response.message || "Đã gửi yêu cầu đổi mật khẩu, chờ một admin khác phê duyệt. Hoàn tất trong mục Phê duyệt tài khoản."
         : "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.";
       setPasswordMessage(message);
       showToast("success", message);
