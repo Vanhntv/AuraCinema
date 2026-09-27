@@ -44,7 +44,6 @@ const shiftDate = (dateValue, amount) => {
   const [year, month, day] = dateValue.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
 };
-const yesterdayDate = shiftDate(currentDate, -1);
 
 const getPeriodRange = (period, selectedDate, rangeFrom, rangeTo) => {
   if (period === "range") return { from: rangeFrom, to: rangeTo };
@@ -285,7 +284,6 @@ const DashboardPage = () => {
           <div className="dashboard-revenue-controls">
             <div className="dashboard-date-shortcuts" aria-label="Chọn ngày nhanh">
               <button className={selectedDate === currentDate && revenuePeriod === "day" ? "active" : ""} onClick={() => chooseDate(currentDate)} type="button">Hôm nay</button>
-              <button className={selectedDate === yesterdayDate && revenuePeriod === "day" ? "active" : ""} onClick={() => chooseDate(yesterdayDate)} type="button">Hôm qua</button>
             </div>
             <label className="dashboard-date-filter"><span>Kiểu xem</span><select className="form-input dashboard-period-select" value={revenuePeriod} onChange={(event) => setRevenuePeriod(event.target.value)}><option value="day">Theo ngày</option><option value="week">Theo tuần</option><option value="month">Theo tháng</option><option value="year">Theo năm</option><option value="range">Khoảng ngày</option></select></label>
             {(revenuePeriod === "day" || revenuePeriod === "week") && <label className="dashboard-date-filter"><span>{revenuePeriod === "day" ? "Chọn ngày" : "Ngày thuộc tuần"}</span><input className="form-input dashboard-date-input" type="date" max={currentDate} value={selectedDate} onChange={(event) => event.target.value && setSelectedDate(event.target.value)} /></label>}
