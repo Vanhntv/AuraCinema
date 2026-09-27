@@ -130,6 +130,16 @@ export default function App() {
 
 const STAFF_SCANNER_ID = "staff-ticket-qr-reader";
 const BOOKING_QR_PREFIX = "AURA_BOOKING_V2:";
+const AURA_TICKET_PLUS_SEPARATOR_PATTERN = /^(AURA\d{12})\+([A-Z]+\d+)$/;
+const AURA_BOOKING_CODE_PATTERN = /^AURA\d{12}$/;
+
+const normalizeTicketLookupCode = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(AURA_TICKET_PLUS_SEPARATOR_PATTERN, "$1-$2");
+
+const isAuraBookingCode = (value) => AURA_BOOKING_CODE_PATTERN.test(normalizeTicketLookupCode(value));
 
 function TicketScanner() {
   const scannerRef = useRef(null);
@@ -138,10 +148,9 @@ function TicketScanner() {
   const [cameraActive, setCameraActive] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
-  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc nhập mã vé.");
+  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc tra cứu bằng mã vé.");
   const [result, setResult] = useState(null);
   const [currentQrToken, setCurrentQrToken] = useState("");
-  const [qrText, setQrText] = useState("");
   const [ticketCode, setTicketCode] = useState("");
   const ticket = result?.data || null;
   const services = ticket?.booking?.combos?.length
@@ -206,12 +215,17 @@ function TicketScanner() {
 
   const lookupTicket = async (event) => {
     event.preventDefault();
-    const code = ticketCode.trim().toUpperCase();
+    const code = normalizeTicketLookupCode(ticketCode);
     if (!code || processingRef.current) return;
     processingRef.current = true; setProcessing(true); setResult(null); setMessage("Đang tra cứu mã vé...");
     try {
-      const response = await api("/staff/pos/tickets/lookup", { method: "POST", body: JSON.stringify({ ticketCode: code }), returnBody: true });
-      setResult(response); setCurrentQrToken(response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
+      const bookingLookup = isAuraBookingCode(code);
+      const response = await api(bookingLookup ? "/staff/pos/bookings/verify" : "/staff/pos/tickets/lookup", {
+        method: "POST",
+        body: JSON.stringify(bookingLookup ? { bookingCode: code } : { ticketCode: code }),
+        returnBody: true,
+      });
+      setResult(response); setCurrentQrToken(bookingLookup ? "" : response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
     } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setCurrentQrToken(""); setMessage(err.message); }
     finally { processingRef.current = false; setProcessing(false); }
   };
@@ -226,9 +240,77 @@ function TicketScanner() {
     finally { setCheckingIn(false); }
   };
 
-  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setQrText(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
 
-  return <div className="staff-scanner"><section className="scanner-panel"><div className="scanner-heading"><div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div><span>⌗</span></div><div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} /><div id="staff-ticket-file-reader" className="scanner-file-reader" /><div className="scanner-controls"><button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button><button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button><input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden /></div><form className="scanner-token-form" onSubmit={(event) => { event.preventDefault(); verifyQr(qrText); }}><label htmlFor="staff-qr-token">Hoặc nhập nội dung mã QR</label><div><input id="staff-qr-token" value={qrText} onChange={(event) => setQrText(event.target.value)} placeholder="AURA_TICKET:... hoặc AURA_BOOKING_V2:..." /><button disabled={!qrText.trim() || processing}>Kiểm tra</button></div></form><form className="scanner-token-form" onSubmit={lookupTicket}><label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label><div><input id="staff-ticket-code" value={ticketCode} onChange={(event) => setTicketCode(event.target.value.toUpperCase())} placeholder="Nhập mã vé" /><button disabled={!ticketCode.trim() || processing}>Tra cứu</button></div></form><p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang xử lý..." : message}</p></section><section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}><div className="scanner-heading"><div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div><span>🎟</span></div>{ticket ? <><div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div><div className="scan-ticket-grid"><Info label="Phim" value={ticket.movie?.title} /><Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} /><Info label="Phòng" value={ticket.room?.name} /><Info label={ticket.qrType === "BOOKING" ? "Toàn bộ ghế" : "Ghế"} value={ticket.seat?.label || ticket.seatLabel} /><Info label="Loại ghế" value={ticket.seat?.type} /><Info label="Dịch vụ" value={services} /></div>{ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}<button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button></> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}</section></div>;
+  return (
+    <div className="staff-scanner">
+      <section className="scanner-panel">
+        <div className="scanner-heading">
+          <div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div>
+          <span>⌗</span>
+        </div>
+        <div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} />
+        <div id="staff-ticket-file-reader" className="scanner-file-reader" />
+        <div className="scanner-controls">
+          <button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button>
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden />
+        </div>
+        <form className="scanner-token-form" onSubmit={lookupTicket}>
+          <label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label>
+          <div>
+            <input
+              id="staff-ticket-code"
+              value={ticketCode}
+              onChange={(event) => setTicketCode(event.target.value.toUpperCase())}
+              placeholder="Ví dụ: AURA790641104155"
+              minLength={6}
+              maxLength={64}
+              autoComplete="off"
+              spellCheck="false"
+              disabled={processing}
+              required
+            />
+            <button disabled={!ticketCode.trim() || processing}>{processing ? "Đang tìm..." : "Tra cứu"}</button>
+          </div>
+        </form>
+        <p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang tra cứu mã vé..." : message}</p>
+      </section>
+
+      <section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}>
+        <div className="scanner-heading">
+          <div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div>
+          <span>🎟</span>
+        </div>
+        {ticket ? <>
+          <div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div>
+          <div className="scan-ticket-grid">
+            {ticket.qrType === "BOOKING" ? <>
+              <Info label="Mã đơn" value={ticket.booking?.bookingCode || ticket.ticketCode} />
+              <Info label="Phim" value={ticket.movie?.title} />
+              <Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} />
+              <Info label="Phòng" value={ticket.room?.name} />
+              <Info label="Toàn bộ ghế" value={ticket.seat?.label} />
+              <Info label="Loại ghế" value={ticket.seat?.type} />
+              <Info label="Dịch vụ" value={services} />
+            </> : <>
+              <Info label="Mã vé" value={ticket.ticketCode} />
+              <Info label="Phim" value={ticket.movie?.title} />
+              <Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} />
+              <Info label="Phòng" value={ticket.room?.name} />
+              <Info label="Ghế" value={ticket.seat?.label || ticket.seatLabel} />
+              <Info label="Loại ghế" value={ticket.seat?.type} />
+              <Info label="Giá vé" value={money.format(Number(ticket.price || 0))} />
+              <Info label="Mã đơn" value={ticket.booking?.bookingCode} />
+              <Info label="Dịch vụ" value={services} />
+            </>}
+          </div>
+          {ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}
+          <button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button>
+        </> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}
+      </section>
+    </div>
+  );
 }
 
 function Info({ label, value }) { return <div><span>{label}</span><strong>{value || "—"}</strong></div>; }
