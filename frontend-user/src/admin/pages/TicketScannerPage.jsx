@@ -15,11 +15,12 @@ import {
 import {
   checkInTicketQr,
   claimTicketPrint,
+  confirmTicketPrint,
   lookupTicketByCode,
   verifyTicketQr,
 } from "../services/ticketAdminService";
 import { showToast } from "../../utils/toast";
-import { lookupBookingOrderPrint, scanPrintBookingOrder } from "../services/bookingAdminService";
+import { confirmBookingOrderPrint, lookupBookingOrderPrint, scanPrintBookingOrder } from "../services/bookingAdminService";
 import { lookupGiftQr, redeemGiftQr } from "../services/giftStaffService";
 import { isAuraBookingCode, normalizeTicketLookupCode } from "../utils/ticketCodeLookup";
 
@@ -157,7 +158,10 @@ const TicketScannerPage = () => {
   const [checkingIn, setCheckingIn] = useState(false);
   const [printingTicket, setPrintingTicket] = useState(false);
   const [printingBookingOrder, setPrintingBookingOrder] = useState(false);
-  const [preparedTicketId, setPreparedTicketId] = useState("");
+  const [waitingForPrintDialog, setWaitingForPrintDialog] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(null);
+  const [printFailureReason, setPrintFailureReason] = useState("");
+  const [confirmingPrint, setConfirmingPrint] = useState(false);
   const [lookingUpTicket, setLookingUpTicket] = useState(false);
   const [ticketCodeQuery, setTicketCodeQuery] = useState("");
   const [currentQrToken, setCurrentQrToken] = useState("");
@@ -215,7 +219,6 @@ const TicketScannerPage = () => {
       setCheckInResult(null);
       setVerifyResult(null);
       setBookingPrintResult(null);
-      setPreparedTicketId("");
       setGiftResult(null);
       setCameraMessage("Đã đọc QR. Đang xử lý...");
     }
@@ -337,10 +340,10 @@ const TicketScannerPage = () => {
   }, [handleQrToken, processing, scannerConfig]);
 
   const handleScanNext = async () => {
+    if (pendingPrint) return;
     setVerifyResult(null);
     setCheckInResult(null);
     setBookingPrintResult(null);
-    setPreparedTicketId("");
     setGiftResult(null);
     setCurrentQrToken("");
     setTicketCodeQuery("");
@@ -360,7 +363,6 @@ const TicketScannerPage = () => {
       setCheckInResult(null);
       setVerifyResult(null);
       setBookingPrintResult(null);
-      setPreparedTicketId("");
       setCurrentQrToken("");
       await stopScanner();
 
@@ -402,30 +404,26 @@ const TicketScannerPage = () => {
   };
 
   const handlePrintTicket = async () => {
-    const ticketId = String(ticket?.id || ticket?._id || "");
-    const canReopenPreparedTicket = Boolean(ticketId && preparedTicketId === ticketId && currentQrToken);
-    if (!ticket || printingTicket || (!canReopenPreparedTicket && (ticket.canPrint === false || ticket.printedAt))) return;
+    if (!ticket || printingTicket || pendingPrint || ticket.printedAt) return;
 
+    let activeClaimId = "";
     try {
       setPrintingTicket(true);
-      let printableTicket = ticket;
-
-      if (!canReopenPreparedTicket) {
-        const claimResponse = await claimTicketPrint(currentQrToken);
-        printableTicket = claimResponse.data || ticket;
-        setPreparedTicketId(String(printableTicket?.id || printableTicket?._id || ticketId));
-
-        if (checkInResult?.data) {
-          setCheckInResult((current) => ({ ...current, data: printableTicket }));
-        } else {
-          setVerifyResult((current) => ({ ...current, data: printableTicket }));
-        }
-      }
+      const claimResponse = await claimTicketPrint(currentQrToken);
+      const printableTicket = claimResponse.data || ticket;
+      const claimId = claimResponse.printClaimId;
+      if (!claimId) throw new Error("Không nhận được mã xác nhận lượt in.");
+      activeClaimId = claimId;
 
       const { printTicketPdf } = await import("../../utils/ticketPdf");
+      setWaitingForPrintDialog(true);
       await printTicketPdf(printableTicket, currentQrToken);
-      showToast("success", canReopenPreparedTicket ? "Đã mở lại hộp thoại in vé." : "Đã mở hộp thoại in vé.");
+      setPendingPrint({ kind: "ticket", claimId, qrToken: currentQrToken, count: 1 });
+      setPrintFailureReason("");
     } catch (error) {
+      if (activeClaimId) {
+        try { await confirmTicketPrint(currentQrToken, activeClaimId, false, "Không mở được hộp thoại in"); } catch { /* The claim can be resumed on the next attempt. */ }
+      }
       const latestTicket = error?.response?.data?.data;
       if (latestTicket) {
         if (checkInResult?.data) {
@@ -436,6 +434,7 @@ const TicketScannerPage = () => {
       }
       showToast("error", getApiMessage(error, "Không thể mở hộp thoại in vé."));
     } finally {
+      setWaitingForPrintDialog(false);
       setPrintingTicket(false);
     }
   };
@@ -443,13 +442,15 @@ const TicketScannerPage = () => {
   const handlePrintBookingOrder = async () => {
     if (
       !bookingPrintResult?.success
-      || bookingPrintResult?.action === "printed"
+      || pendingPrint
       || !bookingPrintResult?.data
       || (bookingPrintResult.data.tickets?.length || 0) === 0
       || printingBookingOrder
       || processing
     ) return;
 
+    let activeClaimId = "";
+    let activeBookingCode = "";
     try {
       setPrintingBookingOrder(true);
       const response = await scanPrintBookingOrder({
@@ -457,17 +458,20 @@ const TicketScannerPage = () => {
         bookingCode: bookingPrintResult.data?.booking?.bookingCode,
       });
       if (!mountedRef.current) return;
-      setBookingPrintResult({ ...response, action: "printed" });
+      if (!response.printClaimId) throw new Error("Không nhận được mã xác nhận lượt in.");
+      activeClaimId = response.printClaimId;
+      activeBookingCode = response.data?.booking?.bookingCode;
 
       const { printBookingOrder } = await import("../../utils/bookingOrderPrint");
+      setWaitingForPrintDialog(true);
       await printBookingOrder(response.data);
       if (!mountedRef.current) return;
-
-      const printedCount = response.data?.tickets?.length || 0;
-      const successMessage = `Đã ghi nhận và mở hộp thoại in ${printedCount} vé. Đơn vé không thể in lại.`;
-      setCameraMessage(successMessage);
-      showToast("success", successMessage);
+      setPendingPrint({ kind: "booking", claimId: response.printClaimId, bookingCode: response.data?.booking?.bookingCode, count: response.data?.tickets?.length || 0 });
+      setPrintFailureReason("");
     } catch (error) {
+      if (activeClaimId && activeBookingCode) {
+        try { await confirmBookingOrderPrint(activeBookingCode, activeClaimId, false, "Không mở được hộp thoại in"); } catch { /* The claim can be resumed on the next attempt. */ }
+      }
       const message = getApiMessage(error, "Không thể in đơn vé.");
       if (!mountedRef.current) return;
       if (error?.response?.data?.data) {
@@ -482,7 +486,39 @@ const TicketScannerPage = () => {
       setCameraMessage(message);
       showToast("error", message);
     } finally {
-      if (mountedRef.current) setPrintingBookingOrder(false);
+      if (mountedRef.current) {
+        setWaitingForPrintDialog(false);
+        setPrintingBookingOrder(false);
+      }
+    }
+  };
+
+  const handlePrintDialogClosedManually = async () => {
+    const { finishPendingPrintDialog } = await import("../../utils/ticketPdf");
+    finishPendingPrintDialog();
+  };
+
+  const handleConfirmPrint = async (success) => {
+    if (!pendingPrint || confirmingPrint || (!success && printFailureReason.trim().length < 3)) return;
+    try {
+      setConfirmingPrint(true);
+      let response;
+      if (pendingPrint.kind === "ticket") {
+        response = await confirmTicketPrint(pendingPrint.qrToken, pendingPrint.claimId, success, printFailureReason);
+        if (checkInResult?.data) setCheckInResult((current) => ({ ...current, data: response.data }));
+        else setVerifyResult((current) => ({ ...current, data: response.data }));
+      } else {
+        response = await confirmBookingOrderPrint(pendingPrint.bookingCode, pendingPrint.claimId, success, printFailureReason);
+        setBookingPrintResult((current) => ({ ...current, action: success ? "printed" : "lookup" }));
+      }
+      setPendingPrint(null);
+      setPrintFailureReason("");
+      setCameraMessage(response.message);
+      showToast("success", response.message);
+    } catch (error) {
+      showToast("error", getApiMessage(error, "Không thể xác nhận kết quả in. Vui lòng thử lại."));
+    } finally {
+      setConfirmingPrint(false);
     }
   };
 
@@ -733,13 +769,13 @@ const TicketScannerPage = () => {
 
           {!bookingPrintResult && !giftResult && <button
             className="btn btn-primary ticket-print-btn"
-            disabled={!ticket || !currentQrToken || processing || lookingUpTicket || checkingIn || printingTicket || ((ticket?.canPrint === false || Boolean(ticket?.printedAt)) && preparedTicketId !== String(ticket?.id || ticket?._id || ""))}
-            title={preparedTicketId === String(ticket?.id || ticket?._id || "") ? "Mở lại bản in vừa chuẩn bị" : ticket?.printedAt ? "Vé này đã được in và không thể in lại." : "In vé điện tử"}
+            disabled={!ticket || !currentQrToken || processing || lookingUpTicket || checkingIn || printingTicket || pendingPrint || Boolean(ticket?.printedAt)}
+            title={ticket?.printedAt ? "Vé này đã được in và không thể in lại." : "In vé điện tử"}
             onClick={handlePrintTicket}
             type="button"
           >
             <HiOutlinePrinter />
-            {printingTicket ? "Đang chuẩn bị..." : preparedTicketId === String(ticket?.id || ticket?._id || "") ? "In vé" : ticket?.printedAt ? "Đã in" : "In vé"}
+            {printingTicket ? "Đang chuẩn bị..." : ticket?.printedAt ? "Đã in" : "In vé"}
           </button>}
 
           {bookingPrintResult && <button
@@ -748,6 +784,7 @@ const TicketScannerPage = () => {
               !bookingPrintResult.success
               || processing
               || printingBookingOrder
+              || pendingPrint
               || bookingPrintResult.action === "printed"
               || (bookingPrintResult.data?.tickets?.length || 0) === 0
             }
@@ -758,6 +795,12 @@ const TicketScannerPage = () => {
             <HiOutlinePrinter />
             {printingBookingOrder ? "Đang chuẩn bị..." : bookingPrintResult.action === "printed" ? "Đã in" : "In đơn vé"}
           </button>}
+
+          {waitingForPrintDialog && (
+            <button className="btn btn-secondary" onClick={handlePrintDialogClosedManually} type="button">
+              Đã đóng hộp thoại in? Tiếp tục xác nhận
+            </button>
+          )}
 
           {!bookingPrintResult && !giftResult && <button
             className="btn btn-success ticket-checkin-btn"
@@ -783,12 +826,27 @@ const TicketScannerPage = () => {
             </div>
           )}
 
-          <button className="btn btn-secondary" disabled={processing || checkingIn} onClick={handleScanNext} type="button">
+          <button className="btn btn-secondary" disabled={processing || checkingIn || pendingPrint} onClick={handleScanNext} type="button">
             <HiOutlineRefresh />
             Quét vé tiếp theo
           </button>
         </section>
       </div>
+      {pendingPrint && (
+        <div className="ticket-print-confirm-backdrop">
+          <section aria-describedby="ticket-print-confirm-description" aria-labelledby="ticket-print-confirm-title" aria-modal="true" className="ticket-print-confirm-dialog" role="dialog">
+            <HiOutlinePrinter aria-hidden="true" className="ticket-print-confirm-icon" />
+            <h2 id="ticket-print-confirm-title">Đã in vé thành công?</h2>
+            <p id="ticket-print-confirm-description">Hãy kiểm tra {pendingPrint.count} vé đã ra khỏi máy in và khách hàng đã nhận được vé. Chỉ xác nhận thành công khi vé rõ, đủ thông tin và mã QR đọc được.</p>
+            <label htmlFor="ticket-print-failure-reason">Nếu in lỗi hoặc khách chưa nhận vé, nhập lý do để được in lại</label>
+            <textarea id="ticket-print-failure-reason" onChange={(event) => setPrintFailureReason(event.target.value)} placeholder="Ví dụ: Kẹt giấy, bản in mờ, khách chưa nhận vé" rows={3} value={printFailureReason} />
+            <div className="ticket-print-confirm-actions">
+              <button className="btn btn-secondary" disabled={confirmingPrint || printFailureReason.trim().length < 3} onClick={() => handleConfirmPrint(false)} type="button">In thất bại · cho phép in lại</button>
+              <button className="btn btn-primary" disabled={confirmingPrint} onClick={() => handleConfirmPrint(true)} type="button">{confirmingPrint ? "Đang xác nhận..." : "In thành công · khóa in"}</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import express from "express";
 import {
   checkInAdminTicketQr,
+  confirmAdminTicketPrint,
   getAdminTicketScanLogs,
   lookupAdminTicketCode,
   printAdminTicketQr,
@@ -23,6 +24,7 @@ router.get("/scan-logs", getAdminTicketScanLogs);
 router.post("/lookup", qrActionRateLimit, lookupAdminTicketCode);
 router.post("/verify", qrActionRateLimit, verifyAdminTicketQr);
 router.post("/print", qrActionRateLimit, printAdminTicketQr);
+router.post("/print/confirm", qrActionRateLimit, confirmAdminTicketPrint);
 router.post("/check-in", qrActionRateLimit, checkInAdminTicketQr);
 
 export default router;

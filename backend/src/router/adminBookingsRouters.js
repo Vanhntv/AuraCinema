@@ -7,6 +7,7 @@ import {
 } from "../controllers/adminBookingsControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
 import {
+  confirmBookingOrderPrint,
   lookupAdminBookingOrder,
   lookupAdminBookingOrderPrint,
   reprintBookingTickets,
@@ -21,6 +22,7 @@ router.get("/", getAdminBookings);
 router.post("/lookup", lookupAdminBookingOrder);
 router.post("/lookup-print", lookupAdminBookingOrderPrint);
 router.post("/scan-print", scanPrintBookingOrder);
+router.post("/print-confirm", confirmBookingOrderPrint);
 router.post("/:id/reprint", reprintBookingTickets);
 router.get("/:id", getAdminBookingById);
 router.patch("/:id/payment", updateAdminBookingPayment);

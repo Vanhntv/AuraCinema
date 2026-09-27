@@ -44,6 +44,7 @@ export const formatBookingOrderTicket = (ticketValue) => {
     price: Number(ticket.price || 0),
     status: ticket.status,
     printedAt: ticket.printedAt || null,
+    printPendingAt: ticket.printPendingAt || null,
     checkedInAt: ticket.checkedInAt || null,
     createdAt: ticket.createdAt || null,
   };

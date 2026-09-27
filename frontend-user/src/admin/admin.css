@@ -5376,65 +5376,6 @@ html.dark .admin-layout .showtime-conflict-range strong {
   font-size: 15px;
 }
 
-.booking-ticket-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.booking-ticket-item {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: #f8fafc;
-  padding: 12px 14px;
-  cursor: pointer;
-}
-
-.booking-ticket-item.selected {
-  border-color: var(--color-accent);
-  background: rgba(99, 102, 241, 0.1);
-}
-
-.booking-ticket-item.disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
-.booking-ticket-item input {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  accent-color: var(--color-accent);
-}
-
-.booking-ticket-copy {
-  min-width: 0;
-}
-
-.booking-ticket-copy strong,
-.booking-ticket-copy small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.booking-ticket-copy strong {
-  color: var(--color-text-primary);
-  font-size: 14px;
-}
-
-.booking-ticket-copy small {
-  margin-top: 4px;
-  color: var(--color-text-secondary);
-  font-size: 12px;
-}
-
 .booking-admin-actions-panel {
   display: grid;
   gap: 20px;
@@ -5500,9 +5441,6 @@ html.dark .admin-layout .showtime-conflict-range strong {
     padding-left: 16px;
   }
 
-  .booking-ticket-list {
-    grid-template-columns: 1fr;
-  }
 }
 
 .showtime-group-table th:nth-child(1) {
@@ -7456,6 +7394,42 @@ html.dark .admin-layout .showtime-conflict-range strong {
   min-width: 150px;
   justify-content: center;
 }
+
+.ticket-print-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(9 15 30 / 72%);
+}
+
+.ticket-print-confirm-dialog {
+  width: min(100%, 520px);
+  padding: 28px;
+  border: 1px solid #dce3ef;
+  border-radius: 18px;
+  background: #fff;
+  color: #172033;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 24%);
+}
+
+.ticket-print-confirm-icon { font-size: 28px; color: var(--color-primary, #2563eb); }
+.ticket-print-confirm-dialog h2 { margin: 12px 0 8px; color: #172033; font-size: 24px; }
+.ticket-print-confirm-dialog p { margin: 0 0 20px; line-height: 1.55; }
+.ticket-print-confirm-dialog label { display: block; margin-bottom: 8px; font-weight: 600; }
+.ticket-print-confirm-dialog textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  resize: vertical;
+}
+.ticket-print-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 
 .ticket-checkin-btn {
   min-width: 150px;

@@ -138,7 +138,6 @@ export const getStaffTransactionById = async (req, res) => {
       .populate("sold_by", "full_name email")
       .lean();
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy giao dịch." });
-    await createBookingActionLogSafe({ bookingId: booking._id, adminId: req.user.id, action: "LOOKUP", result: "SUCCESS", reason: "Nhân viên tra cứu lịch sử giao dịch" });
     const [payments, tickets, actionLogs] = await Promise.all([
       Payment.find({ booking_id: booking._id }).select("-raw_request_data -raw_return_data -payment_url").sort({ created_at: -1 }).lean(),
       Ticket.find({ bookingId: booking._id }).select("-qrTokenHash -qrTokenEncrypted").sort({ seatLabel: 1 }).lean(),

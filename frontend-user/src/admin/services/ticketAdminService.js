@@ -26,3 +26,8 @@ export const claimTicketPrint = async (qrToken) => {
   const response = await axiosClient.post(`${API_URL}/print`, { qrToken });
   return response.data;
 };
+
+export const confirmTicketPrint = async (qrToken, printClaimId, success, reason = "") => {
+  const response = await axiosClient.post(`${API_URL}/print/confirm`, { qrToken, printClaimId, success, reason });
+  return response.data;
+};

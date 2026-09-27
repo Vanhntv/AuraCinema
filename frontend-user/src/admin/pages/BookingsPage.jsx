@@ -4,7 +4,6 @@ import {
   HiOutlineChevronRight,
   HiOutlineEye,
   HiOutlineRefresh,
-  HiOutlinePrinter,
   HiOutlineSearch,
   HiOutlineTicket,
   HiOutlineXCircle,
@@ -14,7 +13,6 @@ import {
   getAdminBookingById,
   getAdminBookings,
   updateAdminBookingPayment,
-  reprintBookingTickets,
 } from "../services/bookingAdminService";
 
 const PAGE_SIZE = 10;
@@ -121,9 +119,6 @@ const BookingsPage = () => {
   const [paymentForm, setPaymentForm] = useState({ payment_status: "pending", payment_transaction_id: "" });
   const [cancelReason, setCancelReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [reprinting, setReprinting] = useState(false);
-  const [reprintReason, setReprintReason] = useState("");
-  const [reprintTicketIds, setReprintTicketIds] = useState([]);
 
   const fetchBookings = useCallback(async (page = 1) => {
     try {
@@ -176,8 +171,6 @@ const BookingsPage = () => {
         payment_transaction_id: response.data?.payment_transaction_id || "",
       });
       setCancelReason("");
-      setReprintReason("");
-      setReprintTicketIds([]);
     } catch (error) {
       setFeedback({ type: "error", message: error.response?.data?.message || "Không thể tải chi tiết đơn vé." });
     } finally {
@@ -188,8 +181,6 @@ const BookingsPage = () => {
   const closeDetail = () => {
     setSelectedBooking(null);
     setCancelReason("");
-    setReprintReason("");
-    setReprintTicketIds([]);
   };
 
   const handlePageLookup = (event) => {
@@ -244,25 +235,6 @@ const BookingsPage = () => {
       setFeedback({ type: "error", message: error.response?.data?.message || "Không thể hủy đơn vé." });
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleReprintTickets = async () => {
-    if (!selectedBooking || !reprintTicketIds.length || reprintReason.trim().length < 3) return;
-    try {
-      setReprinting(true);
-      const response = await reprintBookingTickets(selectedBooking._id, reprintTicketIds, reprintReason);
-      const { printBookingOrder } = await import("../../utils/bookingOrderPrint");
-      await printBookingOrder(response.data);
-      const refreshed = await getAdminBookingById(selectedBooking._id);
-      setSelectedBooking(refreshed.data);
-      setReprintTicketIds([]);
-      setReprintReason("");
-      setFeedback({ type: "success", message: "Đã mở bản in lại và ghi lịch sử thao tác." });
-    } catch (error) {
-      setFeedback({ type: "error", message: error.response?.data?.message || error.message || "Không thể in lại vé." });
-    } finally {
-      setReprinting(false);
     }
   };
 
@@ -452,13 +424,7 @@ const BookingsPage = () => {
           onPaymentChange={setPaymentForm}
           onReasonChange={setCancelReason}
           onUpdatePayment={handleUpdatePayment}
-          onReprint={handleReprintTickets}
-          onReprintReasonChange={setReprintReason}
-          onReprintSelectionChange={setReprintTicketIds}
           paymentForm={paymentForm}
-          reprintReason={reprintReason}
-          reprintTicketIds={reprintTicketIds}
-          reprinting={reprinting}
           submitting={submitting}
         />
       )}
@@ -487,13 +453,7 @@ const BookingDetailModal = ({
   onPaymentChange,
   onReasonChange,
   onUpdatePayment,
-  onReprint,
-  onReprintReasonChange,
-  onReprintSelectionChange,
   paymentForm,
-  reprintReason,
-  reprintTicketIds,
-  reprinting,
   submitting,
 }) => (
   <div className="modal-overlay active" onClick={onClose}>
@@ -525,62 +485,6 @@ const BookingDetailModal = ({
           </div>
 
           <div className="booking-admin-actions-panel">
-            {Number(booking.ticketing_version) === 2 && (
-              <div>
-                <h3>Vé trong đơn và in lại</h3>
-                <p className="booking-admin-note">Chỉ vé còn hiệu lực mới được in lại. Lý do là bắt buộc và được lưu trong lịch sử đơn.</p>
-                <div className="booking-ticket-list">
-                  {(booking.tickets || []).map((ticket) => {
-                    const selectable = ticket.status === "VALID";
-                    const selected = reprintTicketIds.includes(String(ticket.id));
-                    return (
-                      <label className={`booking-ticket-item${selected ? " selected" : ""}${selectable ? "" : " disabled"}`} key={ticket.id}>
-                        <input
-                          type="checkbox"
-                          disabled={!selectable || reprinting}
-                          checked={selected}
-                          onChange={(event) => onReprintSelectionChange((current) => event.target.checked
-                            ? [...current, String(ticket.id)]
-                            : current.filter((id) => id !== String(ticket.id)))}
-                        />
-                        <span className="booking-ticket-copy">
-                          <strong>{ticket.seatLabel} · {ticket.seatType || "Loại ghế chưa cập nhật"}</strong>
-                          <small>{ticket.ticketCode} · {ticket.status}{ticket.printedAt ? " · Đã in" : " · Chưa in"}</small>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="booking-action-row">
-                  <input
-                    className="form-input"
-                    minLength="3"
-                    onChange={(event) => onReprintReasonChange(event.target.value)}
-                    placeholder="Lý do in lại (bắt buộc)"
-                    value={reprintReason}
-                  />
-                  <button
-                    className="btn btn-primary"
-                    disabled={reprinting || !reprintTicketIds.length || reprintReason.trim().length < 3}
-                    onClick={onReprint}
-                    type="button"
-                  >
-                    <HiOutlinePrinter />
-                    {reprinting ? "Đang chuẩn bị..." : "In lại vé đã chọn"}
-                  </button>
-                </div>
-                {(booking.action_logs || []).length > 0 && (
-                  <div style={{ marginTop: "16px" }}>
-                    <h3>Lịch sử in đơn</h3>
-                    {(booking.action_logs || []).map((log) => (
-                      <p className="booking-admin-note" key={log._id}>
-                        {formatDateTime(log.createdAt)} · {log.action} · {log.result}{log.reason ? ` · ${log.reason}` : ""}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             <div>
               <h3>Cập nhật thanh toán</h3>
               <div className="booking-action-row">

@@ -103,6 +103,15 @@ const ticketSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    printPendingAt: {
+      type: Date,
+      default: null,
+    },
+    printPendingBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     printClaimId: {
       type: String,
       default: "",

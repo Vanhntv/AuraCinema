@@ -151,20 +151,65 @@ const getSafeTicketCode = (ticket) => String(ticket?.ticketCode || "ve-aura-cine
   .trim()
   .replace(/[^a-zA-Z0-9_-]+/g, "-");
 
+let activePrintDialogFinish = null;
+
+export const finishPendingPrintDialog = () => activePrintDialogFinish?.();
+
 const printPdfInCurrentPage = (pdfDocument) => new Promise((resolve, reject) => {
   pdfDocument.getBlob((blob) => {
     const pdfUrl = URL.createObjectURL(blob);
     const iframe = document.createElement("iframe");
     let cleanupTimer;
+    let focusCheckTimer;
+    let focusReturnTimer;
     let cleanedUp = false;
+    let printFinished = false;
+    let printStarted = false;
+    let printDialogLostFocus = false;
+
+    const onBlur = () => {
+      if (!printStarted) return;
+      printDialogLostFocus = true;
+      window.clearTimeout(focusReturnTimer);
+      focusReturnTimer = null;
+    };
+    const onFocus = () => {
+      if (!printDialogLostFocus || focusReturnTimer) return;
+      focusReturnTimer = window.setTimeout(() => {
+        focusReturnTimer = null;
+        if (document.hasFocus() && document.visibilityState !== "hidden") finishPrint();
+      }, 250);
+    };
+    const checkFocus = () => {
+      if (!printStarted) return;
+      if (!document.hasFocus() || document.visibilityState === "hidden") {
+        printDialogLostFocus = true;
+      } else if (printDialogLostFocus) {
+        onFocus();
+      }
+    };
+
+    const finishPrint = () => {
+      if (printFinished) return;
+      printFinished = true;
+      cleanup();
+      resolve();
+    };
 
     const cleanup = () => {
       if (cleanedUp) return;
       cleanedUp = true;
       window.clearTimeout(cleanupTimer);
-      window.removeEventListener("afterprint", cleanup);
+      window.clearInterval(focusCheckTimer);
+      window.clearTimeout(focusReturnTimer);
+      window.removeEventListener("afterprint", finishPrint);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", checkFocus);
+      iframe.contentWindow?.removeEventListener("afterprint", finishPrint);
       iframe.remove();
       URL.revokeObjectURL(pdfUrl);
+      if (activePrintDialogFinish === finishPrint) activePrintDialogFinish = null;
       window.focus();
     };
 
@@ -187,11 +232,24 @@ const printPdfInCurrentPage = (pdfDocument) => new Promise((resolve, reject) => 
           const printWindow = iframe.contentWindow;
           if (!printWindow) throw new Error("Không thể mở hộp thoại in vé.");
 
-          window.addEventListener("afterprint", cleanup, { once: true });
-          cleanupTimer = window.setTimeout(cleanup, 10 * 60 * 1000);
+          window.addEventListener("afterprint", finishPrint, { once: true });
+          printWindow.addEventListener("afterprint", finishPrint, { once: true });
+          cleanupTimer = window.setTimeout(() => {
+            cleanup();
+            reject(new Error("Không nhận được tín hiệu đóng hộp thoại in. Hãy thử in lại."));
+          }, 10 * 60 * 1000);
           printWindow.focus();
+          window.addEventListener("blur", onBlur);
+          window.addEventListener("focus", onFocus);
+          document.addEventListener("visibilitychange", checkFocus);
+          activePrintDialogFinish = finishPrint;
+          printStarted = true;
+          const startedAt = Date.now();
           printWindow.print();
-          resolve();
+          if (printFinished) return;
+          // Some browsers block here until the dialog closes; Chrome's PDF viewer may return early.
+          if (Date.now() - startedAt > 1000 && document.hasFocus()) finishPrint();
+          else focusCheckTimer = window.setInterval(checkFocus, 250);
         } catch (error) {
           cleanup();
           reject(error);

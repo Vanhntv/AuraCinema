@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import { randomUUID } from "node:crypto";
+import { createBookingActionLogSafe } from "../models/BookingActionLog.js";
 import Ticket from "../models/Ticket.js";
 import { scanHistoryGrouping } from "../modules/tickets/scanHistoryGrouping.js";
 import { BOOKING_SCAN_ACTIONS, bookingScanHistoryUnion } from "../modules/tickets/bookingScanHistory.js";
@@ -343,7 +345,8 @@ export const formatTicketForAdmin = (ticket, verification = {}) => {
     checkedInBy: ticket.checkedInBy || null,
     printedAt: ticket.printedAt || null,
     printedBy: ticket.printedBy || null,
-    canPrint: !ticket.printedAt,
+    printPendingAt: ticket.printPendingAt || null,
+    canPrint: !ticket.printedAt && !ticket.printPendingAt,
     booking: booking?._id
       ? {
         id: booking._id,
@@ -409,7 +412,7 @@ const getTicketByQrToken = async (token) => {
   return populateTicketForAdmin(
     Ticket.findOne({
       qrTokenHash: hashQrToken(token),
-    }),
+    }).select("+printClaimId"),
   );
 };
 
@@ -421,20 +424,23 @@ const getTicketByCode = async (ticketCode) =>
     { includeQrToken: true },
   );
 
-export const claimTicketPrintOnce = ({ qrToken, adminId, now = new Date() }) =>
+export const claimTicketPrintOnce = ({ qrToken, adminId, now = new Date(), claimId = randomUUID() }) =>
   Ticket.findOneAndUpdate(
     {
       qrTokenHash: hashQrToken(qrToken),
+      status: "VALID",
       printedAt: null,
+      printPendingAt: null,
     },
     {
       $set: {
-        printedAt: now,
-        printedBy: adminId,
+        printPendingAt: now,
+        printPendingBy: adminId,
+        printClaimId: claimId,
       },
     },
     { new: true },
-  );
+  ).select("+printClaimId");
 
 const getCheckInWindow = (showtime, movie) => {
   const startTime = showtime?.start_time ? new Date(showtime.start_time) : null;
@@ -668,12 +674,12 @@ export const printAdminTicketQr = async (req, res) => {
   }
 
   try {
-    const printedTicket = await claimTicketPrintOnce({
+    let claimedTicket = await claimTicketPrintOnce({
       qrToken,
       adminId: req.user.id,
     });
 
-    if (!printedTicket) {
+    if (!claimedTicket) {
       const existingTicket = await getTicketByQrToken(qrToken);
       if (!existingTicket) {
         return res.status(404).json({
@@ -682,7 +688,12 @@ export const printAdminTicketQr = async (req, res) => {
         });
       }
 
-      const printedTime = existingTicket.printedAt
+      if (existingTicket.printPendingAt && String(existingTicket.printPendingBy) === String(req.user.id)) {
+        claimedTicket = existingTicket;
+      } else if (existingTicket.printPendingAt) {
+        return res.status(409).json({ success: false, message: "Vé đang chờ nhân viên khác xác nhận kết quả in.", data: formatTicketForAdmin(existingTicket) });
+      } else {
+        const printedTime = existingTicket.printedAt
         ? new Date(existingTicket.printedAt).toLocaleString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",
@@ -692,17 +703,19 @@ export const printAdminTicketQr = async (req, res) => {
         })
         : "trước đó";
 
-      return res.status(409).json({
-        success: false,
-        message: `Vé này đã được in lúc ${printedTime} và không thể in lại.`,
-        data: formatTicketForAdmin(existingTicket),
-      });
+        return res.status(409).json({
+          success: false,
+          message: `Vé này đã được in lúc ${printedTime} và không thể in lại.`,
+          data: formatTicketForAdmin(existingTicket),
+        });
+      }
     }
 
-    const populatedTicket = await populateTicketForAdmin(Ticket.findById(printedTicket._id));
+    const populatedTicket = await populateTicketForAdmin(Ticket.findById(claimedTicket._id));
     return res.json({
       success: true,
-      message: "Đã ghi nhận lượt in vé.",
+      message: "Đã chuẩn bị vé. Hãy xác nhận kết quả sau khi đóng hộp thoại in.",
+      printClaimId: claimedTicket.printClaimId,
       data: formatTicketForAdmin(populatedTicket),
     });
   } catch (error) {
@@ -710,6 +723,36 @@ export const printAdminTicketQr = async (req, res) => {
       success: false,
       message: "Không thể ghi nhận lượt in vé.",
     });
+  }
+};
+
+export const confirmAdminTicketPrint = async (req, res) => {
+  const qrToken = parseTicketQrPayload(req.body?.qrToken);
+  const claimId = String(req.body?.printClaimId || "").trim();
+  const success = req.body?.success;
+  const reason = String(req.body?.reason || "").trim();
+  if (!qrToken || !claimId || typeof success !== "boolean" || (!success && reason.length < 3)) {
+    return res.status(400).json({ success: false, message: "Vui lòng xác nhận kết quả in và nhập lý do nếu in lỗi." });
+  }
+  try {
+    const now = new Date();
+    const ticket = await Ticket.findOneAndUpdate(
+      { qrTokenHash: hashQrToken(qrToken), printClaimId: claimId, printPendingBy: req.user.id, printPendingAt: { $ne: null }, printedAt: null },
+      success
+        ? { $set: { printedAt: now, printedBy: req.user.id, printPendingAt: null, printPendingBy: null } }
+        : { $set: { printPendingAt: null, printPendingBy: null, printClaimId: "" } },
+      { new: true },
+    );
+    if (!ticket) return res.status(409).json({ success: false, message: "Lượt in không còn chờ xác nhận. Hãy quét lại vé." });
+    await createBookingActionLogSafe({
+      bookingId: ticket.bookingId, ticketIds: [ticket._id], adminId: req.user.id,
+      action: "PRINT_INITIAL", result: success ? "SUCCESS" : "ERROR", reason: success ? "" : reason,
+      metadata: { printClaimId: claimId, confirmedAt: now },
+    });
+    const populatedTicket = await populateTicketForAdmin(Ticket.findById(ticket._id));
+    return res.json({ success: true, message: success ? "Đã xác nhận in thành công. Vé không thể in tiếp." : "Đã ghi nhận in lỗi. Có thể in lại vé.", data: formatTicketForAdmin(populatedTicket) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Không thể xác nhận kết quả in vé." });
   }
 };
 
