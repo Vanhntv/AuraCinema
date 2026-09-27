@@ -99,16 +99,29 @@ const getVietnamDateRange = (date) => {
 const getVietnamDay = (date = new Date()) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 
 export const lookupStaffBookingOrder = async (req, res) => {
+  const bookingCode = String(req.body?.bookingCode || "").trim().toUpperCase();
   const token = parseBookingQrPayload(req.body?.qrToken);
-  if (!token) return res.status(400).json({ success: false, message: "QR đơn vé không hợp lệ." });
+  if (!token && !/^AURA\d{12}$/.test(bookingCode)) {
+    return res.status(400).json({
+      success: false,
+      message: bookingCode ? "Mã đơn vé không hợp lệ." : "QR đơn vé không hợp lệ.",
+    });
+  }
 
   try {
-    const booking = await Booking.findOne({
-      ticketing_version: 2,
-      "order_qr.token_hash": hashQrToken(token),
-    }).select("booking_code status payment_status movie_snapshot showtime_snapshot seat_items combos").lean();
+    const bookingFilter = token
+      ? { ticketing_version: 2, "order_qr.token_hash": hashQrToken(token) }
+      : { booking_code: bookingCode };
+    const booking = await Booking.findOne(bookingFilter)
+      .select("booking_code status payment_status movie_snapshot showtime_snapshot seat_items combos")
+      .lean();
 
-    if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn vé từ mã QR." });
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: token ? "Không tìm thấy đơn vé từ mã QR." : "Không tìm thấy đơn vé với mã đã nhập.",
+      });
+    }
     if (booking.status !== "confirmed" || booking.payment_status !== "paid") {
       return res.status(409).json({ success: false, message: "Đơn vé chưa thanh toán hoặc đã bị hủy." });
     }

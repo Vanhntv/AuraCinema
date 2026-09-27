@@ -21,6 +21,7 @@ import {
 import { showToast } from "../../utils/toast";
 import { lookupBookingOrderPrint, scanPrintBookingOrder } from "../services/bookingAdminService";
 import { lookupGiftQr, redeemGiftQr } from "../services/giftStaffService";
+import { isAuraBookingCode, normalizeTicketLookupCode } from "../utils/ticketCodeLookup";
 
 const SCANNER_ELEMENT_ID = "ticket-qr-reader";
 const BOOKING_QR_PREFIX = "AURA_BOOKING_V2:";
@@ -347,8 +348,9 @@ const TicketScannerPage = () => {
 
   const handleTicketCodeLookup = async (event) => {
     event.preventDefault();
-    const ticketCode = ticketCodeQuery.trim().toUpperCase();
+    const ticketCode = normalizeTicketLookupCode(ticketCodeQuery);
     if (!ticketCode || lookingUpTicket) return;
+    const isBookingLookup = isAuraBookingCode(ticketCode);
 
     try {
       setLookingUpTicket(true);
@@ -358,22 +360,36 @@ const TicketScannerPage = () => {
       setCurrentQrToken("");
       await stopScanner();
 
-      const response = await lookupTicketByCode(ticketCode);
-      setTicketCodeQuery(ticketCode);
-      setCurrentQrToken(response.qrPayload || "");
-      setVerifyResult(response);
-      setCameraMessage(response.message || "Đã tìm thấy vé.");
-      showToast("success", response.message || "Đã tìm thấy vé.");
+      if (isBookingLookup) {
+        const response = await lookupBookingOrderPrint({ bookingCode: ticketCode });
+        setTicketCodeQuery(ticketCode);
+        setBookingPrintResult({ ...response, action: "lookup" });
+        setCameraMessage(response.message || "Đã tìm thấy đơn vé.");
+        showToast("success", response.message || "Đã tìm thấy đơn vé.");
+      } else {
+        const response = await lookupTicketByCode(ticketCode);
+        setTicketCodeQuery(ticketCode);
+        setCurrentQrToken(response.qrPayload || "");
+        setVerifyResult(response);
+        setCameraMessage(response.message || "Đã tìm thấy vé.");
+        showToast("success", response.message || "Đã tìm thấy vé.");
+      }
     } catch (error) {
       const response = error?.response?.data || {};
       const message = response.message || "Không thể tra cứu mã vé.";
       setTicketCodeQuery(ticketCode);
       setCurrentQrToken(response.qrPayload || "");
-      setVerifyResult({
+      const errorResult = {
         success: false,
         message,
         data: response.data || null,
-      });
+        ...(isBookingLookup ? { action: "lookup" } : {}),
+      };
+      if (isBookingLookup) {
+        setBookingPrintResult(errorResult);
+      } else {
+        setVerifyResult(errorResult);
+      }
       setCameraMessage(message);
       showToast("error", message);
     } finally {
@@ -594,7 +610,7 @@ const TicketScannerPage = () => {
                 className="form-input"
                 value={ticketCodeQuery}
                 onChange={(event) => setTicketCodeQuery(event.target.value.toUpperCase())}
-                placeholder="Ví dụ: AURA111020904957-E4"
+                placeholder="Ví dụ: AURA802138252429"
                 minLength={6}
                 maxLength={64}
                 autoComplete="off"
