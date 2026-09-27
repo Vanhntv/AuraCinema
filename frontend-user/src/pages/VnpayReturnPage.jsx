@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { verifyVnpayReturn } from "../services/bookingService";
+import {
+  clearActiveProviderPayment,
+  clearPaymentReturnState,
+} from "../utils/paymentNavigation";
 
 function VnpayReturnPage() {
   const location = useLocation();
@@ -18,19 +22,27 @@ function VnpayReturnPage() {
         if (!isActive) return;
 
         if (response.success && bookingId) {
+          clearActiveProviderPayment(bookingId);
+          clearPaymentReturnState(bookingId);
           navigate(`/booking/success/${bookingId}`, { replace: true });
           return;
         }
 
-        navigate("/booking/failed", {
+        clearActiveProviderPayment(bookingId);
+        clearPaymentReturnState(bookingId);
+        navigate("/lich-chieu", {
           replace: true,
-          state: { message: response.message || "Thanh toán VNPay thất bại." },
+          state: { message: response.message || "Giao dịch VNPay đã bị hủy." },
         });
       } catch (error) {
         if (!isActive) return;
 
         const errorMessage = error.response?.data?.message || "Không thể xác minh thanh toán VNPay.";
         setMessage(errorMessage);
+        const responseData = error.response?.data?.data || {};
+        const bookingId = responseData.booking_id || "";
+        clearActiveProviderPayment(bookingId);
+        if (bookingId) clearPaymentReturnState(bookingId);
         navigate("/booking/failed", {
           replace: true,
           state: { message: errorMessage },

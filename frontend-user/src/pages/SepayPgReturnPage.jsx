@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { verifySepayPgReturn } from "../services/bookingService";
 import { SEPAY_CHECKOUT_MESSAGE_TYPE } from "../utils/sepayCheckoutWindow";
+import { clearPaymentReturnState } from "../utils/paymentNavigation";
 
 function SepayPgReturnPage() {
   const location = useLocation();
@@ -51,6 +52,7 @@ function SepayPgReturnPage() {
         if (!isActive) return;
 
         if (response.success && bookingId) {
+          clearPaymentReturnState(bookingId);
           if (notifyCheckoutWindow({
             success: true,
             bookingId,
@@ -70,6 +72,9 @@ function SepayPgReturnPage() {
           paymentStatus,
           resultMessage: response.message || "Thanh toán SePay chưa hoàn tất.",
         })) {
+          if (["expired", "cancelled"].includes(paymentStatus)) {
+            clearPaymentReturnState(bookingId);
+          }
           setMessage(response.message || "Thanh toán chưa hoàn tất. Đang quay lại AuraCinema...");
           return;
         }
@@ -78,6 +83,9 @@ function SepayPgReturnPage() {
           paymentStatus,
           resultMessage: response.message || "Thanh toán SePay chưa hoàn tất.",
         });
+        if (["expired", "cancelled"].includes(paymentStatus)) {
+          clearPaymentReturnState(bookingId);
+        }
       } catch (error) {
         if (!isActive) return;
 

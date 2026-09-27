@@ -15,7 +15,14 @@ import {
   getRemainingSeconds,
   isBookingExpired,
 } from "../utils/bookingExpiry";
-import { buildPaymentClosePath } from "../utils/paymentNavigation";
+import {
+  buildPaymentClosePath,
+  clearActiveProviderPayment,
+  clearPaymentReturnState,
+  readActiveProviderPayment,
+  saveActiveProviderPayment,
+  savePaymentReturnState,
+} from "../utils/paymentNavigation";
 import {
   isTrustedSepayCheckoutMessage,
   openSepayCheckoutWindow,
@@ -167,6 +174,7 @@ function PaymentPage() {
     getRemainingSeconds(summary?.paymentExpiresAt),
   );
   const sepayPopupRef = useRef(null);
+  const sepayPopupCloseHandledRef = useRef(false);
   const expiryHandledRef = useRef(false);
 
   const closeSepayPopup = useCallback(() => {
@@ -177,13 +185,15 @@ function PaymentPage() {
 
   const redirectExpiredBooking = useCallback(() => {
     closeSepayPopup();
+    clearPaymentReturnState(bookingId);
+    clearActiveProviderPayment(bookingId);
     const message = "Đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn.";
     showToast("error", message);
     navigate("/lich-chieu", {
       replace: true,
       state: { message },
     });
-  }, [closeSepayPopup, navigate]);
+  }, [bookingId, closeSepayPopup, navigate]);
 
   const amount = useMemo(
     () => Number(summary?.finalTotal || summary?.total_price || 0),
@@ -255,6 +265,63 @@ function PaymentPage() {
       window.clearInterval(intervalId);
     };
   }, [bookingId]);
+
+  useEffect(() => {
+    if (!summary || String(summary.bookingId || bookingId || "") !== String(bookingId || "")) return;
+    if (paymentStatus !== "pending" || getRemainingSeconds(summary.paymentExpiresAt) <= 0) return;
+    savePaymentReturnState({ ...summary, bookingId, paymentStatus });
+  }, [bookingId, paymentStatus, summary]);
+
+  useEffect(() => {
+    const activePayment = readActiveProviderPayment();
+    if (
+      !bookingId
+      || activePayment?.provider !== "vnpay"
+      || String(activePayment.bookingId || "") !== String(bookingId)
+    ) return undefined;
+
+    let active = true;
+    const resolveVnpayBrowserReturn = async () => {
+      try {
+        const response = await getBookingPaymentStatus(bookingId);
+        const status = response.data?.payment_status || "pending";
+        if (!active) return;
+
+        clearActiveProviderPayment(bookingId);
+        if (status === "paid") {
+          clearPaymentReturnState(bookingId);
+          navigate(`/booking/success/${bookingId}`, { replace: true });
+          return;
+        }
+        if (["review_required", "refund_pending"].includes(status)) {
+          clearPaymentReturnState(bookingId);
+          navigate("/booking/failed", {
+            replace: true,
+            state: { message: "Giao dịch cần được AuraCinema đối soát." },
+          });
+          return;
+        }
+        if (status === "pending") {
+          await cancelBooking(bookingId, { reason: "Khách quay lại từ trang thanh toán VNPay" });
+        }
+        clearPaymentReturnState(bookingId);
+        navigate("/lich-chieu", {
+          replace: true,
+          state: { message: "Giao dịch VNPay đã bị hủy. Ghế đã được mở lại." },
+        });
+      } catch (requestError) {
+        if (!active) return;
+        const message = getApiErrorMessage(requestError, "Không thể xử lý giao dịch VNPay khi quay lại.");
+        setPaymentError(message);
+        showToast("error", message);
+      }
+    };
+
+    void resolveVnpayBrowserReturn();
+    return () => {
+      active = false;
+    };
+  }, [bookingId, navigate]);
 
   useEffect(() => {
     if (!summary?.paymentExpiresAt || bookingIsPaid) {
@@ -333,6 +400,7 @@ function PaymentPage() {
       closeSepayPopup();
       const result = event.data;
       if (result.success) {
+        clearPaymentReturnState(bookingId);
         navigate(`/booking/success/${bookingId}`, { replace: true });
         return;
       }
@@ -346,6 +414,7 @@ function PaymentPage() {
       }
 
       if (["review_required", "refund_pending"].includes(result.paymentStatus)) {
+        clearPaymentReturnState(bookingId);
         showToast("error", message);
         navigate("/booking/failed", {
           replace: true,
@@ -355,6 +424,7 @@ function PaymentPage() {
       }
 
       showToast("error", message);
+      clearPaymentReturnState(bookingId);
       navigate("/lich-chieu", {
         replace: true,
         state: { message },
@@ -367,13 +437,47 @@ function PaymentPage() {
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
-      if (sepayPopupRef.current?.closed) {
+      if (sepayPopupRef.current?.closed && !sepayPopupCloseHandledRef.current) {
         sepayPopupRef.current = null;
-        setIsPaying(false);
+        sepayPopupCloseHandledRef.current = true;
+        const handleClosedCheckout = async () => {
+          try {
+            const response = await getBookingPaymentStatus(bookingId);
+            const status = response.data?.payment_status || "pending";
+            if (status === "paid") {
+              clearPaymentReturnState(bookingId);
+              navigate(`/booking/success/${bookingId}`, { replace: true });
+              return;
+            }
+            if (["review_required", "refund_pending"].includes(status)) {
+              clearPaymentReturnState(bookingId);
+              navigate("/booking/failed", {
+                replace: true,
+                state: { message: "Giao dịch cần được AuraCinema đối soát." },
+              });
+              return;
+            }
+            if (status === "pending") {
+              await cancelBooking(bookingId, { reason: "Khách đóng hoặc quay lại từ trang thanh toán SePay" });
+            }
+            clearPaymentReturnState(bookingId);
+            navigate("/lich-chieu", {
+              replace: true,
+              state: { message: "Giao dịch SePay đã bị hủy. Ghế đã được mở lại." },
+            });
+          } catch (requestError) {
+            const message = getApiErrorMessage(requestError, "Không thể xử lý giao dịch SePay khi đóng cửa sổ.");
+            setPaymentError(message);
+            showToast("error", message);
+            setIsPaying(false);
+            sepayPopupCloseHandledRef.current = false;
+          }
+        };
+        void handleClosedCheckout();
       }
     }, 500);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [bookingId, navigate]);
 
   useEffect(() => () => closeSepayPopup(), [closeSepayPopup]);
 
@@ -411,6 +515,7 @@ function PaymentPage() {
       return;
     }
     sepayPopupRef.current = checkoutWindow.popup;
+    sepayPopupCloseHandledRef.current = false;
 
     try {
       setIsPaying(true);
@@ -422,6 +527,8 @@ function PaymentPage() {
       });
       const checkoutUrl = response.data?.checkoutUrl;
       const fields = response.data?.fields;
+
+      if (!sepayPopupRef.current || sepayPopupRef.current.closed) return;
 
       if (!checkoutUrl || !fields) {
         closeSepayPopup();
@@ -468,6 +575,7 @@ function PaymentPage() {
         return;
       }
 
+      saveActiveProviderPayment({ bookingId, provider: "vnpay" });
       window.location.href = paymentUrl;
     } catch (requestError) {
       const message = getApiErrorMessage(requestError, "Không thể mở thanh toán VNPay.");
@@ -493,6 +601,8 @@ function PaymentPage() {
       setIsCancellingBooking(true);
       setPaymentError("");
       await cancelBooking(bookingId, { reason: "Khách hủy trước khi thanh toán" });
+      clearPaymentReturnState(bookingId);
+      clearActiveProviderPayment(bookingId);
       navigate("/lich-chieu", {
         replace: true,
         state: { message: "Đã hủy đơn thanh toán. Bạn có thể chọn lại ghế." },
@@ -506,27 +616,27 @@ function PaymentPage() {
     }
   };
 
-  const closePayment = async () => {
+  const closePayment = () => {
     if (!bookingId || bookingIsPaid) {
-      navigate(buildPaymentClosePath(summary));
+      navigate(buildPaymentClosePath(summary), { replace: true });
       return;
     }
 
-    try {
-      setIsCancellingBooking(true);
-      setPaymentError("");
-      await cancelBooking(bookingId, { reason: "Khách quay lại trang phim trước khi thanh toán" });
-      navigate(buildPaymentClosePath(summary), {
-        replace: true,
-        state: { message: "Đơn thanh toán đã được hủy. Ghế đã được mở lại." },
-      });
+    const paymentReturnState = savePaymentReturnState({ ...summary, bookingId, paymentStatus });
+    if (!paymentReturnState) {
+      navigate(buildPaymentClosePath(summary), { replace: true });
       return;
-    } catch (requestError) {
-      const message = getApiErrorMessage(requestError, "Không thể hủy đơn thanh toán để quay lại phim.");
-      setPaymentError(message);
-      showToast("error", message);
-      setIsCancellingBooking(false);
     }
+
+    if (location.state?.bookingOrigin) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(buildPaymentClosePath(paymentReturnState), {
+      replace: true,
+      state: { paymentReturnState },
+    });
   };
 
   const selectedPaymentButtonText = selectedPaymentMethod === "sepay" ? "Thanh toán qua SePay" : "Thanh toán qua VNPay";
@@ -655,7 +765,7 @@ function PaymentPage() {
               {isCancellingBooking ? "Đang hủy..." : "Hủy đặt vé"}
             </button>
             <button className="h-11 rounded-[var(--aura-radius-sm)] border border-white/15 bg-white/[0.04] px-4 text-sm font-bold text-white hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-60" type="button" onClick={closePayment} disabled={isCancellingBooking || isPaying}>
-              {isCancellingBooking ? "Đang mở ghế..." : "Quay lại phim"}
+              Quay lại phim
             </button>
           </div>
           <button

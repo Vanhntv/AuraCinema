@@ -25,6 +25,7 @@ import {
   assertBookingPayable,
   expirePendingBooking,
   isBookingPaymentExpired,
+  resolvePaymentExpiry,
 } from "../services/bookingExpiryService.js";
 import { issueBookingOrderQr } from "../services/bookingOrderService.js";
 import { getBookingOrderQrPayload } from "../services/bookingOrderService.js";
@@ -448,6 +449,7 @@ export const createBooking = async (req, res) => {
     const voucherCode = String(req.body.voucher_code || req.body.code || "").trim();
     const userVoucherId = req.body.user_voucher_id;
     const userGiftId = req.body.user_gift_id;
+    const previousBookingId = String(req.body.previous_booking_id || "").trim();
     const requestedCombos = normalizeComboItems(req.body.combos);
     if (userGiftId && (voucherCode || userVoucherId)) {
       return res.status(400).json({ success: false, message: "Mỗi đơn chỉ được dùng quà tặng hoặc voucher." });
@@ -460,6 +462,9 @@ export const createBooking = async (req, res) => {
     }
     if (!holdToken) {
       return res.status(400).json({ success: false, message: "Thiếu phiên giữ ghế hợp lệ" });
+    }
+    if (previousBookingId && !mongoose.Types.ObjectId.isValid(previousBookingId)) {
+      return res.status(400).json({ success: false, message: "Đơn vé trước đó không hợp lệ" });
     }
 
     const createdBooking = await runWithOptionalTransaction(async (session) => {
@@ -484,6 +489,21 @@ export const createBooking = async (req, res) => {
       if (!user) throw Object.assign(new Error("Không tìm thấy tài khoản"), { statusCode: 404 });
       if (!showtime) throw Object.assign(new Error("Không tìm thấy suất chiếu"), { statusCode: 404 });
       if (!hold) throw Object.assign(new Error("Phiên giữ ghế đã hết hạn hoặc không còn hợp lệ"), { statusCode: 410 });
+
+      let paymentExpiresAt = createPaymentExpiry(now);
+      if (previousBookingId) {
+        const previousBooking = await Booking.findOne({
+          _id: previousBookingId,
+          user_id: req.user.id,
+          status: "cancelled",
+          payment_status: "cancelled",
+        }).session(session);
+        const previousDeadline = resolvePaymentExpiry(previousBooking);
+        if (!previousBooking || !previousDeadline || previousDeadline.getTime() <= now.getTime()) {
+          throw Object.assign(new Error("Thời gian thanh toán của đơn vé trước đã hết"), { statusCode: 410 });
+        }
+        paymentExpiresAt = previousDeadline;
+      }
 
       const requestedSeatIds = new Set(showtime_seat_ids.map(String));
       const heldSeatIds = new Set((hold.showtime_seat_ids || []).map(String));
@@ -629,7 +649,7 @@ export const createBooking = async (req, res) => {
             total_price: totalPrice,
             status: "pending",
             payment_status: "pending",
-            payment_expires_at: createPaymentExpiry(now),
+            payment_expires_at: paymentExpiresAt,
             payment_provider: "internal",
           }], { session });
           break;
