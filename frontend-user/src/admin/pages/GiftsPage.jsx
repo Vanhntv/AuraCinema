@@ -693,20 +693,6 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                   <GiftConditionSelect label="Combo chỉ định" compact itemLabel="combo" selectAllLabel="Chọn tất cả combo" options={conditionOptions.combos} value={formData.combo_ids} onChange={(value) => handleChange("combo_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.comboError} error={errors.combo_ids} />
                 </div>
               </div>
-              <div className="segmented-options">
-                <label>
-                  <input type="checkbox" checked={formData.combo_required} onChange={(event) => handleChange("combo_required", event.target.checked)} disabled={isIssuedGift} />
-                  Mua combo
-                </label>
-                <label>
-                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} disabled={isIssuedGift} />
-                  Sinh nhật
-                </label>
-                <label>
-                  <input type="checkbox" checked={formData.new_member} onChange={(event) => handleChange("new_member", event.target.checked)} disabled={isIssuedGift} />
-                  Thành viên mới
-                </label>
-              </div>
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Hạng thành viên</label>
