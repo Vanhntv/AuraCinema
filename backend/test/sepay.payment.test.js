@@ -1,11 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import mongoose from "mongoose";
-import { verifySepayPgReturn } from "../src/controllers/paymentsControllers.js";
+import {
+  receiveSepayPgIpn,
+  verifySepayPgReturn,
+} from "../src/controllers/paymentsControllers.js";
 import Booking from "../src/models/Booking.js";
 import Payment from "../src/models/Payment.js";
 import ShowtimeSeat from "../src/models/ShowtimeSeat.js";
-import { buildSepayPgCheckoutFields } from "../src/services/sepayPgPaymentService.js";
+import {
+  buildSepayPgCheckoutFields,
+  cancelSepayPgOrder,
+} from "../src/services/sepayPgPaymentService.js";
 
 const makeResponse = () => ({
   statusCode: 200,
@@ -89,6 +95,31 @@ test("SePay checkout sends cancel and error returns through backend verification
   });
 });
 
+test("SePay cancellation calls the official order endpoint", async () => {
+  await withEnv({
+    SEPAY_PG_ENV: "sandbox",
+    SEPAY_PG_MERCHANT_ID: "merchant-test",
+    SEPAY_PG_SECRET_KEY: "secret-test",
+  }, async () => {
+    let request;
+    const result = await cancelSepayPgOrder("aura123", {
+      fetchFn: async (url, options) => {
+        request = { url, options };
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ message: "Đã hủy" }),
+        };
+      },
+    });
+
+    assert.equal(request.url, "https://pgapi-sandbox.sepay.vn/v1/order/cancel");
+    assert.deepEqual(JSON.parse(request.options.body), { order_invoice_number: "AURA123" });
+    assert.match(request.options.headers.Authorization, /^Basic /);
+    assert.deepEqual(result, { message: "Đã hủy" });
+  });
+});
+
 test("SePay cancelled return cancels pending booking and releases reserved seats", async () => {
   const bookingId = new mongoose.Types.ObjectId();
   const userId = new mongoose.Types.ObjectId();
@@ -147,5 +178,72 @@ test("SePay cancelled return cancels pending booking and releases reserved seats
     assert.equal(payment.status, "failed");
     assert.equal(String(releasedSeatFilter.reserved_by_booking_id), String(bookingId));
     assert.equal(releasedSeatUpdate.$set.status, "available");
+  });
+});
+
+test("SePay Payment Gateway IPN rejects an invalid secret", async () => {
+  await withEnv({ SEPAY_PG_IPN_SECRET: "correct-secret" }, async () => {
+    const req = {
+      body: {},
+      get: () => "wrong-secret",
+    };
+    const res = makeResponse();
+
+    await receiveSepayPgIpn(req, res);
+
+    assert.equal(res.statusCode, 401);
+    assert.equal(res.body.success, false);
+  });
+});
+
+test("a repeated SePay void IPN never downgrades an already paid booking", async () => {
+  const bookingId = new mongoose.Types.ObjectId();
+  const booking = {
+    _id: bookingId,
+    booking_code: "AURA123456789",
+    status: "confirmed",
+    payment_status: "paid",
+    total_price: 70000,
+    paid_at: new Date("2026-09-27T03:04:00.000Z"),
+  };
+  const payment = {
+    _id: new mongoose.Types.ObjectId(),
+    status: "paid",
+    async save() {
+      return this;
+    },
+  };
+
+  await withEnv({ SEPAY_PG_IPN_SECRET: "ipn-secret" }, async () => {
+    await withPatched([
+      [mongoose, "startSession", async () => makeSession()],
+      [Booking, "findOne", () => ({ select: async () => booking })],
+      [Booking, "findById", () => ({ session: async () => booking })],
+      [Payment, "findOneAndUpdate", async () => payment],
+    ], async () => {
+      const req = {
+        get: (name) => name === "X-Secret-Key" ? "ipn-secret" : "",
+        body: {
+          notification_type: "TRANSACTION_VOID",
+          order: {
+            order_invoice_number: booking.booking_code,
+            order_amount: 70000,
+          },
+          transaction: {
+            transaction_id: "sepay-transaction-1",
+            transaction_status: "VOIDED",
+            transaction_date: "2026-09-27 10:04:00",
+          },
+        },
+      };
+      const res = makeResponse();
+
+      await receiveSepayPgIpn(req, res);
+
+      assert.equal(res.statusCode, 200);
+      assert.equal(res.body.success, true);
+      assert.equal(booking.payment_status, "paid");
+      assert.equal(payment.status, "paid");
+    });
   });
 });

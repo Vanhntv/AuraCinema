@@ -1,11 +1,13 @@
 import { expirePendingBookings } from "./bookingExpiryService.js";
 import { expireSeatHolds } from "./seatHoldService.js";
+import { cancelExpiredSepayPgPayments } from "./expiredPaymentCancellationService.js";
 
 export const startBookingLifecycleWorker = ({
   intervalMs = 30000,
   runImmediately = true,
   expireSeatHoldsTask = expireSeatHolds,
   expirePendingBookingsTask = expirePendingBookings,
+  cancelExpiredProviderPaymentsTask = cancelExpiredSepayPgPayments,
   setIntervalFn = setInterval,
   clearIntervalFn = clearInterval,
   logger = console,
@@ -18,6 +20,7 @@ export const startBookingLifecycleWorker = ({
     try {
       await expireSeatHoldsTask();
       await expirePendingBookingsTask();
+      await cancelExpiredProviderPaymentsTask();
     } catch (error) {
       logger.error("Không thể dọn vòng đời giữ ghế/booking", error);
     } finally {

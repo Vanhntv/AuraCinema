@@ -47,6 +47,44 @@ test("seat holds keep the first selection deadline for exactly five minutes", ()
   );
 });
 
+test("a replacement hold cannot outlive the original payment deadline", async () => {
+  const holdId = new mongoose.Types.ObjectId();
+  const userId = new mongoose.Types.ObjectId();
+  const showtimeId = new mongoose.Types.ObjectId();
+  const seatId = new mongoose.Types.ObjectId();
+  const now = new Date("2026-08-18T00:02:00.000Z");
+  const paymentDeadline = new Date("2026-08-18T00:04:00.000Z");
+
+  await withPatched([
+    [SeatHold, "find", () => ({ limit: async () => [] })],
+    [SeatHold, "findOne", async () => null],
+    [SeatHold, "create", async ([payload]) => [{ ...payload, _id: holdId }]],
+    [SeatHold, "updateOne", async () => ({ modifiedCount: 1 })],
+    [ShowtimeSeat, "find", () => ({
+      populate: async () => [{
+        _id: seatId,
+        status: "available",
+        seat_id: { seat_type_id: { name: "Ghế thường" } },
+      }],
+    })],
+    [ShowtimeSeat, "findOneAndUpdate", async () => ({
+      _id: seatId,
+      status: "available",
+      hold_id: null,
+    })],
+  ], async () => {
+    const result = await acquireSeatHold({
+      userId,
+      showtimeId,
+      seatIds: [seatId],
+      now,
+      expiresAtLimit: paymentDeadline,
+    });
+
+    assert.equal(result.expires_at.toISOString(), paymentDeadline.toISOString());
+  });
+});
+
 test("pending bookings have exactly five minutes to complete payment", () => {
   const now = new Date("2026-08-18T00:00:00.000Z");
 
@@ -334,6 +372,9 @@ test("the lifecycle worker sweeps holds and bookings without overlapping runs", 
     expirePendingBookingsTask: async () => {
       calls.push("bookings");
     },
+    cancelExpiredProviderPaymentsTask: async () => {
+      calls.push("provider-cancellations");
+    },
     setIntervalFn(callback, intervalMs) {
       assert.equal(intervalMs, 30000);
       scheduledRun = callback;
@@ -347,6 +388,6 @@ test("the lifecycle worker sweeps holds and bookings without overlapping runs", 
   assert.deepEqual(calls, ["holds"]);
   releaseFirstRun();
   await Promise.all([firstRun, overlappingRun]);
-  assert.deepEqual(calls, ["holds", "bookings"]);
+  assert.deepEqual(calls, ["holds", "bookings", "provider-cancellations"]);
   stop();
 });

@@ -17,6 +17,15 @@ const normalizeNumber = (value) => {
 
 const normalizePaymentCode = (value) => String(value || "").trim().toUpperCase();
 
+const parseSepayTransactionDate = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)
+    ? raw
+    : `${raw.replace(" ", "T")}+07:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const buildSepaySignature = ({ timestamp, rawBody, secret }) => {
   const digest = crypto
     .createHmac("sha256", secret)
@@ -124,6 +133,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
   const paymentCode = normalizePaymentCode(payload.code);
   const transferType = String(payload.transferType || "").trim();
   const transferAmount = normalizeNumber(payload.transferAmount);
+  const paidAt = parseSepayTransactionDate(payload.transactionDate || payload.transaction_date) || new Date();
 
   if (transferType !== "in") {
     await markSepayTransactionStatus({
@@ -168,7 +178,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
     }
 
     const transactionId = String(payload.referenceCode || payload.id || transactionKey);
-    if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
+    if (booking.payment_status === "expired" || isBookingPaymentExpired(booking, paidAt)) {
       const expiryResult = await expirePendingBooking({ booking, session });
       const expiredBooking = expiryResult.booking || booking;
       const payment = await Payment.findOneAndUpdate(
@@ -197,6 +207,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
         payment,
         provider: "sepay",
         transactionId,
+        now: paidAt,
         session,
       });
       await markSepayTransactionStatus({
@@ -213,6 +224,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
       booking,
       provider: "sepay",
       transactionId,
+      paidAt,
       session,
     });
 
@@ -232,7 +244,7 @@ export const processSepayPayment = async ({ payload, transactionKey }) => {
           transaction_status: "00",
           order_info: String(payload.content || ""),
           raw_return_data: payload,
-          paid_at: paidBooking.paid_at || new Date(),
+          paid_at: paidBooking.paid_at || paidAt,
         },
       },
       { upsert: true, returnDocument: "after", session },

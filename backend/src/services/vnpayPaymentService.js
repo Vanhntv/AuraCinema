@@ -54,7 +54,22 @@ export const signVnpayParams = ({ params, hashSecret }) => {
   return { sortedParams, secureHash: signed };
 };
 
-export const buildVnpayPaymentUrl = ({ bookingId, amount, ipAddr, frontendUrl }) => {
+export const parseVnpayDate = (value) => {
+  const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(String(value || ""));
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second] = match.map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day, hour - 7, minute, second));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+export const buildVnpayPaymentUrl = ({
+  bookingId,
+  amount,
+  ipAddr,
+  frontendUrl,
+  expiresAt,
+  now = new Date(),
+}) => {
   process.env.TZ = "Asia/Ho_Chi_Minh";
 
   const { tmnCode, hashSecret, vnpUrl } = getVnpayConfig();
@@ -69,7 +84,12 @@ export const buildVnpayPaymentUrl = ({ bookingId, amount, ipAddr, frontendUrl })
     throw Object.assign(new Error("Số tiền thanh toán không hợp lệ"), { statusCode: 400 });
   }
 
-  const createDate = moment(new Date()).format("YYYYMMDDHHmmss");
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime()) || expiry <= now) {
+    throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
+  }
+
+  const createDate = moment(now).format("YYYYMMDDHHmmss");
   const vnpParams = {
     vnp_Version: "2.1.0",
     vnp_Command: "pay",
@@ -82,6 +102,8 @@ export const buildVnpayPaymentUrl = ({ bookingId, amount, ipAddr, frontendUrl })
     vnp_ReturnUrl: returnUrl,
     vnp_IpAddr: ipAddr,
     vnp_CreateDate: createDate,
+    // VNPay receives the exact immutable booking deadline. Do not extend it per checkout attempt.
+    vnp_ExpireDate: moment(expiry).format("YYYYMMDDHHmmss"),
     vnp_Locale: "vn",
   };
 
