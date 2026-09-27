@@ -334,6 +334,9 @@ test("the lifecycle worker sweeps holds and bookings without overlapping runs", 
     expirePendingBookingsTask: async () => {
       calls.push("bookings");
     },
+    cancelExpiredProviderPaymentsTask: async () => {
+      calls.push("provider-cancellations");
+    },
     setIntervalFn(callback, intervalMs) {
       assert.equal(intervalMs, 30000);
       scheduledRun = callback;
@@ -347,6 +350,6 @@ test("the lifecycle worker sweeps holds and bookings without overlapping runs", 
   assert.deepEqual(calls, ["holds"]);
   releaseFirstRun();
   await Promise.all([firstRun, overlappingRun]);
-  assert.deepEqual(calls, ["holds", "bookings"]);
+  assert.deepEqual(calls, ["holds", "bookings", "provider-cancellations"]);
   stop();
 });

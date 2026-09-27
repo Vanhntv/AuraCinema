@@ -159,10 +159,14 @@ export const markBookingAsPaid = async ({
   booking,
   provider = "internal",
   transactionId = "",
+  paidAt = new Date(),
   session = null,
 }) => {
   requireTransaction(session);
-  if (booking.payment_status === "expired" || isBookingPaymentExpired(booking)) {
+  const trustedPaidAt = paidAt instanceof Date && !Number.isNaN(paidAt.getTime())
+    ? paidAt
+    : new Date();
+  if (booking.payment_status === "expired" || isBookingPaymentExpired(booking, trustedPaidAt)) {
     throw Object.assign(new Error("Đơn vé đã hết thời gian thanh toán"), { statusCode: 410 });
   }
 
@@ -267,7 +271,7 @@ export const markBookingAsPaid = async ({
   booking.payment_status = "paid";
   booking.payment_provider = provider || "internal";
   booking.payment_transaction_id = transactionId;
-  booking.paid_at = new Date();
+  booking.paid_at = trustedPaidAt;
   await creditRewardPointsForBooking({ booking, session });
   if (booking.gift?.user_gift_id) await consumeGiftForBooking({ bookingId: booking._id, session });
   await booking.save({ session });
