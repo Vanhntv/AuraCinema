@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { timingSafeEqual } from "node:crypto";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import Payment from "../models/Payment.js";
@@ -7,6 +8,7 @@ import { markBookingAsPaid } from "./bookingsControllers.js";
 import {
   buildVnpayPaymentUrl,
   getClientIp,
+  parseVnpayDate,
   verifyVnpayReturnParams,
 } from "../services/vnpayPaymentService.js";
 import {
@@ -18,6 +20,7 @@ import {
   expirePendingBooking,
   isBookingPaymentExpired,
   markLatePaymentForReview,
+  resolvePaymentExpiry,
 } from "../services/bookingExpiryService.js";
 import { releaseReservedVoucherForBooking } from "../services/voucherService.js";
 
@@ -40,6 +43,17 @@ const getSepayOrderAmount = (order = {}) => normalizeMoney(
   order.paid_amount ||
   0,
 );
+
+const parseSepayPaymentDate = (order = {}) => {
+  const transaction = Array.isArray(order.transactions) ? order.transactions[0] || {} : {};
+  const value = order.transaction_date || order.paid_at || transaction.transaction_date || transaction.paid_at;
+  if (!value) return null;
+  const raw = String(value).trim();
+  const parsed = new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)
+    ? raw
+    : `${raw.replace(" ", "T")}+07:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
 const SEPAY_PG_SUCCESS_STATUSES = new Set(["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "CAPTURED", "APPROVED"]);
 const SEPAY_PG_FAILED_STATUSES = new Set(["FAILED", "CANCELLED", "CANCELED", "VOIDED", "EXPIRED", "ERROR"]);
@@ -181,6 +195,7 @@ export const createVnpayPaymentUrl = async (req, res) => {
       amount: bookingAmount,
       ipAddr: getClientIp(req),
       frontendUrl: req.body?.frontend_url || req.get("origin") || process.env.FRONTEND_URL,
+      expiresAt: resolvePaymentExpiry(booking),
     });
 
     const payment = await Payment.findOneAndUpdate(
@@ -298,6 +313,7 @@ export const verifyVnpayReturn = async (req, res) => {
     const transactionStatus = String(params.vnp_TransactionStatus || "").trim();
     const vnpAmount = normalizeMoney(Number(params.vnp_Amount || 0) / 100);
     const success = responseCode === "00" && transactionStatus === "00";
+    const paidAt = parseVnpayDate(params.vnp_PayDate) || new Date();
 
     if (!verification.isValid) {
       return res.status(400).json({
@@ -343,7 +359,25 @@ export const verifyVnpayReturn = async (req, res) => {
         { new: true, upsert: true, session, sort: { created_at: -1 } },
       );
 
-      if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking))) {
+      if (success && booking.payment_status === "paid") {
+        if (payment.status !== "paid") {
+          payment.status = "paid";
+          payment.paid_at = booking.paid_at || paidAt;
+          await payment.save({ session });
+        }
+        return { booking, payment };
+      }
+
+      if (success && booking.payment_status === "review_required") {
+        if (payment.status !== "review_required") {
+          payment.status = "review_required";
+          payment.paid_at = payment.paid_at || paidAt;
+          await payment.save({ session });
+        }
+        return { booking, payment, lateSuccess: true };
+      }
+
+      if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking, paidAt))) {
         const expiryResult = await expirePendingBooking({ booking, session });
         const expiredBooking = expiryResult.booking || booking;
         return markLatePaymentForReview({
@@ -351,6 +385,7 @@ export const verifyVnpayReturn = async (req, res) => {
           payment,
           provider: "vnpay",
           transactionId: String(params.vnp_TransactionNo || params.vnp_BankTranNo || bookingId),
+          now: paidAt,
           session,
         });
       }
@@ -360,6 +395,7 @@ export const verifyVnpayReturn = async (req, res) => {
           booking,
           provider: "vnpay",
           transactionId: String(params.vnp_TransactionNo || params.vnp_BankTranNo || bookingId),
+          paidAt,
           session,
         });
 
@@ -370,6 +406,12 @@ export const verifyVnpayReturn = async (req, res) => {
         }
 
         return { booking: paidBooking, payment };
+      }
+
+      // Providers can repeat or reorder notifications. A later failure must never
+      // downgrade a payment that was already accepted or queued for review.
+      if (["paid", "review_required"].includes(booking.payment_status)) {
+        return { booking, payment, lateSuccess: booking.payment_status === "review_required" };
       }
 
       payment.status = "failed";
@@ -411,6 +453,121 @@ export const verifyVnpayReturn = async (req, res) => {
   }
 };
 
+const processSepayPgResult = async ({
+  bookingId,
+  invoiceNumber,
+  orderResponse,
+  order,
+  orderStatus,
+  sepayAmount,
+  success,
+  isExplicitFailureReturn = false,
+  paidAt,
+}) => runWithOptionalTransaction(async (session) => {
+  const booking = await Booking.findById(bookingId).session(session);
+  if (!booking) {
+    throw Object.assign(new Error("Không tìm thấy đơn vé"), { statusCode: 404 });
+  }
+
+  if (booking.booking_code !== invoiceNumber) {
+    throw Object.assign(new Error("Mã đơn SePay không khớp booking"), { statusCode: 400 });
+  }
+
+  const bookingAmount = normalizeMoney(booking.total_price);
+  if (sepayAmount > 0 && bookingAmount !== sepayAmount) {
+    throw Object.assign(new Error("Số tiền SePay trả về không khớp đơn vé"), { statusCode: 400 });
+  }
+
+  const transactionId = String(order.transaction_id || order.payment_id || order.id || invoiceNumber);
+  const payment = await Payment.findOneAndUpdate(
+    { booking_id: booking._id, provider: "sepay_pg" },
+    {
+      $set: {
+        amount: sepayAmount || bookingAmount,
+        payment_code: booking.booking_code,
+        transaction_ref: invoiceNumber,
+        transaction_id: transactionId,
+        response_code: orderStatus,
+        transaction_status: orderStatus,
+        order_info: String(order.order_description || order.description || ""),
+        raw_return_data: orderResponse,
+      },
+      $setOnInsert: {
+        booking_id: booking._id,
+        provider: "sepay_pg",
+      },
+    },
+    { new: true, upsert: true, session, sort: { created_at: -1 } },
+  );
+
+  if (success && booking.payment_status === "paid") {
+    if (payment.status !== "paid") {
+      payment.status = "paid";
+      payment.paid_at = booking.paid_at || paidAt;
+      await payment.save({ session });
+    }
+    return { booking, payment };
+  }
+
+  if (success && booking.payment_status === "review_required") {
+    if (payment.status !== "review_required") {
+      payment.status = "review_required";
+      payment.paid_at = payment.paid_at || paidAt;
+      await payment.save({ session });
+    }
+    return { booking, payment, lateSuccess: true };
+  }
+
+  if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking, paidAt))) {
+    const expiryResult = await expirePendingBooking({ booking, session });
+    const expiredBooking = expiryResult.booking || booking;
+    return markLatePaymentForReview({
+      booking: expiredBooking,
+      payment,
+      provider: "sepay_pg",
+      transactionId,
+      now: paidAt,
+      session,
+    });
+  }
+
+  if (success) {
+    const paidBooking = await markBookingAsPaid({
+      booking,
+      provider: "sepay_pg",
+      transactionId,
+      paidAt,
+      session,
+    });
+
+    if (payment.status !== "paid") {
+      payment.status = "paid";
+      payment.paid_at = paidBooking.paid_at || paidAt;
+      await payment.save({ session });
+    }
+    return { booking: paidBooking, payment };
+  }
+
+  if (isExplicitFailureReturn || SEPAY_PG_FAILED_STATUSES.has(orderStatus)) {
+    if (["paid", "review_required"].includes(booking.payment_status)) {
+      return { booking, payment, lateSuccess: booking.payment_status === "review_required" };
+    }
+
+    payment.status = "failed";
+    await payment.save({ session });
+    const cancelledBooking = await cancelUnpaidBookingAfterPaymentFailure({
+      booking,
+      provider: "sepay_pg",
+      transactionId: String(order.transaction_id || order.payment_id || order.id || ""),
+      reason: isExplicitFailureReturn ? "Khách hủy thanh toán SePay" : "Thanh toán SePay thất bại hoặc bị hủy",
+      session,
+    });
+    return { booking: cancelledBooking, payment };
+  }
+
+  return { booking, payment };
+});
+
 export const verifySepayPgReturn = async (req, res) => {
   try {
     const bookingId = String(req.query.booking_id || "").trim();
@@ -421,7 +578,6 @@ export const verifySepayPgReturn = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(bookingId)) {
       return res.status(400).json({ success: false, message: "booking_id không hợp lệ" });
     }
-
     if (!invoiceNumber) {
       return res.status(400).json({ success: false, message: "Thiếu mã đơn SePay" });
     }
@@ -431,88 +587,17 @@ export const verifySepayPgReturn = async (req, res) => {
     const orderStatus = isExplicitFailureReturn ? returnResult.toUpperCase() : getSepayOrderStatus(order);
     const sepayAmount = isExplicitFailureReturn ? 0 : getSepayOrderAmount(order);
     const success = SEPAY_PG_SUCCESS_STATUSES.has(orderStatus);
-
-    const result = await runWithOptionalTransaction(async (session) => {
-      const booking = await Booking.findById(bookingId).session(session);
-      if (!booking) {
-        throw Object.assign(new Error("Không tìm thấy đơn vé"), { statusCode: 404 });
-      }
-
-      if (booking.booking_code !== invoiceNumber) {
-        throw Object.assign(new Error("Mã đơn SePay không khớp booking"), { statusCode: 400 });
-      }
-
-      const bookingAmount = normalizeMoney(booking.total_price);
-      if (sepayAmount > 0 && bookingAmount !== sepayAmount) {
-        throw Object.assign(new Error("Số tiền SePay trả về không khớp đơn vé"), { statusCode: 400 });
-      }
-
-      const payment = await Payment.findOneAndUpdate(
-        { booking_id: booking._id, provider: "sepay_pg" },
-        {
-          $set: {
-            amount: sepayAmount || bookingAmount,
-            payment_code: booking.booking_code,
-            transaction_ref: invoiceNumber,
-            transaction_id: String(order.transaction_id || order.payment_id || order.id || invoiceNumber),
-            response_code: orderStatus,
-            transaction_status: orderStatus,
-            order_info: String(order.order_description || order.description || ""),
-            raw_return_data: orderResponse,
-          },
-          $setOnInsert: {
-            booking_id: booking._id,
-            provider: "sepay_pg",
-          },
-        },
-        { new: true, upsert: true, session, sort: { created_at: -1 } },
-      );
-
-      if (success && (booking.payment_status === "expired" || isBookingPaymentExpired(booking))) {
-        const expiryResult = await expirePendingBooking({ booking, session });
-        const expiredBooking = expiryResult.booking || booking;
-        return markLatePaymentForReview({
-          booking: expiredBooking,
-          payment,
-          provider: "sepay_pg",
-          transactionId: String(order.transaction_id || order.payment_id || order.id || invoiceNumber),
-          session,
-        });
-      }
-
-      if (success) {
-        const paidBooking = await markBookingAsPaid({
-          booking,
-          provider: "sepay_pg",
-          transactionId: String(order.transaction_id || order.payment_id || order.id || invoiceNumber),
-          session,
-        });
-
-        if (payment.status !== "paid") {
-          payment.status = "paid";
-          payment.paid_at = paidBooking.paid_at || new Date();
-          await payment.save({ session });
-        }
-
-        return { booking: paidBooking, payment };
-      }
-
-      if (isExplicitFailureReturn || SEPAY_PG_FAILED_STATUSES.has(orderStatus)) {
-        payment.status = "failed";
-        await payment.save({ session });
-
-        const cancelledBooking = await cancelUnpaidBookingAfterPaymentFailure({
-          booking,
-          provider: "sepay_pg",
-          transactionId: String(order.transaction_id || order.payment_id || order.id || ""),
-          reason: isExplicitFailureReturn ? "Khách hủy thanh toán SePay" : "Thanh toán SePay thất bại hoặc bị hủy",
-          session,
-        });
-
-        return { booking: cancelledBooking, payment };
-      }
-
-      return { booking, payment };
+    const paidAt = parseSepayPaymentDate(order) || new Date();
+    const result = await processSepayPgResult({
+      bookingId,
+      invoiceNumber,
+      orderResponse,
+      order,
+      orderStatus,
+      sepayAmount,
+      success,
+      isExplicitFailureReturn,
+      paidAt,
     });
 
     const requiresPaymentReview = Boolean(result.lateSuccess);
@@ -535,5 +620,99 @@ export const verifySepayPgReturn = async (req, res) => {
       success: false,
       message: error.message || "Không thể xác minh kết quả SePay",
     });
+  }
+};
+
+const captureControllerResponse = () => ({
+  statusCode: 200,
+  body: null,
+  status(code) {
+    this.statusCode = code;
+    return this;
+  },
+  json(payload) {
+    this.body = payload;
+    return this;
+  },
+});
+
+export const receiveVnpayIpn = async (req, res) => {
+  const captured = captureControllerResponse();
+  await verifyVnpayReturn(req, captured);
+
+  const code = String(captured.body?.code || "");
+  if (code === "97") return res.json({ RspCode: "97", Message: "Invalid signature" });
+  if (code === "01" || captured.statusCode === 404) {
+    return res.json({ RspCode: "01", Message: "Order not found" });
+  }
+  if (code === "04") return res.json({ RspCode: "04", Message: "Invalid amount" });
+  if (captured.statusCode >= 500) {
+    return res.json({ RspCode: "99", Message: "Unknown error" });
+  }
+
+  // A late payment has still been recorded for review, so acknowledge it to stop provider retries.
+  return res.json({ RspCode: "00", Message: "Confirm Success" });
+};
+
+const secretsMatch = (expected, received) => {
+  const expectedBuffer = Buffer.from(String(expected || ""));
+  const receivedBuffer = Buffer.from(String(received || ""));
+  return expectedBuffer.length > 0
+    && expectedBuffer.length === receivedBuffer.length
+    && timingSafeEqual(expectedBuffer, receivedBuffer);
+};
+
+export const receiveSepayPgIpn = async (req, res) => {
+  try {
+    const secret = process.env.SEPAY_PG_IPN_SECRET || process.env.SEPAY_PG_SECRET_KEY;
+    if (!secretsMatch(secret, req.get("X-Secret-Key"))) {
+      return res.status(401).json({ success: false, message: "Sai khóa xác thực SePay Payment Gateway" });
+    }
+
+    const payload = req.body || {};
+    const notificationType = String(payload.notification_type || "").trim().toUpperCase();
+    const invoiceNumber = String(payload.order?.order_invoice_number || "").trim().toUpperCase();
+    if (!invoiceNumber || !["ORDER_PAID", "TRANSACTION_VOID"].includes(notificationType)) {
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const booking = await Booking.findOne({ booking_code: invoiceNumber }).select("_id booking_code");
+    if (!booking) {
+      // Permanent mismatch: acknowledge so SePay does not retry indefinitely.
+      return res.status(200).json({ success: true, ignored: true });
+    }
+
+    const isVoid = notificationType === "TRANSACTION_VOID";
+    const order = isVoid
+      ? { ...payload.order, ...payload.transaction }
+      : { ...payload.order, ...payload.transaction, transactions: [payload.transaction || {}] };
+    const orderStatus = isVoid ? "VOIDED" : getSepayOrderStatus(order);
+    const sepayAmount = getSepayOrderAmount(order);
+    const success = notificationType === "ORDER_PAID" && SEPAY_PG_SUCCESS_STATUSES.has(orderStatus);
+    const paidAt = parseSepayPaymentDate(order) || new Date();
+    const result = await processSepayPgResult({
+      bookingId: String(booking._id),
+      invoiceNumber,
+      orderResponse: payload,
+      order,
+      orderStatus,
+      sepayAmount,
+      success,
+      isExplicitFailureReturn: isVoid,
+      paidAt,
+    });
+
+    return res.status(200).json({
+      success: true,
+      requires_payment_review: Boolean(result.lateSuccess),
+    });
+  } catch (error) {
+    console.error("Khong the xu ly SePay Payment Gateway IPN:", error.message);
+    if (Number(error?.statusCode) >= 400 && Number(error?.statusCode) < 500) {
+      // The authenticated payload is permanently invalid (for example, amount
+      // mismatch). Acknowledge it to stop endless retries; operators can inspect logs.
+      return res.status(200).json({ success: true, rejected: true });
+    }
+    return res.status(500).json({ success: false, message: "Chưa thể xử lý IPN SePay" });
   }
 };

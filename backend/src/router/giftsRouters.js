@@ -16,6 +16,7 @@ import {
   redeemMyGift,
 } from "../controllers/giftControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
+import { uploadGiftImage } from "../middleware/giftUploadMiddleware.js";
 
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
@@ -30,6 +31,7 @@ router.post("/admin/grants/preview", adminOnly, previewAdminGiftGrant);
 router.post("/admin/grants/:id/confirm", adminOnly, confirmAdminGiftGrant);
 router.get("/admin/grants", adminOnly, getAdminGiftGrantHistory);
 router.get("/", adminOnly, getAllGifts);
+router.post("/upload-image", adminOnly, uploadGiftImage);
 router.get("/:id", adminOnly, getGiftById);
 router.post("/", adminOnly, createGift);
 router.put("/:id", adminOnly, updateGift);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
@@ -48,8 +48,6 @@ const text = {
   chooseRoom: "Ch\u1ecdn ph\u00f2ng chi\u1ebfu",
   close: "\u0110\u00f3ng",
   closeForm: "\u0110\u00f3ng form",
-  formInvalid:
-    "Vui l\u00f2ng ki\u1ec3m tra l\u1ea1i th\u00f4ng tin su\u1ea5t chi\u1ebfu.",
   loading: "\u0110ang t\u1ea3i d\u1eef li\u1ec7u...",
   movie: "Phim",
   noPrice: "Ch\u01b0a \u0111\u1eb7t",
@@ -414,6 +412,7 @@ const groupSlotsByDate = (slots = []) =>
     );
 
 const ShowtimesPage = () => {
+  const formRef = useRef(null);
   const [showtimes, setShowtimes] = useState([]);
   const [movies, setMovies] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -939,6 +938,38 @@ const ShowtimesPage = () => {
     }
 
     setFormErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      const fieldPriority = [
+        "movie_id",
+        "room_id",
+        "start_date",
+        "show_time",
+        "pricing_preview",
+        ...Object.keys(errors).filter((key) => key.startsWith("pricing.")),
+      ];
+      const firstErrorKey = fieldPriority.find((key) => errors[key]);
+
+      window.requestAnimationFrame(() => {
+        const selectorByField = {
+          movie_id: '[name="movie_id"]',
+          room_id: '[name="room_id"]',
+          start_date: ".showtime-date-trigger",
+          show_time: '[name="show_time"]',
+          pricing_preview: ".showtime-pricing-panel",
+        };
+        const selector = firstErrorKey?.startsWith("pricing.")
+          ? `[data-error-key="${firstErrorKey}"]`
+          : selectorByField[firstErrorKey];
+        const invalidField = selector
+          ? formRef.current?.querySelector(selector)
+          : null;
+
+        invalidField?.focus({ preventScroll: true });
+        invalidField?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+
     return Object.keys(errors).length === 0;
   };
 
@@ -1063,7 +1094,7 @@ const ShowtimesPage = () => {
     event.preventDefault();
 
     if (!validateForm()) {
-      setFeedback({ type: "error", message: text.formInvalid });
+      setFeedback({ type: "", message: "" });
       return;
     }
 
@@ -1198,7 +1229,7 @@ const ShowtimesPage = () => {
 
     if (Object.keys(errors).length > 0) {
       setFormErrors((current) => ({ ...current, ...errors }));
-      setFeedback({ type: "error", message: text.formInvalid });
+      setFeedback({ type: "", message: "" });
       return;
     }
 
@@ -1569,6 +1600,8 @@ const ShowtimesPage = () => {
             setDatePickerOpen((current) => !current);
           }}
           aria-expanded={datePickerOpen}
+          aria-invalid={Boolean(formErrors.start_date)}
+          aria-describedby={formErrors.start_date ? "showtime-start-date-error" : undefined}
         >
           <span>{selectedDateRangeLabel || "Chọn ngày chiếu"}</span>
           <HiOutlineCalendar />
@@ -1829,19 +1862,28 @@ const ShowtimesPage = () => {
             </button>
           </div>
 
-          <form className="showtime-form" onSubmit={handleSubmit}>
+          <form
+            ref={formRef}
+            className="showtime-form"
+            onSubmit={handleSubmit}
+            noValidate
+          >
             <div className="showtime-form-grid">
               <label className="form-group">
                 <span className="form-label">
                   {text.movie} <span className="required">*</span>
                 </span>
                 <select
+                  id="showtime-movie"
+                  name="movie_id"
                   className={`form-input ${formErrors.movie_id ? "error" : ""}`}
                   value={formData.movie_id}
                   onChange={(event) =>
                     updateField("movie_id", event.target.value)
                   }
                   required
+                  aria-invalid={Boolean(formErrors.movie_id)}
+                  aria-describedby={formErrors.movie_id ? "showtime-movie-error" : undefined}
                 >
                   <option value="">{text.chooseMovie}</option>
                   {movies.map((movie) => (
@@ -1851,7 +1893,9 @@ const ShowtimesPage = () => {
                   ))}
                 </select>
                 {formErrors.movie_id ? (
-                  <span className="form-error">{formErrors.movie_id}</span>
+                  <span className="form-error" id="showtime-movie-error" role="alert">
+                    {formErrors.movie_id}
+                  </span>
                 ) : selectedMovie ? (
                   <span className="form-hint">Thời lượng: {formatDuration(selectedMovie.duration)}</span>
                 ) : null}
@@ -1946,6 +1990,7 @@ const ShowtimesPage = () => {
                               >
                                 <span>{label}</span>
                                 <input
+                                  data-error-key={errorKey}
                                   className={`form-input showtime-pricing-input ${formErrors[errorKey] ? "error" : ""}`}
                                   type="number"
                                   inputMode="numeric"
@@ -1960,6 +2005,7 @@ const ShowtimesPage = () => {
                                     )
                                   }
                                   aria-label={`${label} - ${pricingDayTypeLabels[group.dayType] || group.dayType}`}
+                                  aria-invalid={Boolean(formErrors[errorKey])}
                                   required
                                 />
                                 {formErrors[errorKey] ? (
@@ -1994,12 +2040,16 @@ const ShowtimesPage = () => {
                   {text.roomLabel} <span className="required">*</span>
                 </span>
                 <select
+                  id="showtime-room"
+                  name="room_id"
                   className={`form-input ${formErrors.room_id ? "error" : ""}`}
                   value={formData.room_id}
                   onChange={(event) =>
                     updateField("room_id", event.target.value)
                   }
                   required
+                  aria-invalid={Boolean(formErrors.room_id)}
+                  aria-describedby={formErrors.room_id ? "showtime-room-error" : undefined}
                 >
                   <option value="">{text.chooseRoom}</option>
                   {rooms.map((room) => (
@@ -2009,7 +2059,9 @@ const ShowtimesPage = () => {
                   ))}
                 </select>
                 {formErrors.room_id ? (
-                  <span className="form-error">{formErrors.room_id}</span>
+                  <span className="form-error" id="showtime-room-error" role="alert">
+                    {formErrors.room_id}
+                  </span>
                 ) : null}
               </label>
 
@@ -2019,7 +2071,9 @@ const ShowtimesPage = () => {
                 </span>
                 {renderShowtimeDateRangePicker()}
                 {formErrors.start_date ? (
-                  <span className="form-error">{formErrors.start_date}</span>
+                  <span className="form-error" id="showtime-start-date-error" role="alert">
+                    {formErrors.start_date}
+                  </span>
                 ) : (
                   <span className="form-hint">
                     {isEditing
@@ -2035,6 +2089,8 @@ const ShowtimesPage = () => {
                 </span>
                 <div className="showtime-time-row">
                   <input
+                    id="showtime-time"
+                    name="show_time"
                     className={`form-input ${formErrors.show_time ? "error" : ""}`}
                     type="time"
                     value={formData.show_time}
@@ -2042,6 +2098,8 @@ const ShowtimesPage = () => {
                       updateField("show_time", event.target.value)
                     }
                     required
+                    aria-invalid={Boolean(formErrors.show_time)}
+                    aria-describedby={formErrors.show_time ? "showtime-time-error" : undefined}
                   />
                   <button
                     className="btn btn-secondary showtime-auto-btn"
@@ -2053,7 +2111,9 @@ const ShowtimesPage = () => {
                   </button>
                 </div>
                 {formErrors.show_time ? (
-                  <span className="form-error">{formErrors.show_time}</span>
+                  <span className="form-error" id="showtime-time-error" role="alert">
+                    {formErrors.show_time}
+                  </span>
                 ) : null}
                 <div className="showtime-auto-slots">
                   <div className="showtime-auto-slots-header">

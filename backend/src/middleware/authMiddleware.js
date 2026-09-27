@@ -36,6 +36,7 @@ export const authMiddleware = async (req, res, next) => {
     const user = await User.findOne({
       _id: payload.id,
       deleted_at: null,
+      email_verification_required: { $ne: true },
       $or: [
         { account_status: "active" },
         { account_status: { $exists: false }, status: true },
@@ -94,6 +95,7 @@ export const optionalAuthMiddleware = async (req, res, next) => {
     const user = await User.findOne({
       _id: payload.id,
       deleted_at: null,
+      email_verification_required: { $ne: true },
       $or: [
         { account_status: "active" },
         { account_status: { $exists: false }, status: true },

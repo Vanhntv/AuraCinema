@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import {
   HiOutlineEye,
   HiOutlineGift,
@@ -13,7 +13,10 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
-import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift } from "../services/giftService";
+import { resolveGiftFormValue } from "../utils/giftFormValue";
+import { getMovies } from "../services/movieService";
+import { getConcessions } from "../services/concessionService";
+import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift, uploadGiftImage } from "../services/giftService";
 
 const PAGE_SIZE = 10;
 
@@ -261,9 +264,7 @@ const emptyGiftForm = {
   type: "ticket",
   acquisition_modes: ["manual"],
   trigger: "none",
-  redemption_channel: "online",
   max_per_user: 1,
-  validity_days: "",
   benefit_reference_id: "",
   benefit_quantity: 1,
   seat_types: "",
@@ -293,9 +294,7 @@ const buildGiftFormFromGift = (gift) => ({
   type: gift?.type || "ticket",
   acquisition_modes: gift?.acquisition_modes?.length ? gift.acquisition_modes : ["manual"],
   trigger: gift?.trigger || "none",
-  redemption_channel: gift?.redemption_channel || "online",
   max_per_user: gift?.max_per_user || 1,
-  validity_days: gift?.validity_days ?? "",
   benefit_reference_id: gift?.benefit?.combo_id || gift?.benefit?.voucher_id || "",
   benefit_quantity: gift?.benefit?.quantity || 1,
   seat_types: stringifyList(gift?.benefit?.seat_types),
@@ -321,9 +320,53 @@ const buildGiftFormFromGift = (gift) => ({
   status: gift?.status || "active",
 });
 
+const GiftConditionSelect = ({ label, options, value, onChange, disabled, loading, loadError, error, selectAllLabel, compact = false, itemLabel = "phim" }) => {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  const selectedIds = parseDelimitedList(value);
+  const remaining = options.filter((item) => !selectedIds.includes(item._id));
+  const allSelected = !loading && !loadError && options.length > 0 && remaining.length === 0 && selectedIds.length === options.length;
+  const visibleIds = compact && !expanded ? (allSelected ? [] : selectedIds.slice(0, 2)) : selectedIds;
+  const renderSelection = (id) => {
+    const item = options.find((entry) => entry._id === id);
+    const name = item?.title || item?.name || `Mục đã chọn (${id})`;
+    return <span key={id} className="gift-condition-selection"><span className="gift-condition-name" title={name}>{name}</span><button type="button" aria-label={`Bỏ chọn ${name}`} disabled={disabled} onClick={() => onChange(selectedIds.filter((entry) => entry !== id).join(", "))}><HiOutlineX /></button></span>;
+  };
+  return <>
+    <select aria-label={label} className={`form-input ${error ? "error" : ""}`} value="" disabled={disabled || loading || Boolean(loadError)} onChange={(event) => {
+      if (selectAllLabel && event.target.value === "select-all") {
+        onChange([...new Set([...selectedIds, ...options.map((item) => item._id)])].join(", "));
+        return;
+      }
+      if (event.target.value) onChange([...new Set([...selectedIds, event.target.value])].join(", "));
+    }}>
+      <option value="">{loading ? "Đang tải danh sách..." : loadError ? "Không tải được danh sách" : remaining.length ? `Chọn ${label.toLowerCase()}` : compact && allSelected ? `Đã chọn tất cả ${itemLabel}` : "Không có mục để chọn"}</option>
+      {selectAllLabel && options.length > 0 && <option value="select-all" disabled={remaining.length === 0}>{selectAllLabel}</option>}
+      {remaining.map((item) => <option key={item._id} value={item._id}>{item.title || item.name}</option>)}
+    </select>
+    {selectedIds.length > 0 && <>
+      {compact && allSelected && <p className="gift-condition-summary">Đã chọn tất cả {options.length} {itemLabel}</p>}
+      <div id={listId} className={`gift-condition-selections${compact ? " gift-condition-selections-compact" : ""}${compact && expanded ? " gift-condition-selections-expanded" : ""}`}>
+        {visibleIds.map(renderSelection)}
+        {compact && !expanded && !allSelected && selectedIds.length > 2 && <button type="button" className="gift-condition-more" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(true)}>+{selectedIds.length - 2} {itemLabel}</button>}
+      </div>
+      {compact && <div className="gift-condition-actions">
+        {(allSelected || selectedIds.length > 2 || expanded) && <button type="button" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((prev) => !prev)}>{expanded ? "Thu gọn" : "Xem danh sách"}</button>}
+        <button type="button" disabled={disabled} onClick={() => { onChange(""); setExpanded(false); }}>Bỏ chọn tất cả</button>
+      </div>}
+    </>}
+    {loadError && <p className="form-error">{loadError}</p>}
+    {error && <p className="form-error">{error}</p>}
+  </>;
+};
+
 const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = null }) => {
   const [formData, setFormData] = useState(emptyGiftForm);
   const [errors, setErrors] = useState({});
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
+  const [conditionOptions, setConditionOptions] = useState({ movies: [], combos: [], loading: true, movieError: "", comboError: "" });
   const isEditMode = Boolean(initialData?._id);
   const issuedQuantity = Number(initialData?.issued_quantity || 0);
   const isIssuedGift = isEditMode && issuedQuantity > 0;
@@ -332,7 +375,44 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     if (!isOpen) return;
     setFormData(initialData ? buildGiftFormFromGift(initialData) : emptyGiftForm);
     setErrors({});
+    setImageFile(null);
+    setImagePreview("");
   }, [initialData, isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadMovies = async () => {
+      const movies = [];
+      let page = 1;
+      let totalPages;
+      do {
+        const response = await getMovies("", page, 100);
+        if (cancelled) return [];
+        movies.push(...(response.data || []));
+        totalPages = response.pagination?.totalPages || response.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      return movies;
+    };
+    Promise.allSettled([loadMovies(), getConcessions()]).then(([movies, combos]) => {
+      if (cancelled) return;
+      setConditionOptions({
+        movies: movies.status === "fulfilled" ? movies.value : [],
+        combos: combos.status === "fulfilled" ? (Array.isArray(combos.value.data) ? combos.value.data : combos.value.data?.data || []) : [],
+        loading: false,
+        movieError: movies.status === "rejected" ? "Không tải được phim. Hãy đóng và mở lại form để thử lại." : "",
+        comboError: combos.status === "rejected" ? "Không tải được combo. Hãy đóng và mở lại form để thử lại." : "",
+      });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -358,7 +438,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
   const validate = () => {
     const nextErrors = {};
     const quantity = Number(formData.quantity);
-    const value = formData.value === "" ? 0 : Number(formData.value);
+    const value = resolveGiftFormValue(formData, initialData);
     const minOrder = formData.min_order === "" ? null : Number(formData.min_order);
     const pointRequired = formData.point_required === "" ? null : Number(formData.point_required);
     const movieIds = parseDelimitedList(formData.movie_ids);
@@ -372,7 +452,6 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     if (!formData.acquisition_modes.length) nextErrors.acquisition_modes = "Chọn ít nhất một hình thức nhận";
     if (["combo", "voucher"].includes(formData.type) && !objectIdPattern.test(formData.benefit_reference_id)) nextErrors.benefit_reference_id = `ID ${formData.type === "combo" ? "combo" : "voucher"} không hợp lệ`;
     if (!Number.isInteger(Number(formData.max_per_user)) || Number(formData.max_per_user) < 1) nextErrors.max_per_user = "Giới hạn nhận phải là số nguyên dương";
-    if (formData.validity_days !== "" && (!Number.isInteger(Number(formData.validity_days)) || Number(formData.validity_days) < 1)) nextErrors.validity_days = "Số ngày phải là số nguyên dương";
     if (!isIssuedGift && !/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
       nextErrors.code = "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự";
     }
@@ -380,9 +459,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       nextErrors.value_label = "Vui lòng nhập giá trị quà";
     }
     if (!isIssuedGift && ["voucher", "point"].includes(formData.type) && (!Number.isFinite(value) || value <= 0)) {
-      nextErrors.value = formData.type === "point"
-        ? "Quà điểm thưởng phải có số điểm lớn hơn 0"
-        : "Quà voucher phải có giá trị lớn hơn 0";
+      nextErrors.value_label = formData.type === "point"
+        ? "Nhập số điểm được tặng, ví dụ: 500 điểm"
+        : "Nhập giá trị voucher, ví dụ: Voucher 50.000 VNĐ";
     }
     if (!isIssuedGift && (!Number.isInteger(quantity) || quantity <= 0)) {
       nextErrors.quantity = "Tổng số lượng phải là số nguyên lớn hơn 0";
@@ -412,8 +491,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isLoading || imageUploading) return;
     if (!validate()) return;
 
     const issuedGiftPayload = {
@@ -435,9 +515,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       type: formData.type,
       acquisition_modes: formData.acquisition_modes,
       trigger: formData.trigger,
-      redemption_channel: formData.redemption_channel,
+      redemption_channel: "online",
       max_per_user: Number(formData.max_per_user),
-      validity_days: formData.validity_days === "" ? null : Number(formData.validity_days),
+      validity_days: null,
       benefit: formData.type === "ticket"
         ? { quantity: Number(formData.benefit_quantity), max_unit_price: Number(formData.value || 0), seat_types: parseDelimitedList(formData.seat_types) }
         : formData.type === "combo"
@@ -445,10 +525,10 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
           : formData.type === "voucher"
             ? { voucher_id: formData.benefit_reference_id }
             : formData.type === "point"
-              ? { points: Number(formData.value || 0) }
+              ? { points: resolveGiftFormValue(formData, initialData) }
               : { label: formData.value_label.trim() },
       value_label: formData.value_label.trim(),
-      value: formData.value === "" ? 0 : Number(formData.value),
+      value: resolveGiftFormValue(formData, initialData),
       quantity: Number(formData.quantity),
       condition: {
         min_order: formData.min_order === "" ? null : Number(formData.min_order),
@@ -467,7 +547,25 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       status: formData.status,
     };
 
-    onSubmit(isIssuedGift ? issuedGiftPayload : fullPayload);
+    const payload = isIssuedGift ? issuedGiftPayload : fullPayload;
+    try {
+      setImageUploading(true);
+      if (imageFile) {
+        const response = await uploadGiftImage(imageFile);
+        payload.image_url = response.data.image_url;
+        handleChange("image_url", payload.image_url);
+        setImageFile(null);
+        setImagePreview("");
+      }
+      await onSubmit(payload);
+    } catch (error) {
+      setErrors((previous) => ({
+        ...previous,
+        image_url: error.response?.data?.message || "Không thể tải ảnh lên. Vui lòng thử lại.",
+      }));
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   return (
@@ -508,7 +606,27 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label">Ảnh</label>
-                  <input className={`form-input ${errors.image_url ? "error" : ""}`} placeholder="https://..." value={formData.image_url} onChange={(event) => handleChange("image_url", event.target.value)} />
+                  <input
+                    className={`form-input ${errors.image_url ? "error" : ""}`}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    disabled={isLoading || imageUploading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                        setErrors((previous) => ({ ...previous, image_url: "Chọn ảnh JPG, PNG, WEBP hoặc GIF, tối đa 5 MB." }));
+                        event.target.value = "";
+                        return;
+                      }
+                      setImageFile(file);
+                      setImagePreview(URL.createObjectURL(file));
+                      setErrors((previous) => ({ ...previous, image_url: "" }));
+                    }}
+                  />
+                  <p className="voucher-cell-sub">JPG, PNG, WEBP hoặc GIF · tối đa 5 MB</p>
+                  {(imagePreview || formData.image_url) && <img className="gift-upload-preview" src={imagePreview || formData.image_url} alt="Xem trước ảnh quà tặng" />}
+                  {imageUploading && <p className="voucher-cell-sub">Đang lưu quà tặng...</p>}
                   {errors.image_url && <p className="form-error">{errors.image_url}</p>}
                 </div>
                 <div className="form-group">
@@ -530,11 +648,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 {[{ value: "manual", label: "Admin cấp" }, { value: "automatic", label: "Tự động" }, { value: "points", label: "Đổi bằng điểm" }].map((mode) => <label key={mode.value}><input type="checkbox" checked={formData.acquisition_modes.includes(mode.value)} onChange={(event) => handleModeToggle(mode.value, event.target.checked)} disabled={isIssuedGift} />{mode.label}</label>)}
               </div>
               {errors.acquisition_modes && <p className="form-error">{errors.acquisition_modes}</p>}
-              <div className="form-row">
+              <div className="form-row gift-receiving-fields">
                 <div className="form-group"><label className="form-label">Sự kiện phát tự động</label><select className="form-input" value={formData.trigger} onChange={(event) => handleChange("trigger", event.target.value)} disabled={isIssuedGift}><option value="none">Không áp dụng</option><option value="new_member">Thành viên mới</option><option value="birthday">Sinh nhật</option><option value="tier_reached">Đạt hạng thành viên</option><option value="paid_booking">Thanh toán đơn thành công</option></select></div>
-                <div className="form-group"><label className="form-label">Kênh sử dụng</label><select className="form-input" value={formData.redemption_channel} onChange={(event) => handleChange("redemption_channel", event.target.value)} disabled={isIssuedGift}><option value="online">Đặt vé trực tuyến</option><option value="counter">Nhận tại quầy</option><option value="both">Trực tuyến hoặc tại quầy</option><option value="instant">Chuyển ngay vào tài khoản</option></select></div>
-                <div className="form-group"><label className="form-label">Số lượt tối đa mỗi người</label><input className={`form-input ${errors.max_per_user ? "error" : ""}`} type="number" min="1" value={formData.max_per_user} onChange={(event) => handleChange("max_per_user", event.target.value)} disabled={isIssuedGift} />{errors.max_per_user && <p className="form-error">{errors.max_per_user}</p>}</div>
-                <div className="form-group"><label className="form-label">Hiệu lực sau khi nhận (ngày)</label><input className={`form-input ${errors.validity_days ? "error" : ""}`} type="number" min="1" placeholder="Bỏ trống để dùng ngày kết thúc" value={formData.validity_days} onChange={(event) => handleChange("validity_days", event.target.value)} disabled={isIssuedGift} />{errors.validity_days && <p className="form-error">{errors.validity_days}</p>}</div>
+                <div className="form-group"><label className="form-label" title="Số lượt tối đa mỗi người">Lượt/người</label><input aria-label="Số lượt tối đa mỗi người" className={`form-input ${errors.max_per_user ? "error" : ""}`} type="number" min="1" value={formData.max_per_user} onChange={(event) => handleChange("max_per_user", event.target.value)} disabled={isIssuedGift} />{errors.max_per_user && <p className="form-error">{errors.max_per_user}</p>}</div>
               </div>
               <div className="form-row">
                 {["combo", "voucher"].includes(formData.type) && <div className="form-group"><label className="form-label">ID {formData.type === "combo" ? "combo" : "voucher"} liên kết <span className="required">*</span></label><input className={`form-input ${errors.benefit_reference_id ? "error" : ""}`} value={formData.benefit_reference_id} onChange={(event) => handleChange("benefit_reference_id", event.target.value)} disabled={isIssuedGift} />{errors.benefit_reference_id && <p className="form-error">{errors.benefit_reference_id}</p>}</div>}
@@ -549,12 +665,8 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 <div className="form-group">
                   <label className="form-label">Giá trị hiển thị <span className="required">*</span></label>
                   <input className={`form-input ${errors.value_label ? "error" : ""}`} placeholder="Combo Big, Voucher 50.000 VNĐ, 500 điểm" value={formData.value_label} onChange={(event) => handleChange("value_label", event.target.value)} disabled={isIssuedGift} />
+                  {["point", "voucher"].includes(formData.type) && <p className="form-helper">{formData.type === "point" ? "Ví dụ: 500 điểm — số điểm sẽ cộng vào tài khoản." : "Ví dụ: Voucher 50.000 VNĐ — nhập đúng giá trị voucher liên kết."}</p>}
                   {errors.value_label && <p className="form-error">{errors.value_label}</p>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Giá trị quy đổi</label>
-                  <input className={`form-input ${errors.value ? "error" : ""}`} type="number" min="0" value={formData.value} onChange={(event) => handleChange("value", event.target.value)} disabled={isIssuedGift} />
-                  {errors.value && <p className="form-error">{errors.value}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Tổng số lượng <span className="required">*</span></label>
@@ -574,28 +686,12 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phim chỉ định</label>
-                  <input className={`form-input ${errors.movie_ids ? "error" : ""}`} placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.movie_ids} onChange={(event) => handleChange("movie_ids", event.target.value)} disabled={isIssuedGift} />
-                  {errors.movie_ids && <p className="form-error">{errors.movie_ids}</p>}
+                  <GiftConditionSelect label="Phim chỉ định" compact selectAllLabel="Chọn tất cả phim" options={conditionOptions.movies} value={formData.movie_ids} onChange={(value) => handleChange("movie_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.movieError} error={errors.movie_ids} />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Combo chỉ định</label>
-                  <input className={`form-input ${errors.combo_ids ? "error" : ""}`} placeholder="Nhập ID combo, cách nhau bằng dấu phẩy" value={formData.combo_ids} onChange={(event) => handleChange("combo_ids", event.target.value)} disabled={isIssuedGift} />
-                  {errors.combo_ids && <p className="form-error">{errors.combo_ids}</p>}
+                  <GiftConditionSelect label="Combo chỉ định" compact itemLabel="combo" selectAllLabel="Chọn tất cả combo" options={conditionOptions.combos} value={formData.combo_ids} onChange={(value) => handleChange("combo_ids", value)} disabled={isIssuedGift} loading={conditionOptions.loading} loadError={conditionOptions.comboError} error={errors.combo_ids} />
                 </div>
-              </div>
-              <div className="segmented-options">
-                <label>
-                  <input type="checkbox" checked={formData.combo_required} onChange={(event) => handleChange("combo_required", event.target.checked)} disabled={isIssuedGift} />
-                  Mua combo
-                </label>
-                <label>
-                  <input type="checkbox" checked={formData.birthday} onChange={(event) => handleChange("birthday", event.target.checked)} disabled={isIssuedGift} />
-                  Sinh nhật
-                </label>
-                <label>
-                  <input type="checkbox" checked={formData.new_member} onChange={(event) => handleChange("new_member", event.target.checked)} disabled={isIssuedGift} />
-                  Thành viên mới
-                </label>
               </div>
               <div className="form-row">
                 <div className="form-group">
@@ -651,7 +747,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Hủy bỏ</button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo quà tặng"}</button>
+            <button type="submit" className="btn btn-primary" disabled={isLoading || imageUploading}>{isLoading || imageUploading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo quà tặng"}</button>
           </div>
         </form>
       </div>
@@ -914,13 +1010,11 @@ const GiftsPage = () => {
             </select>
             <select className="user-filter-select" value={statusFilter} onChange={handleFilterChange(setStatusFilter, "status")}>
               <option value="">Tất cả trạng thái</option>
-              <option value="draft">Nháp</option>
               <option value="upcoming">Sắp diễn ra</option>
               <option value="active">Đang hoạt động</option>
               <option value="paused">Tạm dừng</option>
               <option value="out_of_stock">Hết quà</option>
               <option value="expired">Hết hạn</option>
-              <option value="cancelled">Đã hủy</option>
             </select>
             <select className="user-filter-select" value={stockFilter} onChange={handleFilterChange(setStockFilter, "stock")}>
               <option value="">Tất cả tồn quà</option>
@@ -946,27 +1040,22 @@ const GiftsPage = () => {
           </div>
         ) : (
           <>
-            <div className="table-wrapper vouchers-table-wrapper">
+            <div className="table-wrapper gifts-table-wrapper" tabIndex={0} role="region" aria-label="Danh sách quà tặng, có thể cuộn ngang">
               <table className="data-table vouchers-table gifts-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "74px" }}>Hình ảnh</th>
-                    <th style={{ width: "120px" }}>Mã quà</th>
-                    <th>Tên quà</th>
-                    <th style={{ width: "140px" }}>Loại quà</th>
-                    <th style={{ width: "120px" }}>Giá trị</th>
-                    <th style={{ width: "100px" }}>Số lượng</th>
-                    <th style={{ width: "100px" }}>Đã phát</th>
-                    <th style={{ width: "100px" }}>Còn lại</th>
-                    <th style={{ width: "180px" }}>Thời gian áp dụng</th>
-                    <th style={{ width: "140px" }}>Trạng thái</th>
-                    <th style={{ width: "170px", textAlign: "center" }}>Thao tác</th>
+                    <th>Quà tặng</th>
+                    <th>Giá trị</th>
+                    <th>Hiệu lực</th>
+                    <th>Lượt phát</th>
+                    <th>Trạng thái</th>
+                    <th style={{ textAlign: "center" }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {gifts.length === 0 ? (
                     <tr>
-                      <td colSpan="11">
+                      <td colSpan="6">
                         <div className="table-empty">
                           <div className="table-empty-icon">%</div>
                           <div className="table-empty-text">Chưa có quà tặng phù hợp</div>
@@ -982,24 +1071,29 @@ const GiftsPage = () => {
                       return (
                         <tr key={gift._id}>
                           <td>
+                            <div className="gift-table-identity">
                             <div className="gift-thumb">
                               {imageUrl ? <img src={imageUrl} alt={gift.name} /> : <HiOutlineGift />}
                             </div>
-                          </td>
-                          <td><span className="voucher-code">{gift.code}</span></td>
-                          <td>
+                            <div className="gift-table-info">
+                            <span className="voucher-code">{gift.code}</span>
                             <div className="table-cell-name">{gift.name}</div>
-                            {gift.description && <div className="table-cell-desc">{gift.description}</div>}
+                            </div>
+                            </div>
                           </td>
-                          <td>{gift.type_label || typeLabels[gift.type] || gift.type}</td>
-                          <td className="voucher-discount-value">{formatGiftValue(gift)}</td>
-                          <td>{Number(gift.quantity || 0).toLocaleString("vi-VN")}</td>
-                          <td>{Number(gift.issued_quantity || 0).toLocaleString("vi-VN")}</td>
                           <td>
-                            <strong className="text-usage">{Number(gift.remaining_quantity || 0).toLocaleString("vi-VN")}</strong>
+                            <strong className="voucher-discount-value">{formatGiftValue(gift)}</strong>
+                            <span className="voucher-cell-sub">{gift.type_label || typeLabels[gift.type] || gift.type}</span>
                           </td>
                           <td className="table-cell-date">
-                            {formatDate(gift.start_date)} - {formatDate(gift.end_date)}
+                            <span>{formatDate(gift.start_date)}</span>
+                            <span className="voucher-date-separator">→</span>
+                            <span>{formatDate(gift.end_date)}</span>
+                          </td>
+                          <td>
+                            <strong className="text-usage">{Number(gift.issued_quantity || 0).toLocaleString("vi-VN")}</strong>
+                            <span className="text-muted-inline"> / {Number(gift.quantity || 0).toLocaleString("vi-VN")}</span>
+                            <span className="voucher-cell-sub">Còn lại: {Number(gift.remaining_quantity || 0).toLocaleString("vi-VN")}</span>
                           </td>
                           <td>
                             <span className={`status-badge ${statusClass}`}>{gift.computed_status_label}</span>

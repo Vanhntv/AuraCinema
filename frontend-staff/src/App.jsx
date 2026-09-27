@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   HiOutlineBell,
   HiOutlineChartBar,
@@ -9,11 +10,13 @@ import {
   HiOutlineQrcode,
   HiOutlineSearch,
   HiOutlineShoppingBag,
-  HiOutlineSparkles,
+  HiOutlineSun,
   HiOutlineViewGrid,
 } from "react-icons/hi";
+import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import "./App.css";
 import TransactionHistory from "./TransactionHistory.jsx";
+import { validateSeatSpacing } from "../../shared/seatSpacing.mjs";
 import auraCinemaLogo from "../../frontend-user/src/assets/logo-datn-auracinema.jpg";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
@@ -32,6 +35,44 @@ const titles = {
   history: ["Lịch sử giao dịch", "Các giao dịch gần đây", "Tra cứu hóa đơn, trạng thái thanh toán và lịch sử bán vé."],
 };
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
+
+const initialNotifications = [
+  {
+    id: 1,
+    title: "Có vé mới cần kiểm tra",
+    description: "Một giao dịch bán vé tại quầy vừa được ghi nhận.",
+    time: "5 phút trước",
+    isRead: false,
+  },
+  {
+    id: 2,
+    title: "Suất chiếu sắp bắt đầu",
+    description: "Hãy chuẩn bị kiểm tra vé cho suất chiếu tiếp theo.",
+    time: "20 phút trước",
+    isRead: false,
+  },
+  {
+    id: 3,
+    title: "Báo cáo ca đã được cập nhật",
+    description: "Số liệu bán vé và check-in trong ca đã sẵn sàng.",
+    time: "1 giờ trước",
+    isRead: true,
+  },
+];
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+const getInitialTheme = () => {
+  if (typeof window === "undefined") return false;
+  const savedTheme = window.localStorage.getItem("theme");
+  if (savedTheme) return savedTheme === "dark";
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+};
 
 const headers = () => {
   const token = localStorage.getItem("staffAccessToken") || localStorage.getItem("adminAccessToken") || localStorage.getItem("accessToken");
@@ -66,8 +107,26 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [staff, setStaff] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
+  const [isDarkMode, setIsDarkMode] = useState(getInitialTheme);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState(initialNotifications);
+  const searchRef = useRef(null);
+  const notificationRef = useRef(null);
   const [crumb, title, description] = titles[active];
   consumeStaffTokenFromHash();
+
+  const filteredSearchResults = useMemo(() => {
+    const keyword = normalizeSearchText(searchTerm);
+    if (!keyword) return [];
+    return menu
+      .filter(([, label]) => normalizeSearchText(label).includes(keyword))
+      .map(([id, label]) => ({ id, label }));
+  }, [searchTerm]);
+
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   useEffect(() => {
     let live = true;
@@ -77,8 +136,75 @@ export default function App() {
     return () => { live = false; };
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDarkMode);
+    window.localStorage.setItem("theme", isDarkMode ? "dark" : "light");
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false);
+        setActiveSearchIndex(-1);
+      }
+      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const staffName = staff?.full_name || staff?.email || "Nhân viên";
   const staffInitial = staffName.charAt(0).toUpperCase();
+
+  const selectSearchResult = (result) => {
+    setActive(result.id);
+    setSearchTerm("");
+    setShowSearchResults(false);
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setSearchTerm(value);
+    setShowSearchResults(Boolean(value.trim()));
+    setActiveSearchIndex(-1);
+  };
+
+  const handleSearchKeyDown = (event) => {
+    if (event.key === "Escape") {
+      setShowSearchResults(false);
+      setActiveSearchIndex(-1);
+      return;
+    }
+    if (!filteredSearchResults.length) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => (current + 1) % filteredSearchResults.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setShowSearchResults(true);
+      setActiveSearchIndex((current) => current <= 0 ? filteredSearchResults.length - 1 : current - 1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      selectSearchResult(filteredSearchResults[activeSearchIndex] || filteredSearchResults[0]);
+    }
+  };
+
+  const markNotificationAsRead = (notificationId) => {
+    setNotifications((current) => current.map((notification) =>
+      notification.id === notificationId ? { ...notification, isRead: true } : notification,
+    ));
+  };
+
+  const markAllNotificationsAsRead = () => {
+    setNotifications((current) => current.map((notification) => ({ ...notification, isRead: true })));
+  };
+
   const handleLogout = () => {
     localStorage.removeItem("staffAccessToken");
     localStorage.removeItem("adminAccessToken");
@@ -99,7 +225,7 @@ export default function App() {
           {menu.map(([id, label, Icon]) => <button key={id} type="button" className={`sidebar-link ${active === id ? "active" : ""}`} onClick={() => { setActive(id); setMobile(false); }} title={collapsed ? label : undefined}><span className="sidebar-link-icon"><Icon /></span><span className="sidebar-link-text">{label}</span></button>)}
         </nav>
         <div className="sidebar-footer">
-          <div className="sidebar-footer-kicker"><HiOutlineSparkles /><span>Vận hành rạp phim</span></div>
+          <div className="sidebar-footer-kicker"><span>Vận hành rạp phim</span></div>
           <div className="sidebar-footer-info"><div className="sidebar-footer-avatar">{staffInitial}</div><div className="sidebar-footer-details"><strong>{staffName}</strong><span>Nhân viên quầy vé</span></div></div>
         </div>
       </aside>
@@ -112,9 +238,92 @@ export default function App() {
             <div className="header-title-group"><div className="breadcrumb"><span>Nhân viên</span><b>/</b><span>{crumb}</span></div><strong>{crumb}</strong></div>
           </div>
           <div className="header-right">
-            <label className="header-search"><HiOutlineSearch /><input placeholder="Tìm kiếm..." aria-label="Tìm kiếm" /></label>
-            <button type="button" className="header-icon" title="Chế độ tối"><HiOutlineMoon /></button>
-            <button type="button" className="header-icon header-notification" title="Thông báo"><HiOutlineBell /><i /></button>
+            <div className="header-search" ref={searchRef}>
+              <HiOutlineSearch aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="Tìm kiếm chức năng..."
+                aria-label="Tìm kiếm chức năng"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={showSearchResults}
+                aria-controls="staff-search-results"
+                value={searchTerm}
+                onChange={handleSearchChange}
+                onFocus={() => setShowSearchResults(Boolean(searchTerm.trim()))}
+                onKeyDown={handleSearchKeyDown}
+              />
+              {showSearchResults && (
+                <div className="staff-search-dropdown" id="staff-search-results" role="listbox">
+                  {filteredSearchResults.length ? filteredSearchResults.map((result, index) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={activeSearchIndex === index}
+                      className={activeSearchIndex === index ? "active" : ""}
+                      key={result.id}
+                      onMouseEnter={() => setActiveSearchIndex(index)}
+                      onClick={() => selectSearchResult(result)}
+                    >
+                      <HiOutlineSearch aria-hidden="true" />
+                      <strong>{result.label}</strong>
+                    </button>
+                  )) : (
+                    <p>Không tìm thấy chức năng phù hợp.</p>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className="header-icon"
+              onClick={() => setIsDarkMode((current) => !current)}
+              title={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+              aria-label={isDarkMode ? "Chuyển sang chế độ sáng" : "Chuyển sang chế độ tối"}
+            >
+              {isDarkMode ? <HiOutlineSun aria-hidden="true" /> : <HiOutlineMoon aria-hidden="true" />}
+            </button>
+            <div className="staff-notification-wrap" ref={notificationRef}>
+              <button
+                type="button"
+                className="header-icon header-notification"
+                title="Thông báo"
+                aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
+                aria-expanded={showNotifications}
+                onClick={() => {
+                  setShowNotifications((current) => !current);
+                  setShowSearchResults(false);
+                }}
+              >
+                <HiOutlineBell aria-hidden="true" />
+                {unreadCount > 0 && <i />}
+              </button>
+              {showNotifications && (
+                <div className="staff-notification-dropdown">
+                  <div className="staff-notification-heading">
+                    <div>
+                      <h2>Thông báo</h2>
+                      <p>{unreadCount ? `${unreadCount} thông báo chưa đọc` : "Bạn đã đọc tất cả"}</p>
+                    </div>
+                    <button type="button" onClick={markAllNotificationsAsRead} disabled={!unreadCount}>
+                      Đọc tất cả
+                    </button>
+                  </div>
+                  <ul>
+                    {notifications.map((notification) => (
+                      <li className={notification.isRead ? "read" : "unread"} key={notification.id}>
+                        <button type="button" onClick={() => markNotificationAsRead(notification.id)}>
+                          {!notification.isRead && <i />}
+                          <strong>{notification.title}</strong>
+                          <span>{notification.description}</span>
+                          <time>{notification.time}</time>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
             <div className="header-user"><div>{staffInitial}</div><span><strong>{staffName}</strong><small>Nhân viên quầy vé</small></span></div>
             <button type="button" className="header-icon" onClick={handleLogout} title="Đăng xuất"><HiOutlineLogout /></button>
           </div>
@@ -130,6 +339,53 @@ export default function App() {
 
 const STAFF_SCANNER_ID = "staff-ticket-qr-reader";
 const BOOKING_QR_PREFIX = "AURA_BOOKING_V2:";
+const AURA_TICKET_PLUS_SEPARATOR_PATTERN = /^(AURA\d{12})\+([A-Z]+\d+)$/;
+const AURA_BOOKING_CODE_PATTERN = /^AURA\d{12}$/;
+
+const normalizeTicketLookupCode = (value) =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(AURA_TICKET_PLUS_SEPARATOR_PATTERN, "$1-$2");
+
+const isAuraBookingCode = (value) => AURA_BOOKING_CODE_PATTERN.test(normalizeTicketLookupCode(value));
+
+const normalizeBookingPrintResult = (response, printed = false) => {
+  const printData = response?.data || {};
+  const booking = printData.booking || {};
+  const seats = Array.isArray(booking.seats) ? booking.seats : [];
+  const seatLabels = seats
+    .map((item) => item.seat_label || item.seatLabel || item.label || item.seat_code)
+    .filter(Boolean);
+  const seatTypes = [...new Set(seats
+    .map((item) => item.seat_type || item.seatType || item.type)
+    .filter(Boolean))];
+  const printableCount = printData.tickets?.length || 0;
+  const skippedTickets = printData.skippedTickets || [];
+  const allAlreadyPrinted = !printableCount
+    && skippedTickets.length > 0
+    && skippedTickets.every((item) => item.reason === "ALREADY_PRINTED");
+
+  return {
+    ...response,
+    data: {
+      qrType: "BOOKING",
+      ticketCode: booking.bookingCode,
+      status: "ORDER",
+      movie: { title: booking.movie?.title || "" },
+      showtime: { startTime: booking.showtime?.start_time || null },
+      room: { name: booking.showtime?.room_name || "" },
+      seat: { label: seatLabels.join(", "), type: seatTypes.join(", ") },
+      booking: {
+        bookingCode: booking.bookingCode,
+        combos: Array.isArray(booking.services) ? booking.services : [],
+      },
+      canPrint: !printed && printableCount > 0,
+      printedAt: printed || allAlreadyPrinted ? new Date().toISOString() : null,
+      printData,
+    },
+  };
+};
 
 function TicketScanner() {
   const scannerRef = useRef(null);
@@ -138,10 +394,10 @@ function TicketScanner() {
   const [cameraActive, setCameraActive] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
-  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc nhập mã vé.");
+  const [printing, setPrinting] = useState(false);
+  const [message, setMessage] = useState("Camera chưa bật. Bạn cũng có thể tải ảnh QR hoặc tra cứu bằng mã vé.");
   const [result, setResult] = useState(null);
   const [currentQrToken, setCurrentQrToken] = useState("");
-  const [qrText, setQrText] = useState("");
   const [ticketCode, setTicketCode] = useState("");
   const ticket = result?.data || null;
   const services = ticket?.booking?.combos?.length
@@ -169,9 +425,10 @@ function TicketScanner() {
     processingRef.current = true; setProcessing(true); setResult(null); setCurrentQrToken(token); setMessage("Đang xác minh vé...");
     await stopCamera();
     try {
-      const verifyPath = token.startsWith(BOOKING_QR_PREFIX) ? "/staff/pos/bookings/verify" : "/staff/pos/tickets/verify";
+      const isBookingQr = token.startsWith(BOOKING_QR_PREFIX);
+      const verifyPath = isBookingQr ? "/staff/pos/bookings/lookup-print" : "/staff/pos/tickets/verify";
       const response = await api(verifyPath, { method: "POST", body: JSON.stringify({ qrToken: token }), returnBody: true });
-      setResult(response); setMessage(response.message);
+      setResult(isBookingQr ? normalizeBookingPrintResult(response) : response); setMessage(response.message);
     } catch (err) {
       setResult({ success: false, message: err.message, data: err.data }); setMessage(err.message);
     } finally { processingRef.current = false; setProcessing(false); }
@@ -206,12 +463,17 @@ function TicketScanner() {
 
   const lookupTicket = async (event) => {
     event.preventDefault();
-    const code = ticketCode.trim().toUpperCase();
+    const code = normalizeTicketLookupCode(ticketCode);
     if (!code || processingRef.current) return;
     processingRef.current = true; setProcessing(true); setResult(null); setMessage("Đang tra cứu mã vé...");
     try {
-      const response = await api("/staff/pos/tickets/lookup", { method: "POST", body: JSON.stringify({ ticketCode: code }), returnBody: true });
-      setResult(response); setCurrentQrToken(response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
+      const bookingLookup = isAuraBookingCode(code);
+      const response = await api(bookingLookup ? "/staff/pos/bookings/lookup-print" : "/staff/pos/tickets/lookup", {
+        method: "POST",
+        body: JSON.stringify(bookingLookup ? { bookingCode: code } : { ticketCode: code }),
+        returnBody: true,
+      });
+      setResult(bookingLookup ? normalizeBookingPrintResult(response) : response); setCurrentQrToken(bookingLookup ? "" : response.qrPayload || ""); setTicketCode(code); setMessage(response.message);
     } catch (err) { setResult({ success: false, message: err.message, data: err.data }); setCurrentQrToken(""); setMessage(err.message); }
     finally { processingRef.current = false; setProcessing(false); }
   };
@@ -226,9 +488,112 @@ function TicketScanner() {
     finally { setCheckingIn(false); }
   };
 
-  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setQrText(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+  const printTicket = async () => {
+    if (!ticket || printing || ticket.canPrint === false || ticket.printedAt) return;
+    setPrinting(true);
+    try {
+      if (ticket.qrType === "BOOKING") {
+        const response = await api("/staff/pos/bookings/scan-print", {
+          method: "POST",
+          body: JSON.stringify({
+            ...(currentQrToken.startsWith(BOOKING_QR_PREFIX) ? { qrToken: currentQrToken } : {}),
+            bookingCode: ticket.booking?.bookingCode,
+          }),
+          returnBody: true,
+        });
+        setResult(normalizeBookingPrintResult(response, true));
+        const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js");
+        await printBookingOrder(response.data);
+        setMessage(`Đã ghi nhận và mở hộp thoại in ${response.data?.tickets?.length || 0} vé. Đơn vé không thể in lại.`);
+      } else {
+        const response = await api("/staff/pos/tickets/print", {
+          method: "POST",
+          body: JSON.stringify({ qrToken: currentQrToken }),
+          returnBody: true,
+        });
+        setResult(response);
+        const { printTicketPdf } = await import("../../frontend-user/src/utils/ticketPdf.js");
+        await printTicketPdf(response.data, currentQrToken);
+        setMessage("Đã ghi nhận và mở hộp thoại in vé. Vé không thể in lại.");
+      }
+    } catch (err) {
+      if (err.data) setResult({ success: false, message: err.message, data: err.data });
+      setMessage(err.message || "Không thể in vé.");
+    } finally { setPrinting(false); }
+  };
 
-  return <div className="staff-scanner"><section className="scanner-panel"><div className="scanner-heading"><div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div><span>⌗</span></div><div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} /><div id="staff-ticket-file-reader" className="scanner-file-reader" /><div className="scanner-controls"><button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button><button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button><input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden /></div><form className="scanner-token-form" onSubmit={(event) => { event.preventDefault(); verifyQr(qrText); }}><label htmlFor="staff-qr-token">Hoặc nhập nội dung mã QR</label><div><input id="staff-qr-token" value={qrText} onChange={(event) => setQrText(event.target.value)} placeholder="AURA_TICKET:... hoặc AURA_BOOKING_V2:..." /><button disabled={!qrText.trim() || processing}>Kiểm tra</button></div></form><form className="scanner-token-form" onSubmit={lookupTicket}><label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label><div><input id="staff-ticket-code" value={ticketCode} onChange={(event) => setTicketCode(event.target.value.toUpperCase())} placeholder="Nhập mã vé" /><button disabled={!ticketCode.trim() || processing}>Tra cứu</button></div></form><p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang xử lý..." : message}</p></section><section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}><div className="scanner-heading"><div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div><span>🎟</span></div>{ticket ? <><div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div><div className="scan-ticket-grid"><Info label="Phim" value={ticket.movie?.title} /><Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} /><Info label="Phòng" value={ticket.room?.name} /><Info label={ticket.qrType === "BOOKING" ? "Toàn bộ ghế" : "Ghế"} value={ticket.seat?.label || ticket.seatLabel} /><Info label="Loại ghế" value={ticket.seat?.type} /><Info label="Dịch vụ" value={services} /></div>{ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}<button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button></> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}</section></div>;
+  const reset = async () => { await stopCamera(); setResult(null); setCurrentQrToken(""); setTicketCode(""); setMessage("Sẵn sàng quét vé tiếp theo."); };
+
+  return (
+    <div className="staff-scanner">
+      <section className="scanner-panel">
+        <div className="scanner-heading">
+          <div><h2>Quét mã QR</h2><p>Dùng camera hoặc tải ảnh QR từ thiết bị.</p></div>
+          <span>⌗</span>
+        </div>
+        <div id={STAFF_SCANNER_ID} className={`scanner-viewfinder ${cameraActive ? "active" : ""}`} />
+        <div id="staff-ticket-file-reader" className="scanner-file-reader" />
+        <div className="scanner-controls">
+          <button type="button" className="scanner-primary" onClick={cameraActive ? stopCamera : startCamera} disabled={processing}>{cameraActive ? "Dừng camera" : "Bật camera"}</button>
+          <button type="button" onClick={() => fileInputRef.current?.click()} disabled={processing}>Tải ảnh QR</button>
+          <input ref={fileInputRef} type="file" accept="image/*" onChange={scanFile} hidden />
+        </div>
+        <form className="scanner-token-form" onSubmit={lookupTicket}>
+          <label htmlFor="staff-ticket-code">Tra cứu bằng mã vé</label>
+          <div>
+            <input
+              id="staff-ticket-code"
+              value={ticketCode}
+              onChange={(event) => setTicketCode(event.target.value.toUpperCase())}
+              placeholder="Ví dụ: AURA790641104155"
+              minLength={6}
+              maxLength={64}
+              autoComplete="off"
+              spellCheck="false"
+              disabled={processing}
+              required
+            />
+            <button disabled={!ticketCode.trim() || processing}>{processing ? "Đang tìm..." : "Tra cứu"}</button>
+          </div>
+        </form>
+        <p className={`scanner-message ${result ? (result.success ? "success" : "error") : ""}`}>{processing ? "Đang tra cứu mã vé..." : message}</p>
+      </section>
+
+      <section className={`scanner-panel scanner-result ${result ? (result.success ? "success" : "error") : ""}`}>
+        <div className="scanner-heading">
+          <div><h2>Kết quả quét</h2><p>Kiểm tra thông tin trước khi cho khách vào rạp.</p></div>
+          <span>🎟</span>
+        </div>
+        {ticket ? <>
+          <div className="scan-status"><strong>{result.message}</strong><span>{ticket.ticketCode || "Không có mã vé"}</span></div>
+          <div className="scan-ticket-grid">
+            {ticket.qrType === "BOOKING" ? <>
+              <Info label="Mã đơn" value={ticket.booking?.bookingCode || ticket.ticketCode} />
+              <Info label="Phim" value={ticket.movie?.title} />
+              <Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} />
+              <Info label="Phòng" value={ticket.room?.name} />
+              <Info label="Toàn bộ ghế" value={ticket.seat?.label} />
+              <Info label="Loại ghế" value={ticket.seat?.type} />
+              <Info label="Dịch vụ" value={services} />
+            </> : <>
+              <Info label="Mã vé" value={ticket.ticketCode} />
+              <Info label="Phim" value={ticket.movie?.title} />
+              <Info label="Suất chiếu" value={dateTime(ticket.showtime?.startTime)} />
+              <Info label="Phòng" value={ticket.room?.name} />
+              <Info label="Ghế" value={ticket.seat?.label || ticket.seatLabel} />
+              <Info label="Loại ghế" value={ticket.seat?.type} />
+              <Info label="Giá vé" value={money.format(Number(ticket.price || 0))} />
+              <Info label="Mã đơn" value={ticket.booking?.bookingCode} />
+              <Info label="Dịch vụ" value={services} />
+            </>}
+          </div>
+          <button type="button" className="print-ticket-button" onClick={printTicket} disabled={printing || ticket.canPrint === false || Boolean(ticket.printedAt)}>{printing ? "Đang chuẩn bị in..." : ticket.printedAt || ticket.canPrint === false ? "Đã in" : ticket.qrType === "BOOKING" ? "In đơn vé" : "In vé"}</button>
+          {ticket.qrType !== "BOOKING" && <button type="button" className="checkin-button" onClick={checkIn} disabled={!currentQrToken || checkingIn || ticket.status !== "VALID"}>{checkingIn ? "Đang check-in..." : ticket.status === "CHECKED_IN" ? "Vé đã check-in" : "Xác nhận check-in"}</button>}
+          <button type="button" className="scan-next-button" onClick={reset}>Quét vé tiếp theo</button>
+        </> : <div className="scanner-empty"><span>⌗</span><p>Chưa có vé được quét.</p></div>}
+      </section>
+    </div>
+  );
 }
 
 function Info({ label, value }) { return <div><span>{label}</span><strong>{value || "—"}</strong></div>; }
@@ -264,7 +629,7 @@ function ShiftReport() {
   const cashTotal = Number(report?.cash_total || 0);
   const ticketCount = Number(report?.pos_ticket_count || 0);
   const onlineScannedCount = Number(report?.online_scanned_count || 0);
-  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền mặt thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong>{loading ? "..." : `${onlineScannedCount} vé`}</strong><small>Vé online do bạn xác nhận check-in trong ngày.</small></article></div></section>;
+  return <section className="shift-report"><div className="shift-meta"><span>Nhân viên: <strong>{report?.staff_name || "Nhân viên"}</strong></span><i /><span>Ngày: <strong>{formatReportDate(report?.date || today)}</strong></span></div>{error && <div className="shift-error">{error}</div>}<div className="shift-summary"><article className="cash"><div className="shift-card-title"><span>＄</span>Tiền thu tại quầy</div><strong>{loading ? "..." : money.format(cashTotal)}</strong><small>Tổng số tiền cần nộp lại cho quản lý cuối ca.</small></article><article className="tickets"><div className="shift-card-title"><span>🎟</span>Vé bán tại quầy (POS)</div><strong>{loading ? "..." : `${ticketCount} vé`}</strong><small>Số lượng vé in ra trực tiếp bằng tiền mặt.</small></article><article className="online"><div className="shift-card-title"><span>⌗</span>Vé online đã quét</div><strong>{loading ? "..." : `${onlineScannedCount} vé`}</strong><small>Vé online do bạn xác nhận check-in trong ngày.</small></article></div></section>;
 }
 
 function RoomSeatManagement() {
@@ -373,6 +738,7 @@ function MaintenanceSeatMap({ seats, updatingIds, updateStatus }) {
 }
 
 function CounterSale() {
+  const [seatError, setSeatError] = useState("");
   const [showtimes, setShowtimes] = useState([]), [current, setCurrent] = useState(null), [seats, setSeats] = useState([]), [selected, setSelected] = useState([]), [loading, setLoading] = useState(true), [seatLoading, setSeatLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [sale, setSale] = useState(null);
   const [combos, setCombos] = useState([]), [comboQuantities, setComboQuantities] = useState({}), [comboLoading, setComboLoading] = useState(true), [comboError, setComboError] = useState("");
   const [holdToken, setHoldToken] = useState(""), [holdExpiresAt, setHoldExpiresAt] = useState(null), [remainingHoldSeconds, setRemainingHoldSeconds] = useState(0);
@@ -382,8 +748,45 @@ function CounterSale() {
   const [clock, setClock] = useState(() => Date.now());
   const [selectedDate, setSelectedDate] = useState(() => getVietnamDateValue());
   const [selectedMovieId, setSelectedMovieId] = useState("");
-  const dateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
-  const effectiveDate = dateOptions.some((item) => item.value === selectedDate) ? selectedDate : dateOptions[0].value;
+  const [datePickerAnchor, setDatePickerAnchor] = useState(null);
+  const resetOrder = () => { setSeatError(""); holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
+  const changeDate = (date) => {
+    if (date === "__date_picker__") {
+      const calendarButton = document.activeElement?.closest?.(".pos-date-tabs > button:last-child");
+      setDatePickerAnchor((current) => current ? null : calendarButton);
+      return;
+    }
+
+    setDatePickerAnchor(null);
+    if (!date || date === selectedDate) return;
+    setSelectedDate(date);
+    setSelectedMovieId("");
+    resetOrder();
+    setError("");
+    setLoading(true);
+  };
+  const rollingDateOptions = useMemo(() => getRollingDateOptions(clock), [clock]);
+  const isCustomDate = !rollingDateOptions.some((item) => item.value === selectedDate);
+  const queryDate = selectedDate || rollingDateOptions[0].value;
+  const dateOptions = [
+    ...rollingDateOptions,
+    {
+      value: "__date_picker__",
+      label: isCustomDate ? formatReportDate(selectedDate) : "Ngày khác",
+      day: (
+        <StaffDatePopover
+          key={`${queryDate}-${datePickerAnchor ? "open" : "closed"}`}
+          anchor={datePickerAnchor}
+          minDate={getVietnamDateValue(clock)}
+          selectedDate={queryDate}
+          onClose={() => setDatePickerAnchor(null)}
+          onSelect={changeDate}
+        />
+      ),
+      month: null,
+    },
+  ];
+  const effectiveDate = isCustomDate ? "__date_picker__" : selectedDate;
   const visibleShowtimes = useMemo(() => showtimes.filter((item) => item.status === "scheduled" && new Date(item.start_time).getTime() > clock), [showtimes, clock]);
   const movies = useMemo(() => {
     const groupedMovies = new Map();
@@ -402,7 +805,7 @@ function CounterSale() {
   const comboTotal = selectedCombos.reduce((sum, item) => sum + Number(item.price || 0) * item.quantity, 0);
   const total = seatTotal + comboTotal;
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
-  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(effectiveDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [effectiveDate, clock]);
+  useEffect(() => { let live = true; api(`/staff/pos/showtimes?date=${encodeURIComponent(queryDate)}`).then((data) => { if (live) { setShowtimes(data); setError(""); } }).catch((err) => live && setError(err.message)).finally(() => live && setLoading(false)); return () => { live = false; }; }, [queryDate, clock]);
   useEffect(() => { let live = true; api("/combos/public?limit=100").then((data) => { const list = Array.isArray(data) ? data : data?.data || []; if (live) { setCombos(list.filter((item) => item.status)); setComboError(""); } }).catch((err) => { if (live) { setCombos([]); setComboError(err.message); } }).finally(() => live && setComboLoading(false)); return () => { live = false; }; }, []);
   useEffect(() => {
     const showtimeId = current?.id;
@@ -459,19 +862,29 @@ function CounterSale() {
     const timer = window.setInterval(updateCountdown, 1_000);
     return () => window.clearInterval(timer);
   }, [holdExpiresAt]);
-  const resetOrder = () => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(null); setSeats([]); setSelected([]); setComboQuantities({}); setSale(null); };
-  const changeDate = (date) => { setSelectedDate(date); setSelectedMovieId(""); resetOrder(); setError(""); setLoading(true); };
   const chooseMovie = (movie) => { setSelectedMovieId(String(movie.id)); resetOrder(); setError(""); };
-  const choose = async (showtime) => { holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(showtime); setSelected([]); setSeats([]); setComboQuantities({}); setSale(null); setError(""); setSeatLoading(true); try { const [data, activeHold] = await Promise.all([api(`/showtime-seats?showtime_id=${showtime.id}`), api(`/showtime-seats/hold/active?showtime_id=${showtime.id}`)]); const normalizedSeats = data.map(normalizeSeat); const heldIds = new Set((activeHold?.showtime_seat_ids || []).map(String)); holdIdRef.current = String(activeHold?.hold_id || ""); setHoldToken(activeHold?.hold_token || ""); setHoldExpiresAt(activeHold?.expires_at || null); setRemainingHoldSeconds(getRemainingHoldSeconds(activeHold?.expires_at)); setSelected(normalizedSeats.filter((seat) => heldIds.has(String(seat.id))).map((seat) => seat.id)); setSeats(normalizedSeats); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
+  const choose = async (showtime) => { setSeatError(""); holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setRemainingHoldSeconds(0); setCurrent(showtime); setSelected([]); setSeats([]); setComboQuantities({}); setSale(null); setError(""); setSeatLoading(true); try { const [data, activeHold] = await Promise.all([api(`/showtime-seats?showtime_id=${showtime.id}`), api(`/showtime-seats/hold/active?showtime_id=${showtime.id}`)]); const normalizedSeats = data.map(normalizeSeat); const heldIds = new Set((activeHold?.showtime_seat_ids || []).map(String)); holdIdRef.current = String(activeHold?.hold_id || ""); setHoldToken(activeHold?.hold_token || ""); setHoldExpiresAt(activeHold?.expires_at || null); setRemainingHoldSeconds(getRemainingHoldSeconds(activeHold?.expires_at)); setSelected(normalizedSeats.filter((seat) => heldIds.has(String(seat.id))).map((seat) => seat.id)); setSeats(normalizedSeats); } catch (err) { setError(err.message); } finally { setSeatLoading(false); } };
   const toggle = async (seat) => {
     if (seatBusyRef.current) return;
+    setSeatError("");
     const couplePair = getCoupleSeatPair(seat, seats, (item) => item);
     if (seat.type === "couple" && !couplePair) { setError("Ghế đôi này chưa có đủ cặp liền kề để bán."); return; }
     const seatsToToggle = couplePair || [seat];
     const selectedIds = new Set(selected);
+    // A seat being deselected is empty in the proposed selection, even if the API still reports it as held.
+    const spacingSeats = seats.map((item) => selectedIds.has(item.id) ? { ...item, status: "available" } : item);
     seatBusyRef.current = true;
     if (seatsToToggle.some((item) => selectedIds.has(item.id))) {
       const releaseIds = seatsToToggle.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
+      const remainingSelection = selected.filter((id) => !releaseIds.includes(id));
+      const spacingError = validateSeatSpacing(remainingSelection, spacingSeats);
+      if (spacingError) {
+        seatBusyRef.current = false;
+        setSeatError(spacingError.includes("cách nhau")
+          ? "Đặt sai: không được bỏ trống một ghế ở giữa các ghế đang chọn."
+          : `Đặt sai: ${spacingError}`);
+        return;
+      }
       try {
         const result = await api("/showtime-seats/release", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: releaseIds, hold_token: holdToken }) });
         const remainingIds = (result.showtime_seat_ids || []).map(String);
@@ -485,6 +898,8 @@ function CounterSale() {
     }
     if (seatsToToggle.some((item) => item.status !== "available")) { seatBusyRef.current = false; setError("Cặp ghế đôi này đã có ghế không còn trống."); return; }
     const nextSelected = [...selected, ...seatsToToggle.map((item) => item.id)];
+    const spacingError = validateSeatSpacing(nextSelected, spacingSeats);
+    if (spacingError) { seatBusyRef.current = false; setSeatError(`Đặt sai: ${spacingError}`); return; }
     try {
       const result = await api("/showtime-seats/hold", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: nextSelected, hold_token: holdToken || undefined }) });
       holdIdRef.current = String(result.hold_id || "");
@@ -492,6 +907,7 @@ function CounterSale() {
       setHoldExpiresAt(result.expires_at || null);
       setRemainingHoldSeconds(getRemainingHoldSeconds(result.expires_at));
       setSelected(nextSelected);
+      setSale(null);
       setSeats((list) => list.map((item) => nextSelected.includes(item.id) ? { ...item, status: "available", holdId: String(result.hold_id || "") } : item));
       setError("");
     } catch (err) {
@@ -499,13 +915,123 @@ function CounterSale() {
       try { setSeats((await api(`/showtime-seats?showtime_id=${current.id}`)).map(normalizeSeat)); } catch { /* Keep the current map if reloading also fails. */ }
     } finally { seatBusyRef.current = false; }
   };
-  const updateComboQuantity = (combo, nextQuantity) => { const quantity = Math.min(Math.max(Number(nextQuantity) || 0, 0), Number(combo.stock || 0)); setComboQuantities((current) => { const next = { ...current }; if (quantity) next[combo._id] = quantity; else delete next[combo._id]; return next; }); };
+  const updateComboQuantity = (combo, nextQuantity) => { setSale(null); const quantity = Math.min(Math.max(Number(nextQuantity) || 0, 0), Number(combo.stock || 0)); setComboQuantities((current) => { const next = { ...current }; if (quantity) next[combo._id] = quantity; else delete next[combo._id]; return next; }); };
   const pay = async () => { if (!current || !selected.length || !holdToken) return; setBusy(true); setError(""); try { const data = await api("/staff/pos/sales", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: selected, hold_token: holdToken, combos: selectedCombos.map((item) => ({ combo_id: item._id, quantity: item.quantity })), payment_method: "cash" }) }); const soldSeatIds = [...selected]; holdIdRef.current = ""; setHoldToken(""); setHoldExpiresAt(null); setSale(data); setSeats((list) => list.map((seat) => soldSeatIds.includes(seat.id) ? { ...seat, status: "booked", holdId: "" } : seat)); setCombos((list) => list.map((combo) => ({ ...combo, stock: Math.max(Number(combo.stock || 0) - Number(comboQuantities[combo._id] || 0), 0) }))); setSelected([]); setComboQuantities({}); } catch (err) { setError(err.message); choose(current); } finally { setBusy(false); } };
-  const print = async () => { if (!sale || sale.printed || printing) return; setPrinting(true); setError(""); try { await api(`/staff/pos/sales/${sale.booking_id}/print`, { method: "POST" }); setSale((currentSale) => currentSale ? { ...currentSale, printed: true } : currentSale); window.print(); } catch (err) { setError(err.message); } finally { setPrinting(false); } };
-  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" text={holdExpiresAt && selected.length ? `Ghế đang được giữ trong ${formatHoldCountdown(remainingHoldSeconds)}.` : "Chọn ghế còn trống để bán vé. Thời gian giữ ghế là 5 phút."} />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <><SeatMap seats={seats} selected={selected} toggle={toggle} /><Step number="5" title="Chọn combo bắp nước" text="Có thể bỏ qua nếu khách hàng chỉ mua vé." /><ComboPicker combos={combos} quantities={comboQuantities} loading={comboLoading} error={comboError} updateQuantity={updateComboQuantity} /></>}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div>{selectedCombos.length > 0 && <div className="order-combos"><span>Combo bắp nước</span>{selectedCombos.map((item) => <div key={item._id}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.price || 0) * item.quantity)}</strong></div>)}</div>}<div className="order-breakdown"><span>Tiền vé <strong>{money.format(sale?.pricing?.ticket_subtotal ?? seatTotal)}</strong></span><span>Bắp nước <strong>{money.format(sale?.pricing?.service_subtotal ?? comboTotal)}</strong></span></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(sale?.total_price ?? total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span>{sale.combos?.length > 0 && <span>Combo: {sale.combos.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</span>}<button onClick={print} disabled={printing || sale.printed}>{printing ? "Đang chuẩn bị in..." : sale.printed ? "Vé cứng đã được in" : "In vé cứng"}</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
+  const print = async () => { if (!sale || sale.printed || printing) return; setPrinting(true); setError(""); try { const printData = await api(`/staff/pos/sales/${sale.booking_id}/print`, { method: "POST" }); setSale((currentSale) => currentSale ? { ...currentSale, printed: true } : currentSale); const { printBookingOrder } = await import("../../frontend-user/src/utils/bookingOrderPrint.js"); await printBookingOrder(printData); } catch (err) { setError(err.message); } finally { setPrinting(false); } };
+  return <div className="pos-layout"><section className="pos-workspace"><Step number="1" title="Chọn ngày chiếu" text={loading ? "Đang tải lịch chiếu..." : `${movies.length} phim · ${visibleShowtimes.length} suất chiếu sắp tới`} /><div className="pos-date-tabs">{dateOptions.map((date) => <button key={date.value} className={effectiveDate === date.value ? "active" : ""} onClick={() => changeDate(date.value)} aria-pressed={effectiveDate === date.value}><span>{date.label}</span><strong>{date.day}</strong><small>Tháng {date.month}</small></button>)}</div>{!loading && <><Step number="2" title="Chọn phim" text={movies.length ? "Chỉ hiển thị các phim có suất chiếu trong ngày đã chọn." : "Ngày này không còn phim có suất chiếu sắp tới."} />{movies.length ? <div className="movie-picker">{movies.map((movie) => <button className={`movie-card ${selectedMovieId === String(movie.id) ? "selected" : ""}`} onClick={() => chooseMovie(movie)} key={movie.id} aria-pressed={selectedMovieId === String(movie.id)}><span className="movie-poster"><span>{movie.title.slice(0, 2).toUpperCase()}</span>{movie.poster && <img src={movie.poster} alt={`Poster ${movie.title}`} />}</span><span className="movie-card-info"><strong>{movie.title}</strong><small>{movie.showtimes.length} suất chiếu</small><em>{movie.showtimes.reduce((sum, showtime) => sum + showtime.available_seats, 0)} lượt ghế trống</em></span></button>)}</div> : <p className="empty-note picker-empty">Không còn suất chiếu sắp tới trong ngày này.</p>}</>}{selectedMovie && <><Step number="3" title="Chọn suất chiếu" text={`${selectedMovie.showtimes.length} suất chiếu của ${selectedMovie.title}`} /><div className="showtime-picker">{selectedMovie.showtimes.map((showtime) => <button className={`showtime-card ${activeCurrent?.id === showtime.id ? "selected" : ""}`} onClick={() => choose(showtime)} key={showtime.id} aria-pressed={activeCurrent?.id === showtime.id}><span className="showtime-clock">{showtimeTime(showtime.start_time)}</span><span><strong>{showtime.room.name}</strong><small>{showtime.room.cinema}</small></span><em>{showtime.available_seats} ghế trống</em></button>)}</div></>}{activeCurrent && <><Step number="4" title="Chọn ghế" error={seatError} text={holdExpiresAt && selected.length ? `Ghế đang được giữ trong ${formatHoldCountdown(remainingHoldSeconds)}.` : "Chọn ghế còn trống để bán vé. Thời gian giữ ghế là 5 phút."} />{seatLoading ? <p className="empty-note">Đang tải sơ đồ ghế...</p> : <><SeatMap seats={seats} selected={selected} toggle={toggle} /><Step number="5" title="Chọn combo bắp nước" text="Có thể bỏ qua nếu khách hàng chỉ mua vé." /><ComboPicker combos={combos} quantities={comboQuantities} loading={comboLoading} error={comboError} updateQuantity={updateComboQuantity} /></>}</>}</section><aside className="order-panel"><h2>Thông tin đơn hàng</h2>{activeCurrent ? <><div className="order-row"><span>Phim</span><strong>{activeCurrent.movie.title}</strong></div><div className="order-row"><span>Suất chiếu</span><strong>{dateTime(activeCurrent.start_time)}</strong></div><div className="order-row"><span>Phòng</span><strong>{activeCurrent.room.name}</strong></div><div className="order-seats"><span>Ghế đã chọn</span><div>{chosen.length ? chosen.map((seat) => <b key={seat.id}>{seat.label}</b>) : "Chưa chọn ghế"}</div></div>{selectedCombos.length > 0 && <div className="order-combos"><span>Combo bắp nước</span>{selectedCombos.map((item) => <div key={item._id}><span>{item.name} × {item.quantity}</span><strong>{money.format(Number(item.price || 0) * item.quantity)}</strong></div>)}</div>}<div className="order-breakdown"><span>Tiền vé <strong>{money.format(sale?.pricing?.ticket_subtotal ?? seatTotal)}</strong></span><span>Bắp nước <strong>{money.format(sale?.pricing?.service_subtotal ?? comboTotal)}</strong></span></div><div className="order-total"><span>Tổng thanh toán</span><strong>{money.format(sale?.total_price ?? total)}</strong></div><div className="payment-method">✓ Thanh toán tiền mặt</div><button className="pay-button" disabled={!selected.length || busy} onClick={pay}>{busy ? "Đang xử lý..." : `Xác nhận thanh toán ${money.format(total)}`}</button></> : <p className="empty-note">Hãy chọn phim và suất chiếu để bắt đầu.</p>}{sale && <div className="sale-success"><strong>Thanh toán thành công</strong><span>Mã đơn: {sale.booking_code}</span><span>Vé: {sale.tickets.map((ticket) => ticket.seat).join(", ")}</span>{sale.combos?.length > 0 && <span>Combo: {sale.combos.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</span>}<button onClick={print} disabled={printing || sale.printed}>{printing ? "Đang chuẩn bị in..." : sale.printed ? "Đã in" : "In vé"}</button></div>}</aside>{error && <div className="pos-alert">{error}</div>}</div>;
 }
 
-function Step({ number, title, text }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p></div></div>; }
+function Step({ number, title, text, error }) { return <div className="pos-step"><span>{number}</span><div><h2>{title}</h2><p>{text}</p>{error && <p className="seat-selection-error" role="alert">{error}</p>}</div></div>; }
+function StaffDatePopover({ anchor, minDate, selectedDate, onClose, onSelect }) {
+  const popoverRef = useRef(null);
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const initialDate = new Date(`${selectedDate || minDate}T00:00:00`);
+    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
+  });
+
+  useEffect(() => {
+    if (!anchor) return undefined;
+    const handlePointerDown = (event) => {
+      if (popoverRef.current?.contains(event.target) || anchor.contains(event.target)) return;
+      onClose();
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    const handleViewportChange = () => onClose();
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [anchor, minDate, onClose, selectedDate]);
+
+  if (!anchor) return <FiCalendar aria-hidden="true" />;
+
+  const anchorRect = anchor.getBoundingClientRect();
+  const popoverWidth = 310;
+  const estimatedHeight = 350;
+  const left = Math.max(12, Math.min(anchorRect.left, window.innerWidth - popoverWidth - 12));
+  const openAbove = anchorRect.bottom + estimatedHeight > window.innerHeight && anchorRect.top > estimatedHeight;
+  const top = openAbove
+    ? Math.max(12, anchorRect.top - estimatedHeight - 8)
+    : anchorRect.bottom + 8;
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const calendarCells = [
+    ...Array.from({ length: firstWeekday }, (_, index) => ({ key: `blank-${index}`, blank: true })),
+    ...Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const value = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      return { key: value, day, value, disabled: value < minDate };
+    }),
+  ];
+
+  return (
+    <>
+      <FiCalendar aria-hidden="true" />
+      {createPortal(
+        <div
+          ref={popoverRef}
+          className="staff-date-popover"
+          style={{ top, left }}
+          role="dialog"
+          aria-label="Chọn ngày chiếu"
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="staff-date-popover-header">
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month - 1, 1))}
+              aria-label="Tháng trước"
+            >
+              <FiChevronLeft />
+            </button>
+            <strong>Tháng {month + 1}, {year}</strong>
+            <button
+              type="button"
+              onClick={() => setVisibleMonth(new Date(year, month + 1, 1))}
+              aria-label="Tháng sau"
+            >
+              <FiChevronRight />
+            </button>
+          </div>
+          <div className="staff-date-weekdays" aria-hidden="true">
+            {["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((label) => <span key={label}>{label}</span>)}
+          </div>
+          <div className="staff-date-days">
+            {calendarCells.map((cell) => cell.blank ? <span key={cell.key} /> : (
+              <button
+                type="button"
+                className={cell.value === selectedDate ? "selected" : ""}
+                disabled={cell.disabled}
+                aria-pressed={cell.value === selectedDate}
+                key={cell.key}
+                onClick={() => onSelect(cell.value)}
+              >
+                {cell.day}
+              </button>
+            ))}
+          </div>
+          <div className="staff-date-popover-footer">
+            <button type="button" onClick={() => onSelect(minDate)}>Hôm nay</button>
+            <button type="button" onClick={onClose}>Đóng</button>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
 function getRemainingHoldSeconds(expiresAt) { return expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000)) : 0; }
 function formatHoldCountdown(totalSeconds) { const seconds = Math.max(0, Number(totalSeconds) || 0); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 function dateTime(value) { return new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }); }
@@ -558,7 +1084,7 @@ function calculateSelectedSeatTotal(selectedSeats, allSeats) {
 }
 function normalizeSeat(item) { const seat = item.seat_id || item.seat || {}; const seatType = seat.seat_type_id || seat.seat_type || {}; const label = String(seat.seat_code || `${seat.seat_row || ""}${seat.seat_number || ""}`).toUpperCase(); return { id: item._id || item.id, label, row: seat.seat_row || label.charAt(0) || "?", number: Number(seat.seat_number || label.slice(1) || 0), price: Number(item.price || 0), status: item.status, holdId: String(item.hold_id || ""), type: getSeatTypeTone(seatType), typeName: seatType.name || "Ghế thường" }; }
 function formatSeatLabel(row, number, fallback = "") { const cleanRow = String(row || "").trim().toUpperCase(); const cleanNumber = Number(number); return cleanRow && Number.isFinite(cleanNumber) && cleanNumber > 0 ? `${cleanRow}${cleanNumber}` : String(fallback || "—").toUpperCase(); }
-function SeatMap({ seats, selected, toggle }) { const rows = [...new Set(seats.map((seat) => seat.row))].sort(); return <div className="seat-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend sale-seat-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="selected" />Đang chọn</span><span><i className="taken" />Đã bán / đang giữ</span><span><i className="maintenance" />Bảo trì</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((seat) => seat.row === row).sort((a, b) => a.number - b.number).map((seat, index, rowSeats) => { let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && rowSeats[cursor].type === "couple"; cursor -= 1) previousCouples += 1; const pairClass = seat.type === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : rowSeats[index + 1]?.type === "couple" ? "couple-right" : "") : ""; const seatLabel = formatSeatLabel(seat.row, seat.number, seat.label); return <button key={seat.id} disabled={seat.status !== "available"} onClick={() => toggle(seat)} className={`seat sale-seat ${seat.type} ${pairClass} ${seat.status} ${selected.includes(seat.id) ? "selected" : ""}`} title={`${seatLabel} · ${seat.typeName} · ${seat.status === "maintenance" ? "Đang bảo trì" : money.format(seat.price)}`}>{seatLabel}</button>; })}</div><b>{row}</b></div>)}</div>; }
+function SeatMap({ seats, selected, toggle }) { const rows = [...new Set(seats.map((seat) => seat.row))].sort(); return <div className="seat-map"><div className="screen">MÀN HÌNH</div><div className="seat-legend type-legend sale-seat-legend"><span><i className="normal" />Thường</span><span><i className="vip" />VIP</span><span><i className="couple" />Ghế đôi</span><span><i className="selected" />Đang chọn</span><span><i className="taken" />Đã bán / đang giữ</span><span><i className="maintenance" />Bảo trì</span></div>{rows.map((row) => <div className="seat-row" key={row}><b>{row}</b><div>{seats.filter((seat) => seat.row === row).sort((a, b) => a.number - b.number).map((seat, index, rowSeats) => { let previousCouples = 0; for (let cursor = index - 1; cursor >= 0 && rowSeats[cursor].type === "couple"; cursor -= 1) previousCouples += 1; const pairClass = seat.type === "couple" ? (previousCouples % 2 === 1 ? "couple-left" : rowSeats[index + 1]?.type === "couple" ? "couple-right" : "") : ""; const seatLabel = formatSeatLabel(seat.row, seat.number, seat.label); return <button key={seat.id} disabled={seat.status !== "available" && !selected.includes(seat.id)} onClick={() => toggle(seat)} className={`seat sale-seat ${seat.type} ${pairClass} ${seat.status} ${selected.includes(seat.id) ? "selected" : ""}`} title={`${seatLabel} · ${seat.typeName} · ${seat.status === "maintenance" ? "Đang bảo trì" : money.format(seat.price)}`}>{seatLabel}</button>; })}</div><b>{row}</b></div>)}</div>; }
 function ComboPicker({ combos, quantities, loading, error, updateQuantity }) {
   if (loading) return <p className="empty-note combo-message">Đang tải combo bắp nước...</p>;
   if (error) return <p className="combo-message combo-error">{error}</p>;

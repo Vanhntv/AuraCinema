@@ -123,3 +123,40 @@ export const fetchSepayPgOrder = async (invoiceNumber) => {
 
   return data;
 };
+
+export const cancelSepayPgOrder = async (invoiceNumber, { fetchFn = globalThis.fetch } = {}) => {
+  const normalizedInvoice = normalizeString(invoiceNumber).toUpperCase();
+  if (!normalizedInvoice) {
+    throw Object.assign(new Error("Thiếu mã hóa đơn SePay"), { statusCode: 400 });
+  }
+
+  const { merchantId, secretKey, apiBaseUrl } = getSepayPgConfig();
+  const credentials = Buffer.from(`${merchantId}:${secretKey}`).toString("base64");
+  const response = await fetchFn(`${apiBaseUrl}/v1/order/cancel`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/json",
+    },
+    signal: AbortSignal.timeout(10000),
+    body: JSON.stringify({ order_invoice_number: normalizedInvoice }),
+  });
+
+  const text = await response.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+
+  if (!response.ok) {
+    throw Object.assign(new Error(data?.message || "Không thể hủy đơn SePay"), {
+      statusCode: response.status,
+      data,
+    });
+  }
+
+  return data;
+};

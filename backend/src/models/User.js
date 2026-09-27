@@ -1,6 +1,16 @@
 import mongoose from "mongoose";
 import { randomBytes } from "node:crypto";
 
+const emailChallengeSchema = new mongoose.Schema({
+  hash: String,
+  request_id: String,
+  expires_at: Date,
+  sent_at: Date,
+  attempts: { type: Number, default: 0 },
+  window_start: Date,
+  send_count: { type: Number, default: 0 },
+}, { _id: false });
+
 const userSchema = new mongoose.Schema(
   {
     role_id: {
@@ -24,6 +34,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    email_verified_at: { type: Date, default: null },
+    // Existing accounts remain accessible without claiming they were verified.
+    email_verification_required: { type: Boolean, default: false },
+    email_verification: { type: emailChallengeSchema, select: false },
+    password_recovery: { type: emailChallengeSchema, select: false },
     password: {
       type: String,
       required: true,

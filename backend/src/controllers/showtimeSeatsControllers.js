@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import {
   createShowtimeSeatService,
   createShowtimeSeatsService,
@@ -9,6 +10,7 @@ import {
 } from "../services/showtimeSeatService.js";
 import Booking from "../models/Booking.js";
 import ShowtimeSeat from "../models/ShowtimeSeat.js";
+import { resolvePaymentExpiry } from "../services/bookingExpiryService.js";
 import {
   acquireSeatHold,
   expireSeatHolds,
@@ -49,11 +51,29 @@ const releaseFailedPaymentReservedSeats = async (showtimeId) => {
 
 export const holdShowtimeSeats = async (req, res) => {
   try {
+    const previousBookingId = String(req.body?.previous_booking_id || "").trim();
+    let expiresAtLimit = null;
+    if (previousBookingId) {
+      if (!mongoose.Types.ObjectId.isValid(previousBookingId)) {
+        return res.status(400).json({ success: false, message: "Đơn vé trước đó không hợp lệ" });
+      }
+      const previousBooking = await Booking.findOne({
+        _id: previousBookingId,
+        user_id: req.user.id,
+        status: "cancelled",
+        payment_status: "cancelled",
+      });
+      expiresAtLimit = resolvePaymentExpiry(previousBooking);
+      if (!previousBooking || !expiresAtLimit || expiresAtLimit.getTime() <= Date.now()) {
+        return res.status(410).json({ success: false, message: "Thời gian thanh toán của đơn vé trước đã hết" });
+      }
+    }
     const result = await acquireSeatHold({
       userId: req.user.id,
       showtimeId: req.body?.showtime_id,
       seatIds: req.body?.showtime_seat_ids,
       token: String(req.body?.hold_token || "").trim(),
+      expiresAtLimit,
     });
 
     return res.json({ success: true, data: result });
