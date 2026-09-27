@@ -6909,7 +6909,7 @@ html.dark .admin-layout .showtime-conflict-range strong {
 }
 
 .gifts-table {
-  min-width: 1540px;
+  min-width: 900px;
   table-layout: fixed;
 }
 
@@ -6919,12 +6919,52 @@ html.dark .admin-layout .showtime-conflict-range strong {
   overflow-wrap: anywhere;
 }
 
-.gifts-table th:nth-child(3) {
-  width: 296px;
+.gifts-table th:nth-child(1) { width: 30%; }
+.gifts-table th:nth-child(2) { width: 14%; }
+.gifts-table th:nth-child(3) { width: 14%; }
+.gifts-table th:nth-child(4) { width: 12%; }
+.gifts-table th:nth-child(5) { width: 14%; }
+.gifts-table th:nth-child(6) { width: 16%; }
+
+.gift-table-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gift-table-identity .gift-thumb {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+}
+
+.gift-table-info {
+  min-width: 0;
+}
+
+.gifts-table .table-cell-date > span {
+  display: block;
+}
+
+.gifts-table .voucher-date-separator {
+  margin: 2px 0;
+  color: var(--color-text-muted);
+}
+
+.gifts-table .table-actions {
+  gap: 4px;
+}
+
+.gifts-table .table-actions .btn-icon {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 5px;
 }
 
 .gifts-table .voucher-code {
   text-align: left;
+  margin-bottom: 7px;
 }
 
 .gifts-table .table-cell-name,
@@ -6942,11 +6982,6 @@ html.dark .admin-layout .showtime-conflict-range strong {
   color: var(--color-text-muted);
 }
 
-.gifts-table-hint {
-  margin: 12px 0;
-  color: var(--color-text-muted);
-  font-size: 12px;
-}
 
 .gift-detail-layout {
   display: grid;

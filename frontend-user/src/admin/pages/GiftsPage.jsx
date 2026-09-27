@@ -946,28 +946,22 @@ const GiftsPage = () => {
           </div>
         ) : (
           <>
-            <p className="gifts-table-hint">Cuộn ngang bảng để xem đầy đủ thời gian áp dụng, trạng thái và thao tác.</p>
             <div className="table-wrapper gifts-table-wrapper" tabIndex={0} role="region" aria-label="Danh sách quà tặng, có thể cuộn ngang">
               <table className="data-table vouchers-table gifts-table">
                 <thead>
                   <tr>
-                    <th style={{ width: "74px" }}>Hình ảnh</th>
-                    <th style={{ width: "120px" }}>Mã quà</th>
-                    <th>Tên quà</th>
-                    <th style={{ width: "140px" }}>Loại quà</th>
-                    <th style={{ width: "120px" }}>Giá trị</th>
-                    <th style={{ width: "100px" }}>Số lượng</th>
-                    <th style={{ width: "100px" }}>Đã phát</th>
-                    <th style={{ width: "100px" }}>Còn lại</th>
-                    <th style={{ width: "180px" }}>Thời gian áp dụng</th>
-                    <th style={{ width: "140px" }}>Trạng thái</th>
-                    <th style={{ width: "170px", textAlign: "center" }}>Thao tác</th>
+                    <th>Quà tặng</th>
+                    <th>Giá trị</th>
+                    <th>Hiệu lực</th>
+                    <th>Lượt phát</th>
+                    <th>Trạng thái</th>
+                    <th style={{ textAlign: "center" }}>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {gifts.length === 0 ? (
                     <tr>
-                      <td colSpan="11">
+                      <td colSpan="6">
                         <div className="table-empty">
                           <div className="table-empty-icon">%</div>
                           <div className="table-empty-text">Chưa có quà tặng phù hợp</div>
@@ -983,24 +977,29 @@ const GiftsPage = () => {
                       return (
                         <tr key={gift._id}>
                           <td>
+                            <div className="gift-table-identity">
                             <div className="gift-thumb">
                               {imageUrl ? <img src={imageUrl} alt={gift.name} /> : <HiOutlineGift />}
                             </div>
-                          </td>
-                          <td><span className="voucher-code">{gift.code}</span></td>
-                          <td>
+                            <div className="gift-table-info">
+                            <span className="voucher-code">{gift.code}</span>
                             <div className="table-cell-name">{gift.name}</div>
-                            {gift.description && <div className="table-cell-desc">{gift.description}</div>}
+                            </div>
+                            </div>
                           </td>
-                          <td>{gift.type_label || typeLabels[gift.type] || gift.type}</td>
-                          <td className="voucher-discount-value">{formatGiftValue(gift)}</td>
-                          <td>{Number(gift.quantity || 0).toLocaleString("vi-VN")}</td>
-                          <td>{Number(gift.issued_quantity || 0).toLocaleString("vi-VN")}</td>
                           <td>
-                            <strong className="text-usage">{Number(gift.remaining_quantity || 0).toLocaleString("vi-VN")}</strong>
+                            <strong className="voucher-discount-value">{formatGiftValue(gift)}</strong>
+                            <span className="voucher-cell-sub">{gift.type_label || typeLabels[gift.type] || gift.type}</span>
                           </td>
                           <td className="table-cell-date">
-                            {formatDate(gift.start_date)} - {formatDate(gift.end_date)}
+                            <span>{formatDate(gift.start_date)}</span>
+                            <span className="voucher-date-separator">→</span>
+                            <span>{formatDate(gift.end_date)}</span>
+                          </td>
+                          <td>
+                            <strong className="text-usage">{Number(gift.issued_quantity || 0).toLocaleString("vi-VN")}</strong>
+                            <span className="text-muted-inline"> / {Number(gift.quantity || 0).toLocaleString("vi-VN")}</span>
+                            <span className="voucher-cell-sub">Còn lại: {Number(gift.remaining_quantity || 0).toLocaleString("vi-VN")}</span>
                           </td>
                           <td>
                             <span className={`status-badge ${statusClass}`}>{gift.computed_status_label}</span>
