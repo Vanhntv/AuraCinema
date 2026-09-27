@@ -7,6 +7,7 @@ export const scanHistoryGrouping = () => [
       admin: "$adminId",
       action: "$action",
       result: "$result",
+      orderEvent: { $cond: [{ $eq: ["$source", "booking"] }, "$_id", null] },
     },
     latest: { $first: "$$ROOT" },
     scannedSeats: { $addToSet: "$ticket.seatLabel" },

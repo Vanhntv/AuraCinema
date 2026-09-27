@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import TicketScanLog from "../src/models/TicketScanLog.js";
 import { scanHistoryGrouping } from "../src/modules/tickets/scanHistoryGrouping.js";
+import { bookingScanHistoryUnion } from "../src/modules/tickets/bookingScanHistory.js";
 import { getAdminTicketScanLogs } from "../src/controllers/adminTicketControllers.js";
 
 test("grouping keeps different scan times, results and operators separate", () => {
@@ -12,6 +13,43 @@ test("grouping keeps different scan times, results and operators separate", () =
   assert.equal(group._id.result, "$result");
   assert.equal(group._id.admin, "$adminId");
   assert.deepEqual(group.scannedSeats, { $addToSet: "$ticket.seatLabel" });
+  assert.deepEqual(group._id.orderEvent, { $cond: [{ $eq: ["$source", "booking"] }, "$_id", null] });
+});
+
+test("order scan history reads pre-existing lookup and print logs, not complaint notes", () => {
+  const union = bookingScanHistoryUnion().$unionWith;
+  assert.equal(union.coll, "booking_action_logs");
+  assert.deepEqual(union.pipeline[0].$match.action.$in, ["LOOKUP", "PRINT_INITIAL", "REPRINT"]);
+  assert.equal(union.pipeline[1].$set.scannedAt, "$createdAt");
+  assert.equal(union.pipeline[1].$set.source, "booking");
+});
+
+test("order lookup links booking and seats without requiring an individual ticket", async () => {
+  const original = TicketScanLog.aggregate;
+  TicketScanLog.aggregate = async (pipeline) => {
+    if (pipeline.some((step) => step.$project)) return [{
+      _id: "lookup-log", source: "booking", scannedAt: new Date(), action: "LOOKUP", result: "SUCCESS",
+      booking: {
+        _id: "order-1", booking_code: "ORDER-1", seat_items: [{ seat_label: "A1" }, { seat_label: "A2" }],
+        movie_snapshot: { title: "Phim của đơn" },
+        showtime_snapshot: { start_time: new Date(), room_name: "Phòng 1" },
+      },
+    }];
+    return [{ count: 1, totalItems: 1 }];
+  };
+  try {
+    let body;
+    await getAdminTicketScanLogs({ query: { page: 1, limit: 10, groupBy: "booking" } }, {
+      json(value) { body = value; return this; }, status() { return this; },
+    });
+    assert.equal(body.success, true);
+    assert.equal(body.data[0].bookingId, "order-1");
+    assert.equal(body.data[0].bookingCode, "ORDER-1");
+    assert.equal(body.data[0].seatLabel, "A1, A2");
+    assert.equal(body.data[0].scanCount, 2);
+    assert.equal(body.data[0].movie.title, "Phim của đơn");
+    assert.equal(body.data[0].room.name, "Phòng 1");
+  } finally { TicketScanLog.aggregate = original; }
 });
 
 test("history groups before pagination, searches order codes and returns booking identity", async () => {

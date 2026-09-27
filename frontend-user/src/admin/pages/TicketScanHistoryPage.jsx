@@ -14,6 +14,9 @@ const PAGE_SIZE = 10;
 const actionLabels = {
   VERIFY: "Xác minh",
   CHECK_IN: "Check-in",
+  LOOKUP: "Quét / tra cứu đơn",
+  PRINT_INITIAL: "In đơn vé",
+  REPRINT: "In lại vé",
 };
 
 const resultLabels = {
@@ -24,6 +27,10 @@ const resultLabels = {
   EXPIRED: "Vé hết hạn",
   WRONG_SHOWTIME: "Sai thời gian",
   PAYMENT_NOT_COMPLETED: "Chưa thanh toán",
+  PARTIAL: "In một phần",
+  NO_ELIGIBLE_TICKETS: "Không còn vé để in",
+  BOOKING_NOT_PAYABLE: "Đơn chưa thanh toán / đã hủy",
+  ERROR: "Lỗi xử lý đơn",
 };
 
 const formatDateTime = (value) => {
@@ -41,7 +48,7 @@ const formatDateTime = (value) => {
 
 const resultBadgeClass = (result) => {
   if (result === "SUCCESS") return "status-badge status-now-showing";
-  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN"].includes(result)) {
+  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN", "PARTIAL", "NO_ELIGIBLE_TICKETS"].includes(result)) {
     return "status-badge status-coming-soon";
   }
   return "status-badge status-ended";
@@ -131,7 +138,7 @@ const TicketScanHistoryPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Lịch sử quét QR</h1>
-          <p>Theo dõi toàn bộ lượt xác minh và check-in vé điện tử.</p>
+          <p>Theo dõi quét mã đơn, in vé, xác minh và check-in vé điện tử.</p>
         </div>
         <button className="btn btn-secondary" onClick={fetchLogs} disabled={loading} type="button">
           <HiOutlineRefresh />

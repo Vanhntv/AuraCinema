@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
 import { scanHistoryGrouping } from "../modules/tickets/scanHistoryGrouping.js";
+import { BOOKING_SCAN_ACTIONS, bookingScanHistoryUnion } from "../modules/tickets/bookingScanHistory.js";
+import { BOOKING_ACTION_RESULTS } from "../models/BookingActionLog.js";
 import TicketScanLog, {
   TICKET_SCAN_ACTIONS,
   TICKET_SCAN_RESULTS,
@@ -82,15 +84,17 @@ const buildScanLogAggregation = (query = {}) => {
   const scannedAtRange = parseDateRange(query);
 
   if (scannedAtRange) match.scannedAt = scannedAtRange;
-  if (TICKET_SCAN_ACTIONS.includes(String(query.action || "").trim())) {
+  if ([...TICKET_SCAN_ACTIONS, ...BOOKING_SCAN_ACTIONS].includes(String(query.action || "").trim())) {
     match.action = String(query.action).trim();
   }
 
-  if (TICKET_SCAN_RESULTS.includes(String(query.result || "").trim())) {
+  if ([...TICKET_SCAN_RESULTS, ...BOOKING_ACTION_RESULTS].includes(String(query.result || "").trim())) {
     match.result = String(query.result).trim();
   }
 
   const pipeline = [
+    { $set: { source: "ticket" } },
+    bookingScanHistoryUnion(),
     { $match: match },
     {
       $lookup: {
@@ -101,12 +105,18 @@ const buildScanLogAggregation = (query = {}) => {
       },
     },
     { $unwind: { path: "$ticket", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "bookings", localField: "ticket.bookingId", foreignField: "_id", as: "booking" } },
+    { $set: { bookingJoinId: { $ifNull: ["$bookingId", "$ticket.bookingId"] } } },
+    { $lookup: { from: "bookings", localField: "bookingJoinId", foreignField: "_id", as: "booking" } },
     { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
+    { $set: {
+      linkedMovieId: { $ifNull: ["$ticket.movieId", "$booking.movie_snapshot.movie_id"] },
+      linkedShowtimeId: { $ifNull: ["$ticket.showtimeId", "$booking.showtime_id"] },
+      linkedRoomId: { $ifNull: ["$ticket.roomId", "$booking.showtime_snapshot.room_id"] },
+    } },
     {
       $lookup: {
         from: "movies",
-        localField: "ticket.movieId",
+        localField: "linkedMovieId",
         foreignField: "_id",
         as: "movie",
       },
@@ -115,7 +125,7 @@ const buildScanLogAggregation = (query = {}) => {
     {
       $lookup: {
         from: "showtimes",
-        localField: "ticket.showtimeId",
+        localField: "linkedShowtimeId",
         foreignField: "_id",
         as: "showtime",
       },
@@ -124,7 +134,7 @@ const buildScanLogAggregation = (query = {}) => {
     {
       $lookup: {
         from: "rooms",
-        localField: "ticket.roomId",
+        localField: "linkedRoomId",
         foreignField: "_id",
         as: "room",
       },
@@ -146,9 +156,9 @@ const buildScanLogAggregation = (query = {}) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
   const roomId = objectIdOrNull(query.roomId);
 
-  if (movieId) linkedMatch["ticket.movieId"] = movieId;
-  if (showtimeId) linkedMatch["ticket.showtimeId"] = showtimeId;
-  if (roomId) linkedMatch["ticket.roomId"] = roomId;
+  if (movieId) linkedMatch.linkedMovieId = movieId;
+  if (showtimeId) linkedMatch.linkedShowtimeId = showtimeId;
+  if (roomId) linkedMatch.linkedRoomId = roomId;
 
   if (query.movie) {
     linkedMatch["movie.title"] = new RegExp(escapeRegex(query.movie), "i");
@@ -163,6 +173,7 @@ const buildScanLogAggregation = (query = {}) => {
     linkedMatch.$or = [
       { "booking.booking_code": regex },
       { "ticket.seatLabel": regex },
+      { "booking.seat_items.seat_label": regex },
     ];
   }
 
@@ -174,10 +185,10 @@ const buildScanLogAggregation = (query = {}) => {
 };
 
 const formatScanLogRow = (log) => ({
-  id: log._id,
+  id: `${log.source || "ticket"}-${log._id}`,
   bookingId: log.booking?._id || log.ticket?.bookingId || null,
   bookingCode: log.booking?.booking_code || "",
-  scanCount: log.scanCount || 1,
+  scanCount: log.source === "booking" ? log.ticketIds?.length || log.booking?.seat_items?.length || 0 : log.scanCount || 1,
   scannedAt: log.scannedAt,
   ticketCode: log.ticket?.ticketCode || "",
   ticketStatus: log.ticket?.status || "",
@@ -186,21 +197,21 @@ const formatScanLogRow = (log) => ({
       id: log.movie._id,
       title: log.movie.title,
     }
-    : null,
+    : log.booking?.movie_snapshot?.title ? { id: log.booking.movie_snapshot.movie_id, title: log.booking.movie_snapshot.title } : null,
   showtime: log.showtime?._id
     ? {
       id: log.showtime._id,
       startTime: log.showtime.start_time,
       endTime: log.showtime.end_time,
     }
-    : null,
+    : log.booking?.showtime_snapshot?.start_time ? { id: log.booking.showtime_id, startTime: log.booking.showtime_snapshot.start_time, endTime: log.booking.showtime_snapshot.end_time } : null,
   room: log.room?._id
     ? {
       id: log.room._id,
       name: log.room.name,
     }
-    : null,
-  seatLabel: log.scannedSeats?.filter(Boolean).sort().join(", ") || log.ticket?.seatLabel || "",
+    : log.booking?.showtime_snapshot?.room_name ? { id: log.booking.showtime_snapshot.room_id, name: log.booking.showtime_snapshot.room_name } : null,
+  seatLabel: log.source === "booking" ? (log.booking?.seat_items || []).map((seat) => seat.seat_label).filter(Boolean).join(", ") : log.scannedSeats?.filter(Boolean).sort().join(", ") || log.ticket?.seatLabel || "",
   admin: log.admin?._id
     ? {
       id: log.admin._id,
@@ -222,17 +233,17 @@ const getScanStats = async ({ query = {} }) => {
   const [errorResult, successScanResult, verifyScanResult, successfulCheckInResult] = await Promise.all([
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { result: { $ne: "SUCCESS" } } },
+      { $match: { result: { $nin: ["SUCCESS", "PARTIAL"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { result: "SUCCESS" } },
+      { $match: { result: { $in: ["SUCCESS", "PARTIAL"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { action: "VERIFY" } },
+      { $match: { action: { $in: ["VERIFY", "LOOKUP"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
