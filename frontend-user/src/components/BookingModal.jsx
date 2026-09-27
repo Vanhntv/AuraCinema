@@ -23,6 +23,11 @@ import { buildRelativeDateOptions, deduplicateShowtimes, getShowtimeDateValue, g
 import { showToast } from "../utils/toast";
 import { getVoucherBookingPricing, mergeBookingVoucherPricing } from "../utils/voucherBooking";
 import { validateBookingSeatSpacing } from "../utils/seatSpacing";
+import {
+  clearPaymentReturnState,
+  readPaymentReturnState,
+  savePaymentReturnState,
+} from "../utils/paymentNavigation";
 
 const SEAT_TYPES = {
   normal: { label: "Ghe thuong", color: "bg-slate-600", selected: "bg-sky-500" },
