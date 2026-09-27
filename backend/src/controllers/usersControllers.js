@@ -5,7 +5,7 @@ import Booking from "../models/Booking.js";
 import RewardPointLog from "../models/RewardPointLog.js";
 import User from "../models/User.js";
 import UserVoucher from "../models/UserVoucher.js";
-import { requestAccountChange, listAccountChangeRequests, approveAccountChange, rejectAccountChange, getApprovedPasswordRequest } from "../services/accountApprovalService.js";
+import { requestAccountChange, listAccountChangeRequests, approveAccountChange, rejectAccountChange } from "../services/accountApprovalService.js";
 import { verifyPassword } from "./authControllers.js";
 
 import { issueEmailOtp } from "../services/emailOtpService.js";
@@ -371,6 +371,10 @@ export const forceResetPassword = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: "ID người dùng không hợp lệ" });
     }
+    const reason = String(req.body?.reason || "").trim();
+    if (!reason) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập lý do đặt lại mật khẩu" });
+    }
 
     const user = await User.findOne({ _id: req.params.id, deleted_at: null });
     if (!user) {
@@ -379,10 +383,11 @@ export const forceResetPassword = async (req, res) => {
     if (resolveAccountStatus(user) === "banned") {
       return res.status(409).json({ success: false, message: "Tài khoản đang bị khóa." });
     }
-    const request = await requestAccountChange({ targetId: user._id, requesterId: req.user.id, kind: "password_reset", reason: req.body.reason });
-    return res.status(202).json({ success: true, message: "Đã tạo đề xuất đặt lại mật khẩu. OTP chỉ được gửi sau khi một admin khác phê duyệt", data: request });
+    await AuditLog.create({ admin_id: req.user.id, target_user_id: user._id, action: "REQUEST_PASSWORD_RESET_OTP", reason });
+    await issueEmailOtp({ userId: user._id, purpose: "recovery" });
+    return res.status(200).json({ success: true, message: "Đã gửi OTP đặt lại mật khẩu đến email của tài khoản" });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || (error.statusCode ? error.message : "Không thể tạo yêu cầu đặt lại mật khẩu.") });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || (error.statusCode ? error.message : "Không thể gửi OTP đặt lại mật khẩu.") });
   }
 };
 
@@ -403,12 +408,7 @@ export const approveAccountChangeRequest = async (req, res) => {
       return res.status(401).json({ success: false, message: "Mật khẩu admin xác nhận không đúng" });
     }
     const request = await approveAccountChange({ requestId: req.params.id, reviewerId: req.user.id, passwordValid: true });
-    let deliveryMessage = "";
-    if (request.status === "approved" && request.kind === "password_reset") {
-      try { await issueEmailOtp({ userId: request.target_user_id, purpose: "recovery" }); }
-      catch { deliveryMessage = " Yêu cầu đã được duyệt nhưng chưa gửi được OTP; hãy thử nút Gửi lại OTP."; }
-    }
-    return res.json({ success: true, message: `Admin khác đã phê duyệt đề xuất.${deliveryMessage}`, data: request });
+    return res.json({ success: true, message: "Admin khác đã phê duyệt đề xuất.", data: request });
   } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message, ...(error.code ? { code: error.code } : {}) }); }
 };
 
@@ -417,12 +417,4 @@ export const rejectAccountChangeRequest = async (req, res) => {
     const request = await rejectAccountChange({ requestId: req.params.id, reviewerId: req.user.id, reason: req.body?.reason });
     return res.json({ success: true, message: "Đã từ chối yêu cầu", data: request });
   } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message, ...(error.code ? { code: error.code } : {}) }); }
-};
-
-export const resendApprovedPasswordReset = async (req, res) => {
-  try {
-    const request = await getApprovedPasswordRequest({ requestId: req.params.id, targetId: req.body?.target_user_id, kind: "password_reset" });
-    await issueEmailOtp({ userId: request.target_user_id, purpose: "recovery" });
-    return res.json({ success: true, message: "Đã gửi OTP đặt lại mật khẩu" });
-  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || error.message }); }
 };

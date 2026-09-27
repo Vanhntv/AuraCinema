@@ -4,7 +4,7 @@ import User from "../models/User.js";
 import RewardPointLog from "../models/RewardPointLog.js";
 import { membershipView } from "../services/loyaltyPolicy.js";
 import { signJwt } from "../utils/jwt.js";
-import { requestAccountChange, getApprovedPasswordRequest, applyApprovedPasswordChange } from "../services/accountApprovalService.js";
+import { requestAccountChange } from "../services/accountApprovalService.js";
 
 import { issueEmailOtp, consumeEmailOtp } from "../services/emailOtpService.js";
 import { assertEmailConfigured } from "../services/emailService.js";
@@ -390,16 +390,14 @@ export const forgotPassword = async (req, res) => {
 
     const responsePayload = {
       success: true,
-      message: "Nếu tài khoản đủ điều kiện, mã OTP đặt lại mật khẩu đã được gửi. Tài khoản admin cần một admin khác phê duyệt yêu cầu trước khi nhận OTP.",
+      message: "Nếu tài khoản đủ điều kiện, mã OTP đặt lại mật khẩu đã được gửi đến email.",
     };
 
     if (!user) {
       return res.status(200).json(responsePayload);
     }
 
-    if (resolveUserRole(user) !== "admin") {
-      await issueEmailOtp({ userId: user._id, purpose: "recovery" });
-    }
+    await issueEmailOtp({ userId: user._id, purpose: "recovery" });
 
     return res.status(200).json(responsePayload);
   } catch (error) {
@@ -434,18 +432,8 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    const target = await User.findOne({ email: normalizedEmail, deleted_at: null });
-    let approvedRequest = null;
-    if (target?.role === "admin") {
-      approvedRequest = await getApprovedPasswordRequest({ requestId: req.body.approval_request_id, targetId: target._id, kind: "password_reset" });
-    }
     await consumeEmailOtp({ email: normalizedEmail, otp: String(otp).trim(),
       purpose: "recovery", passwordHash: await hashPassword(password) });
-    if (approvedRequest) {
-      approvedRequest.status = "applied";
-      approvedRequest.applied_at = new Date();
-      await approvedRequest.save();
-    }
 
     return res.status(200).json({
       success: true,
@@ -602,20 +590,9 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    if (resolveUserRole(user) === "admin") {
-      if (!req.body.approval_request_id) {
-        const request = await requestAccountChange({
-          targetId: user._id, requesterId: user._id, kind: "password_change",
-          reason: "Admin yêu cầu tự đổi mật khẩu",
-        });
-        return res.status(202).json({ success: true, message: "Đã gửi yêu cầu đổi mật khẩu. Sau khi một admin khác duyệt, hãy nhập lại mật khẩu để hoàn tất.", data: request });
-      }
-      await applyApprovedPasswordChange({ requestId: req.body.approval_request_id, targetId: user._id, passwordHash: await hashPassword(password) });
-    } else {
-      user.password = await hashPassword(password);
-      user.password_changed_at = new Date(Date.now() + 1000);
-      await user.save();
-    }
+    user.password = await hashPassword(password);
+    user.password_changed_at = new Date(Date.now() + 1000);
+    await user.save();
 
     return res.status(200).json({
       success: true,

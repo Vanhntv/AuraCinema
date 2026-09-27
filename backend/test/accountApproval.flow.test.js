@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { scryptSync } from "node:crypto";
 import test from "node:test";
 import mongoose from "mongoose";
 import AccountChangeRequest from "../src/models/AccountChangeRequest.js";
@@ -8,7 +9,7 @@ import User from "../src/models/User.js";
 import { approveAccountChange, rejectAccountChange, requestAccountChange } from "../src/services/accountApprovalService.js";
 import { authMiddleware } from "../src/middleware/authMiddleware.js";
 import { signJwt } from "../src/utils/jwt.js";
-import { forgotPassword, resetPassword } from "../src/controllers/authControllers.js";
+import { changePassword, verifyPassword } from "../src/controllers/authControllers.js";
 
 const ids = Array.from({ length: 4 }, () => new mongoose.Types.ObjectId());
 const [adminA, adminB, , targetId] = ids;
@@ -53,9 +54,36 @@ test("self-change fails closed when no other admin exists", async () => {
     [User, "countDocuments", async () => 0],
   ], async () => {
     await assert.rejects(
-      requestAccountChange({ targetId: adminA, requesterId: adminA, kind: "password_change", reason: "Đổi mật khẩu" }),
+      requestAccountChange({ targetId: adminA, requesterId: adminA, kind: "profile", changes: { full_name: "Tên mới" }, reason: "Đổi tên" }),
       (error) => error.statusCode === 409 && /một admin khác/.test(error.message),
     );
+  });
+});
+
+test("admin changes their own password immediately after confirming the current password", async () => {
+  const oldPassword = "OldPassword123";
+  const newPassword = "NewPassword456";
+  const salt = "admin-password-test-salt";
+  const user = {
+    _id: adminA, role: "admin", password: `${salt}:${scryptSync(oldPassword, salt, 64).toString("hex")}`,
+    async save() { this.saved = true; },
+  };
+  const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return body; } });
+  await patch([
+    [User, "findOne", async () => user],
+    [AccountChangeRequest, "create", async () => { throw new Error("Password change must not create an approval request"); }],
+  ], async () => {
+    const invalid = response();
+    await changePassword({ user: { id: String(adminA) }, body: { current_password: "wrong", password: newPassword, confirm_password: newPassword } }, invalid);
+    assert.equal(invalid.statusCode, 401);
+    assert.equal(user.saved, undefined);
+
+    const valid = response();
+    await changePassword({ user: { id: String(adminA) }, body: { current_password: oldPassword, password: newPassword, confirm_password: newPassword } }, valid);
+    assert.equal(valid.statusCode, 200);
+    assert.equal(user.saved, true);
+    assert.equal(await verifyPassword(newPassword, user.password), true);
+    assert.ok(user.password_changed_at instanceof Date);
   });
 });
 
@@ -199,21 +227,9 @@ test("authorization uses role even when a stale role_id still says admin", async
   assert.equal(req.user.role, "user");
 });
 
-test("admin recovery does not issue OTP before an approved request exists", async () => {
-  const admin = { _id: adminA, role: "admin", email: "admin@example.com", account_status: "active" };
-  const makeResponse = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return body; } });
-  await patch([
-    [User, "findOne", async () => admin],
-    [AccountChangeRequest, "findOne", async () => null],
-  ], async () => {
-    const forgotResponse = makeResponse();
-    await forgotPassword({ body: { email: admin.email } }, forgotResponse);
-    assert.equal(forgotResponse.statusCode, 200);
-
-    const resetResponse = makeResponse();
-    await resetPassword({ body: {
-      email: admin.email, otp: "123456", password: "NewPassword123", confirm_password: "NewPassword123",
-    } }, resetResponse);
-    assert.equal(resetResponse.statusCode, 403);
-  });
+test("password recovery no longer creates approval requests", async () => {
+  await assert.rejects(
+    requestAccountChange({ targetId: adminA, requesterId: adminA, kind: "password_reset", reason: "Quên mật khẩu" }),
+    (error) => error.statusCode === 400 && /Loại yêu cầu/.test(error.message),
+  );
 });

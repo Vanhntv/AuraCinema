@@ -16,7 +16,7 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
   if (!mongoose.Types.ObjectId.isValid(targetId)) throw error("Tài khoản không hợp lệ");
   const requestReason = String(reason || "").trim();
   if (!requestReason) throw error("Vui lòng nhập lý do thay đổi");
-  if (!["profile", "status", "password_reset", "password_change", "reward_adjustment"].includes(kind)) throw error("Loại yêu cầu không hợp lệ");
+  if (!["profile", "status", "reward_adjustment"].includes(kind)) throw error("Loại yêu cầu không hợp lệ");
   if (["profile", "status"].includes(kind) && !Object.keys(changes).length) throw error("Không có thay đổi nào để phê duyệt");
   if (kind === "reward_adjustment" && (!["add", "subtract"].includes(changes.type) || !Number.isSafeInteger(changes.points) || changes.points <= 0)) throw error("Điểm điều chỉnh không hợp lệ");
 
@@ -47,8 +47,6 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
 
   const before = kind === "reward_adjustment"
     ? snapshot(target, ["reward_points", "role", "account_status"])
-    : kind === "password_change" || kind === "password_reset"
-    ? snapshot(target, ["password_changed_at", "role", "account_status"])
     : snapshot(target, [...Object.keys(changes), "role", "account_status"]);
   try {
     return await AccountChangeRequest.create({
@@ -69,6 +67,10 @@ export const requestAccountChange = async ({ targetId, requesterId, kind, change
 
 export const listAccountChangeRequests = async ({ status, targetId } = {}) => {
   await AccountChangeRequest.updateMany(
+    { kind: { $in: ["password_change", "password_reset"] }, status: { $in: ["pending", "approved"] } },
+    { $set: { status: "expired" } },
+  );
+  await AccountChangeRequest.updateMany(
     { status: { $in: ["pending", "approved"] }, expires_at: { $lte: new Date() } },
     { $set: { status: "expired" } },
   );
@@ -87,6 +89,7 @@ export const approveAccountChange = async ({ requestId, reviewerId, passwordVali
   return withTransaction(async (session) => {
     const request = await AccountChangeRequest.findById(requestId).session(session);
     if (!request) throw error("Không tìm thấy yêu cầu", 404);
+    if (["password_change", "password_reset"].includes(request.kind)) throw error("Đặt lại mật khẩu hiện được thực hiện trực tiếp qua email", 409);
     if (request.status !== "pending") throw error("Yêu cầu không còn chờ phê duyệt", 409);
     if (request.expires_at <= new Date()) throw error("Yêu cầu đã hết hạn", 410);
 
@@ -153,7 +156,7 @@ export const approveAccountChange = async ({ requestId, reviewerId, passwordVali
       target_user_id: target._id,
       action: `APPROVE_${request.kind.toUpperCase()}`,
       before: request.before,
-      after: request.kind === "password_change" || request.kind === "password_reset" ? null : request.changes,
+      after: request.changes,
       changes: { request_id: request._id, proposer_id: proposer._id, approver_ids: request.approvals.filter((item) => id(item.admin_id) !== id(proposer)).map((item) => item.admin_id) },
       reason: request.reason,
     }], { session });
@@ -181,38 +184,3 @@ export const rejectAccountChange = async ({ requestId, reviewerId, reason }) => 
     return request;
   });
 };
-
-export const getApprovedPasswordRequest = async ({ requestId, targetId, kind }) => {
-  if (!mongoose.Types.ObjectId.isValid(targetId)) throw error("Tài khoản không hợp lệ", 400);
-  const request = await AccountChangeRequest.findOne({
-    ...(requestId ? { _id: requestId } : {}),
-    target_user_id: targetId,
-    kind,
-    status: "approved",
-    expires_at: { $gt: new Date() },
-  });
-  if (!request) throw error("Chưa có yêu cầu đổi mật khẩu được admin khác phê duyệt hoặc yêu cầu đã hết hạn", 403);
-  return request;
-};
-
-export const applyApprovedPasswordChange = async ({ requestId, targetId, passwordHash }) =>
-  withTransaction(async (session) => {
-    const request = await AccountChangeRequest.findOne({
-      _id: requestId, target_user_id: targetId, kind: "password_change", status: "approved", expires_at: { $gt: new Date() },
-    }).session(session);
-    if (!request) throw error("Yêu cầu đổi mật khẩu chưa được admin khác phê duyệt hoặc đã hết hạn", 403);
-    const user = await User.findOne({ _id: targetId, role: "admin", deleted_at: null }).session(session);
-    if (!user || !same(user.password_changed_at, request.before?.password_changed_at)) throw error("Mật khẩu đã thay đổi; vui lòng tạo yêu cầu mới", 409);
-    user.password = passwordHash;
-    user.password_changed_at = new Date(Date.now() + 1000);
-    await user.save({ session });
-    request.status = "applied";
-    request.applied_at = new Date();
-    await request.save({ session });
-    await AuditLog.create([{
-      admin_id: user._id, target_user_id: user._id, action: "APPLY_ADMIN_PASSWORD_CHANGE",
-      changes: { request_id: request._id, approver_ids: request.approvals.map((item) => item.admin_id) },
-      reason: request.reason,
-    }], { session });
-    return request;
-  });

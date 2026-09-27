@@ -5,7 +5,6 @@ import {
   getAccountChangeRequests,
   approveAccountChangeRequest,
   rejectAccountChangeRequest,
-  resendApprovedPasswordReset,
   getUserDetail,
   getUsers,
   updateUserBasicInfo,
@@ -34,7 +33,6 @@ router.get("/", getUsers);
 router.get("/approval-requests", getAccountChangeRequests);
 router.post("/approval-requests/:id/approve", approvalRateLimit, approveAccountChangeRequest);
 router.post("/approval-requests/:id/reject", rejectAccountChangeRequest);
-router.post("/approval-requests/:id/send-reset", resendApprovedPasswordReset);
 router.get("/:id", getUserDetail);
 router.patch("/:id", updateUserBasicInfo);
 router.patch("/:id/status", updateUserStatus);

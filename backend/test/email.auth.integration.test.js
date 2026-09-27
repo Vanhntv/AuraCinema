@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import net from "node:net";
 import mongoose from "mongoose";
+import AuditLog from "../src/models/AuditLog.js";
 import User from "../src/models/User.js";
 import { register, login, verifyEmail, forgotPassword, resetPassword } from "../src/controllers/authControllers.js";
 import { forceResetPassword, updateUserBasicInfo } from "../src/controllers/usersControllers.js";
@@ -156,6 +157,27 @@ test("email auth with isolated MongoDB", { skip: process.env.RUN_EMAIL_AUTH_INTE
     await call(resetPassword, { email: pending.email, otp: mail.at(-1).otp, password: "NewPassword123", confirm_password: "NewPassword123" });
     assert.equal((await User.findById(pending.user._id)).account_status, "unverified");
   });
+  await t.test("admin recovers through email OTP without an approval request", async () => {
+    const { email, otp, user } = await signup();
+    await call(verifyEmail, { email, otp });
+    await User.updateOne({ _id: user._id }, { $set: { role: "admin", role_id: 1 } });
+    const priorSession = await call(login, { email, password });
+    assert.equal(priorSession.statusCode, 200);
+    const mailCount = mail.length;
+    const requested = await call(forgotPassword, { email });
+    assert.equal(requested.statusCode, 200);
+    assert.equal(mail.length, mailCount + 1);
+    assert.equal(requested.body.dev_otp, undefined);
+    const recoveryOtp = mail.at(-1).otp;
+    const reset = await call(resetPassword, { email, otp: recoveryOtp, password: "AdminNewPassword123", confirm_password: "AdminNewPassword123" });
+    assert.equal(reset.statusCode, 200);
+    const oldSession = response();
+    await authMiddleware({ headers: { authorization: `Bearer ${priorSession.body.token}` } }, oldSession, () => assert.fail("old admin session must fail"));
+    assert.equal(oldSession.statusCode, 401);
+    assert.equal((await call(login, { email, password })).statusCode, 401);
+    assert.equal((await call(login, { email, password: "AdminNewPassword123" })).statusCode, 200);
+    assert.equal((await call(resetPassword, { email, otp: recoveryOtp, password: "AnotherPassword123", confirm_password: "AnotherPassword123" })).statusCode, 400);
+  });
   await t.test("delivery failure leaves a retryable pending account and invalidates unsent code", async () => {
     const { user } = await signup();
     await unlockSend(user._id);
@@ -166,27 +188,28 @@ test("email auth with isolated MongoDB", { skip: process.env.RUN_EMAIL_AUTH_INTE
   });
   await t.test("admin reset issues a usable recovery email without exposing OTP", async () => {
     const { user, email } = await signup();
+    const actorId = new mongoose.Types.ObjectId();
     const res = response();
-    await forceResetPassword({ params: { id: user._id.toString() }, user: { id: new mongoose.Types.ObjectId().toString() }, body: {} }, res);
+    await forceResetPassword({ params: { id: user._id.toString() }, user: { id: actorId.toString() }, body: { reason: "Hỗ trợ khách hàng" } }, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.dev_otp, undefined);
+    assert.equal(await AuditLog.countDocuments({ admin_id: actorId, target_user_id: user._id, action: "REQUEST_PASSWORD_RESET_OTP", reason: "Hỗ trợ khách hàng" }), 1);
     assert.equal((await call(resetPassword, { email, otp: mail.at(-1).otp, password: "NewPassword123", confirm_password: "NewPassword123" })).statusCode, 200);
   });
-  await t.test("changing email clears verification and old challenges without unbanning", async () => {
+  await t.test("email change without a reason leaves verification and recovery state untouched", async () => {
     const { user, email, otp } = await signup();
     await call(verifyEmail, { email, otp });
     await call(forgotPassword, { email });
     await User.updateOne({ _id: user._id }, { $set: { account_status: "banned", status: false } });
     const res = response();
     await updateUserBasicInfo({ params: { id: user._id.toString() }, user: { id: new mongoose.Types.ObjectId().toString() }, body: { email: "changed@example.com" } }, res);
-    assert.equal(res.statusCode, 200);
+    assert.equal(res.statusCode, 400);
     const changed = await User.findById(user._id).select("+email_verification +password_recovery");
-    assert.equal(changed.email, "changed@example.com");
-    assert.equal(changed.email_verified_at, null);
-    assert.equal(changed.email_verification_required, true);
+    assert.equal(changed.email, email);
+    assert.ok(changed.email_verified_at);
+    assert.equal(changed.email_verification_required, false);
     assert.equal(changed.account_status, "banned");
-    assert.equal(changed.password_recovery, null);
-    assert.equal(changed.email_verification, null);
+    assert.ok(changed.password_recovery?.hash);
   });
   await t.test("legacy active accounts stay accessible and are not falsely marked verified", async () => {
     const { user } = await signup();

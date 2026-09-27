@@ -54,8 +54,3 @@ export const rejectAccountChangeRequest = async (id, reason) => {
   const res = await axiosClient.post(`${API_URL}/approval-requests/${id}/reject`, { reason });
   return res.data;
 };
-
-export const resendApprovedPasswordReset = async (id, target_user_id) => {
-  const res = await axiosClient.post(`${API_URL}/approval-requests/${id}/send-reset`, { target_user_id });
-  return res.data;
-};

@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { changePassword } from "../../api/authApi";
 import { useAuth } from "../../hooks/useAuth";
 import "./AccountApprovalsPage.css";
 import {
   approveAccountChangeRequest,
   getAccountChangeRequests,
   rejectAccountChangeRequest,
-  resendApprovedPasswordReset,
 } from "../services/userService";
 
 const kindLabels = {
   profile: "Thay đổi thông tin / vai trò",
   status: "Khóa hoặc mở khóa tài khoản",
-  password_reset: "Cấp quyền đặt lại mật khẩu",
+  password_reset: "Yêu cầu đặt lại mật khẩu cũ",
   password_change: "Admin tự đổi mật khẩu",
   reward_adjustment: "Điều chỉnh điểm thưởng",
 };
@@ -23,7 +21,7 @@ const identity = (value) => String(value?._id || value?.id || value || "");
 const visibleChanges = (request) => Object.entries(request.changes || {}).filter(([key]) => key !== "role_id" && key !== "status");
 
 export default function AccountApprovalsPage() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("pending");
@@ -31,8 +29,6 @@ export default function AccountApprovalsPage() {
   const [selected, setSelected] = useState(null);
   const [action, setAction] = useState("");
   const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -63,8 +59,6 @@ export default function AccountApprovalsPage() {
     setSelected(request);
     setAction(nextAction);
     setPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
     setReason("");
     setError("");
     setMessage("");
@@ -78,15 +72,9 @@ export default function AccountApprovalsPage() {
       let response;
       if (action === "approve") response = await approveAccountChangeRequest(selected._id, password);
       if (action === "reject") response = await rejectAccountChangeRequest(selected._id, reason);
-      if (action === "resend") response = await resendApprovedPasswordReset(selected._id, selected.target_user_id?._id);
-      if (action === "finish") {
-        if (newPassword !== confirmPassword) throw new Error("Mật khẩu xác nhận không khớp.");
-        response = await changePassword({ current_password: password, password: newPassword, confirm_password: confirmPassword, approval_request_id: selected._id });
-      }
       setMessage(response?.message || "Đã xử lý yêu cầu.");
       setSelected(null);
       await reload();
-      if (action === "finish") window.setTimeout(logout, 1200);
     } catch (requestError) {
       setError(requestError.response?.data?.message || requestError.message || "Không thể xử lý yêu cầu.");
     } finally {
@@ -131,7 +119,6 @@ export default function AccountApprovalsPage() {
             const reviewNames = reviewers.map((item) => item.admin_id?.full_name || item.admin_id?.email || "Admin");
             const isPending = request.status === "pending" && new Date(request.expires_at) > new Date();
             const canReview = isPending && !isRequester && !isTarget && !reviewers.length;
-            const canFinish = request.status === "approved" && request.kind === "password_change" && isTarget && new Date(request.expires_at) > new Date();
             const changes = visibleChanges(request);
             return (
               <article className="approval-card" key={request._id}>
@@ -154,8 +141,6 @@ export default function AccountApprovalsPage() {
                   </p>
                   <div className="approval-actions">
                     {canReview && <><button className="approval-button approval-button-primary" type="button" onClick={() => openAction(request, "approve")}>Phê duyệt</button><button className="approval-button approval-button-danger" type="button" onClick={() => openAction(request, "reject")}>Từ chối</button></>}
-                    {canFinish && <button className="approval-button approval-button-primary" type="button" onClick={() => openAction(request, "finish")}>Hoàn tất đổi mật khẩu</button>}
-                    {request.status === "approved" && request.kind === "password_reset" && <button className="approval-button approval-button-secondary" type="button" onClick={() => openAction(request, "resend")}>Gửi lại OTP</button>}
                   </div>
                 </div>
               </article>
@@ -166,12 +151,11 @@ export default function AccountApprovalsPage() {
       {selected && (
         <div className="approval-modal-backdrop" role="presentation">
           <form className="approval-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="approval-action-title" onKeyDown={(event) => { if (event.key === "Escape" && !busyId) setSelected(null); }}>
-            <div className="approval-modal-heading"><div><h2 id="approval-action-title">{action === "approve" ? "Xác nhận phê duyệt" : action === "reject" ? "Từ chối đề xuất" : action === "finish" ? "Hoàn tất đổi mật khẩu" : "Gửi lại OTP"}</h2><p>{kindLabels[selected.kind]} · {selected.target_user_id?.email}</p></div><button className="approval-close" type="button" onClick={() => setSelected(null)} disabled={Boolean(busyId)}>Đóng</button></div>
+            <div className="approval-modal-heading"><div><h2 id="approval-action-title">{action === "approve" ? "Xác nhận phê duyệt" : "Từ chối đề xuất"}</h2><p>{kindLabels[selected.kind]} · {selected.target_user_id?.email}</p></div><button className="approval-close" type="button" onClick={() => setSelected(null)} disabled={Boolean(busyId)}>Đóng</button></div>
             <p className="approval-modal-reason"><strong>Lý do đề xuất:</strong> {selected.reason}</p>
             {visibleChanges(selected).length > 0 && <div className="approval-modal-diff">{visibleChanges(selected).map(([key, value]) => <p key={key}><strong>{fieldLabels[key] || key}</strong><span>{formatValue(selected.before?.[key])} → {formatValue(value)}</span></p>)}</div>}
             {action === "reject" && <label className="approval-field">Lý do từ chối<textarea value={reason} onChange={(event) => setReason(event.target.value)} required rows={3} /></label>}
-            {["approve", "finish"].includes(action) && <label className="approval-field">Mật khẩu hiện tại<input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}
-            {action === "finish" && <><label className="approval-field">Mật khẩu mới<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required minLength={8} /></label><label className="approval-field">Nhập lại mật khẩu mới<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required /></label></>}
+            {action === "approve" && <label className="approval-field">Mật khẩu hiện tại<input autoFocus type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>}
             {error && <p role="alert" className="approval-alert approval-alert-error">{error}</p>}
             <div className="approval-modal-actions"><button className="approval-button approval-button-secondary" type="button" onClick={() => setSelected(null)} disabled={Boolean(busyId)}>Hủy</button><button className="approval-button approval-button-primary" type="submit" disabled={Boolean(busyId)}>{busyId ? "Đang xử lý..." : "Xác nhận"}</button></div>
           </form>

@@ -367,10 +367,7 @@ function AccountPage() {
     try {
       setSavingPassword(true);
       const response = await changePassword(passwordForm);
-      const isAdminRequest = user?.role === "admin";
-      const message = isAdminRequest
-        ? response.message || "Đã gửi yêu cầu đổi mật khẩu, chờ một admin khác phê duyệt. Hoàn tất trong mục Phê duyệt tài khoản."
-        : "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.";
+      const message = response.message || "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.";
       setPasswordMessage(message);
       showToast("success", message);
       setPasswordForm({
@@ -378,7 +375,7 @@ function AccountPage() {
         password: "",
         confirm_password: "",
       });
-      if (!isAdminRequest) window.setTimeout(logout, 1200);
+      window.setTimeout(logout, 1200);
     } catch (error) {
       const message = getApiErrorMessage(error, "Đổi mật khẩu thất bại.");
       setPasswordError(message);
@@ -508,7 +505,6 @@ function AccountPage() {
           {passwordMessage && (
             <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
               {passwordMessage}
-              {user?.role === "admin" && <Link className="ml-2 font-bold underline" to="/admin/account-approvals">Xem yêu cầu phê duyệt</Link>}
             </div>
           )}
           {passwordError && (

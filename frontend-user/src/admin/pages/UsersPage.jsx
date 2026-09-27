@@ -391,7 +391,7 @@ const UserDetailModal = ({ detail, loading, onClose, onEdit, onReward, onForceRe
             <>
               <button className="btn btn-secondary" type="button" onClick={() => onForceReset(user)}>
                 <HiOutlineKey />
-                Yêu cầu đặt lại mật khẩu
+                Gửi OTP đặt lại mật khẩu
               </button>
               {user.role !== "admin" && <>
                 <button className="btn btn-secondary" type="button" onClick={() => onReward(user)}>
@@ -732,7 +732,7 @@ const UsersPage = () => {
     if (!approvalReason.trim()) { addToast("error", "Vui lòng nhập lý do đặt lại mật khẩu."); return; }
     try {
       const response = await forceResetPassword(resetTarget._id, approvalReason.trim());
-      addToast("success", response.message || "Đã gửi yêu cầu phê duyệt");
+      addToast("success", response.message || "Đã gửi OTP đặt lại mật khẩu");
       setResetTarget(null);
       setApprovalReason("");
     } catch (error) {
@@ -903,7 +903,7 @@ const UsersPage = () => {
                                 >
                                   {isActiveUser(user) ? <HiOutlineLockClosed /> : <HiOutlineLockOpen />}
                                 </button>
-                                <button className="btn btn-icon btn-ghost" title="Yêu cầu đặt lại mật khẩu" onClick={() => { setApprovalReason(""); setResetTarget(user); }}>
+                                <button className="btn btn-icon btn-ghost" title="Gửi OTP đặt lại mật khẩu" onClick={() => { setApprovalReason(""); setResetTarget(user); }}>
                                   <HiOutlineKey />
                                 </button>
                             </div>
@@ -972,11 +972,11 @@ const UsersPage = () => {
 
       <ConfirmDialog
         isOpen={Boolean(resetTarget)}
-        title="Yêu cầu đặt lại mật khẩu"
-        message={`Tạo đề xuất đặt lại mật khẩu cho "${resetTarget?.full_name}"? OTP chỉ được gửi sau khi một admin khác phê duyệt.`}
+        title="Gửi OTP đặt lại mật khẩu"
+        message={`Gửi OTP đặt lại mật khẩu đến email của "${resetTarget?.full_name}"?`}
         onConfirm={handleConfirmForceReset}
         onCancel={() => { setResetTarget(null); setApprovalReason(""); }}
-        confirmLabel="Tạo yêu cầu"
+        confirmLabel="Gửi OTP"
         confirmClassName="btn-primary"
       ><label className="form-label" htmlFor="reset-approval-reason">Lý do</label><textarea id="reset-approval-reason" className="form-input form-textarea" rows={3} value={approvalReason} onChange={(event) => setApprovalReason(event.target.value)} /></ConfirmDialog>
 

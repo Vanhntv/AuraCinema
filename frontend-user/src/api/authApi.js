@@ -35,14 +35,12 @@ export const resetPassword = async ({
   otp,
   password,
   confirm_password,
-  approval_request_id,
 }) => {
   const response = await axiosClient.post("/auth/reset-password", {
     email,
     otp,
     password,
     confirm_password,
-    approval_request_id,
   });
   return response.data;
 };
@@ -61,13 +59,11 @@ export const changePassword = async ({
   current_password,
   password,
   confirm_password,
-  approval_request_id,
 }) => {
   const response = await axiosClient.patch("/auth/change-password", {
     current_password,
     password,
     confirm_password,
-    approval_request_id,
   });
   return response.data;
 };

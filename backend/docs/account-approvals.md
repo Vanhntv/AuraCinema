@@ -2,9 +2,9 @@
 
 `User.role` là nguồn quyền duy nhất (`user`, `staff`, `admin`). `role_id` được duy trì để tương thích dữ liệu cũ nhưng không cấp quyền. Trước khi triển khai, chạy `npm run migrate:roles` để xem số bản ghi lệch; chỉ khi đã kiểm tra kết quả mới chạy `npm run migrate:roles -- --apply`. Script đồng bộ `role_id` theo `role`, không tự nâng quyền.
 
-Các thao tác từ quản lý người dùng (`PATCH /api/users/:id`, `PATCH /api/users/:id/status`, `POST /api/users/:id/force-reset-password`, `POST /api/users/:id/reward-points`) tạo yêu cầu chờ duyệt và trả `202`. Thay đổi thông tin admin qua `PATCH /api/auth/profile` và yêu cầu tự đổi mật khẩu qua `PATCH /api/auth/change-password` cũng trả `202`. Không có thay đổi nào được áp dụng tại bước tạo yêu cầu.
+Các thao tác từ quản lý người dùng (`PATCH /api/users/:id`, `PATCH /api/users/:id/status`, `POST /api/users/:id/reward-points`) tạo yêu cầu chờ duyệt và trả `202`. Thay đổi thông tin admin qua `PATCH /api/auth/profile` cũng trả `202`. Không có thay đổi nào được áp dụng tại bước tạo yêu cầu. Admin tự đổi mật khẩu qua `PATCH /api/auth/change-password` được áp dụng ngay sau khi xác nhận mật khẩu hiện tại và phải đăng nhập lại.
 
-Admin xem hàng chờ tại `/admin/account-approvals`. Người tạo đề xuất không thể tự phê duyệt. Chỉ cần một admin khác xác nhận bằng mật khẩu hiện tại; nếu tài khoản đích là admin, chính tài khoản đích cũng không được duyệt. Yêu cầu hết hạn sau 24 giờ. Đổi mật khẩu admin không lưu mật khẩu mới trong yêu cầu: sau khi được duyệt, chủ tài khoản nhập lại mật khẩu hiện tại và mật khẩu mới trong hàng chờ. Với yêu cầu đặt lại mật khẩu, OTP chỉ được gửi sau khi được duyệt; luồng quên mật khẩu công khai không tự gửi OTP cho admin.
+Admin xem hàng chờ tại `/admin/account-approvals`. Người tạo đề xuất không thể tự phê duyệt. Chỉ cần một admin khác xác nhận bằng mật khẩu hiện tại; nếu tài khoản đích là admin, chính tài khoản đích cũng không được duyệt. Yêu cầu hết hạn sau 24 giờ. Các yêu cầu `password_change` và `password_reset` cũ đang chờ hoặc đã duyệt được chuyển sang `expired` khi tải hàng chờ; không tạo yêu cầu các loại này nữa. Admin có thể tự khôi phục mật khẩu bằng email qua `POST /api/auth/forgot-password` và `POST /api/auth/reset-password`. Admin cũng có thể gửi OTP cho tài khoản khác qua `POST /api/users/:id/force-reset-password` mà không cần phê duyệt; endpoint này chỉ gửi mã, không tự đổi mật khẩu.
 
 Hệ thống cần MongoDB hỗ trợ transaction để áp dụng thay đổi, lưu trạng thái yêu cầu và audit cùng nhau. Cần ít nhất hai admin hoạt động nếu admin tự đề xuất thay đổi tài khoản của mình; nếu admin A đề xuất thay đổi admin B thì cần thêm admin C để duyệt. Không thể khóa hoặc hạ quyền khiến còn dưới hai admin hoạt động.
 
@@ -12,4 +12,4 @@ Nếu phê duyệt hoặc từ chối trả `503 MONGODB_TRANSACTION_UNAVAILABLE
 
 Không chạy `Promise.all` với các truy vấn dùng cùng một session trong transaction. MongoDB có thể trả lỗi `ConflictingOperationInProgress` (mã 117); đó là lỗi thao tác đồng thời, không phải bằng chứng MongoDB thiếu replica set.
 
-API hàng chờ (chỉ admin): `GET /api/users/approval-requests`, `POST /api/users/approval-requests/:id/approve`, `POST /api/users/approval-requests/:id/reject`, `POST /api/users/approval-requests/:id/send-reset`. Phê duyệt yêu cầu trường `current_password`; từ chối yêu cầu trường `reason`.
+API hàng chờ (chỉ admin): `GET /api/users/approval-requests`, `POST /api/users/approval-requests/:id/approve`, `POST /api/users/approval-requests/:id/reject`. Phê duyệt yêu cầu trường `current_password`; từ chối yêu cầu trường `reason`.
