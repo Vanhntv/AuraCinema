@@ -946,7 +946,8 @@ const GiftsPage = () => {
           </div>
         ) : (
           <>
-            <div className="table-wrapper vouchers-table-wrapper">
+            <p className="gifts-table-hint">Cuộn ngang bảng để xem đầy đủ thời gian áp dụng, trạng thái và thao tác.</p>
+            <div className="table-wrapper gifts-table-wrapper" tabIndex={0} role="region" aria-label="Danh sách quà tặng, có thể cuộn ngang">
               <table className="data-table vouchers-table gifts-table">
                 <thead>
                   <tr>
