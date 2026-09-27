@@ -262,7 +262,6 @@ const emptyGiftForm = {
   acquisition_modes: ["manual"],
   trigger: "none",
   max_per_user: 1,
-  validity_days: "",
   benefit_reference_id: "",
   benefit_quantity: 1,
   seat_types: "",
@@ -293,7 +292,6 @@ const buildGiftFormFromGift = (gift) => ({
   acquisition_modes: gift?.acquisition_modes?.length ? gift.acquisition_modes : ["manual"],
   trigger: gift?.trigger || "none",
   max_per_user: gift?.max_per_user || 1,
-  validity_days: gift?.validity_days ?? "",
   benefit_reference_id: gift?.benefit?.combo_id || gift?.benefit?.voucher_id || "",
   benefit_quantity: gift?.benefit?.quantity || 1,
   seat_types: stringifyList(gift?.benefit?.seat_types),
@@ -381,7 +379,6 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
     if (!formData.acquisition_modes.length) nextErrors.acquisition_modes = "Chọn ít nhất một hình thức nhận";
     if (["combo", "voucher"].includes(formData.type) && !objectIdPattern.test(formData.benefit_reference_id)) nextErrors.benefit_reference_id = `ID ${formData.type === "combo" ? "combo" : "voucher"} không hợp lệ`;
     if (!Number.isInteger(Number(formData.max_per_user)) || Number(formData.max_per_user) < 1) nextErrors.max_per_user = "Giới hạn nhận phải là số nguyên dương";
-    if (formData.validity_days !== "" && (!Number.isInteger(Number(formData.validity_days)) || Number(formData.validity_days) < 1)) nextErrors.validity_days = "Số ngày phải là số nguyên dương";
     if (!isIssuedGift && !/^[A-Za-z0-9-]{2,}$/.test(formData.code.trim())) {
       nextErrors.code = "Mã quà chỉ gồm chữ không dấu, số và dấu -, tối thiểu 2 ký tự";
     }
@@ -447,7 +444,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       trigger: formData.trigger,
       redemption_channel: "online",
       max_per_user: Number(formData.max_per_user),
-      validity_days: formData.validity_days === "" ? null : Number(formData.validity_days),
+      validity_days: null,
       benefit: formData.type === "ticket"
         ? { quantity: Number(formData.benefit_quantity), max_unit_price: Number(formData.value || 0), seat_types: parseDelimitedList(formData.seat_types) }
         : formData.type === "combo"
@@ -581,7 +578,6 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
               <div className="form-row gift-receiving-fields">
                 <div className="form-group"><label className="form-label">Sự kiện phát tự động</label><select className="form-input" value={formData.trigger} onChange={(event) => handleChange("trigger", event.target.value)} disabled={isIssuedGift}><option value="none">Không áp dụng</option><option value="new_member">Thành viên mới</option><option value="birthday">Sinh nhật</option><option value="tier_reached">Đạt hạng thành viên</option><option value="paid_booking">Thanh toán đơn thành công</option></select></div>
                 <div className="form-group"><label className="form-label" title="Số lượt tối đa mỗi người">Lượt/người</label><input aria-label="Số lượt tối đa mỗi người" className={`form-input ${errors.max_per_user ? "error" : ""}`} type="number" min="1" value={formData.max_per_user} onChange={(event) => handleChange("max_per_user", event.target.value)} disabled={isIssuedGift} />{errors.max_per_user && <p className="form-error">{errors.max_per_user}</p>}</div>
-                <div className="form-group"><label className="form-label">Hiệu lực sau khi nhận (ngày)</label><input className={`form-input ${errors.validity_days ? "error" : ""}`} type="number" min="1" placeholder="Số ngày (không bắt buộc)" value={formData.validity_days} onChange={(event) => handleChange("validity_days", event.target.value)} disabled={isIssuedGift} /><p className="voucher-cell-sub">Bỏ trống để dùng ngày kết thúc của quà.</p>{errors.validity_days && <p className="form-error">{errors.validity_days}</p>}</div>
               </div>
               <div className="form-row">
                 {["combo", "voucher"].includes(formData.type) && <div className="form-group"><label className="form-label">ID {formData.type === "combo" ? "combo" : "voucher"} liên kết <span className="required">*</span></label><input className={`form-input ${errors.benefit_reference_id ? "error" : ""}`} value={formData.benefit_reference_id} onChange={(event) => handleChange("benefit_reference_id", event.target.value)} disabled={isIssuedGift} />{errors.benefit_reference_id && <p className="form-error">{errors.benefit_reference_id}</p>}</div>}

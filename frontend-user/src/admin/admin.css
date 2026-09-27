@@ -6909,7 +6909,7 @@ html.dark .admin-layout .showtime-conflict-range strong {
 }
 
 .form-row.gift-receiving-fields {
-  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1fr) 120px;
   align-items: start;
 }
 
@@ -6922,9 +6922,6 @@ html.dark .admin-layout .showtime-conflict-range strong {
     grid-template-columns: minmax(0, 1fr) 120px;
   }
 
-  .gift-receiving-fields .form-group:last-child {
-    grid-column: 1 / -1;
-  }
 }
 
 @media (max-width: 480px) {
