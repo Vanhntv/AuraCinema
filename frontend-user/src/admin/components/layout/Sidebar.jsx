@@ -81,6 +81,7 @@ const menuItems = [
     section: "Hệ thống",
     items: [
       { path: "/admin/users", icon: <HiOutlineUsers />, label: "Người dùng" },
+      { path: "/admin/account-approvals", icon: <HiOutlineUsers />, label: "Phê duyệt tài khoản" },
       {
         path: "/admin/policies",
         icon: <HiOutlineDocumentText />,

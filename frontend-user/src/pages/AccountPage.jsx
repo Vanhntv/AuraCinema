@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import LoyaltyPanel from "../components/LoyaltyPanel";
 import QRCode from "qrcode";
 import { HiOutlineLockClosed } from "react-icons/hi";
@@ -316,16 +316,22 @@ function AccountPage() {
 
     try {
       setSavingProfile(true);
-      await updateProfile({
+      const response = await updateProfile({
         full_name: fullName,
         birth_date: profileForm.birth_date || null,
         gender: profileForm.gender || null,
         address: profileForm.address,
         avatar: profileForm.avatar,
       });
-      await refreshProfile();
-      setProfileMessage("Cập nhật thông tin thành công.");
-      showToast("success", "Cập nhật thông tin thành công.");
+      if (user?.role === "admin") {
+        const message = response.message || "Đã gửi đề xuất, chờ một admin khác phê duyệt.";
+        setProfileMessage(message);
+        showToast("success", message);
+      } else {
+        await refreshProfile();
+        setProfileMessage("Cập nhật thông tin thành công.");
+        showToast("success", "Cập nhật thông tin thành công.");
+      }
     } catch (error) {
       const message = getApiErrorMessage(error, "Cập nhật thông tin thất bại.");
       setProfileError(message);
@@ -360,15 +366,19 @@ function AccountPage() {
 
     try {
       setSavingPassword(true);
-      await changePassword(passwordForm);
-      setPasswordMessage("Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
-      showToast("success", "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.");
+      const response = await changePassword(passwordForm);
+      const isAdminRequest = user?.role === "admin";
+      const message = isAdminRequest
+        ? response.message || "Đã gửi yêu cầu đổi mật khẩu, chờ một admin khác phê duyệt. Hoàn tất trong mục Phê duyệt tài khoản."
+        : "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.";
+      setPasswordMessage(message);
+      showToast("success", message);
       setPasswordForm({
         current_password: "",
         password: "",
         confirm_password: "",
       });
-      window.setTimeout(logout, 1200);
+      if (!isAdminRequest) window.setTimeout(logout, 1200);
     } catch (error) {
       const message = getApiErrorMessage(error, "Đổi mật khẩu thất bại.");
       setPasswordError(message);
@@ -384,6 +394,7 @@ function AccountPage() {
         {profileMessage && (
           <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200 md:col-span-2">
             {profileMessage}
+            {user?.role === "admin" && <Link className="ml-2 font-bold underline" to="/admin/account-approvals">Xem yêu cầu phê duyệt</Link>}
           </div>
         )}
         {profileError && (
@@ -497,6 +508,7 @@ function AccountPage() {
           {passwordMessage && (
             <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
               {passwordMessage}
+              {user?.role === "admin" && <Link className="ml-2 font-bold underline" to="/admin/account-approvals">Xem yêu cầu phê duyệt</Link>}
             </div>
           )}
           {passwordError && (

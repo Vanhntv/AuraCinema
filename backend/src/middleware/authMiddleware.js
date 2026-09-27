@@ -1,13 +1,11 @@
 import { verifyJwt } from "../utils/jwt.js";
 import User from "../models/User.js";
 
-const isAdminUser = (user) =>
-  String(user?.role || "").trim().toLowerCase() === "admin" ||
-  Number(user?.role_id) === 1;
+const isAdminUser = (user) => String(user?.role || "").trim().toLowerCase() === "admin";
 
 const resolveRole = (user) => {
   if (isAdminUser(user)) return "admin";
-  return String(user?.role || "").trim().toLowerCase() === "staff" || Number(user?.role_id) === 2
+  return String(user?.role || "").trim().toLowerCase() === "staff"
     ? "staff"
     : "user";
 };

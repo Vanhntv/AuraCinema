@@ -1,8 +1,8 @@
 export const isAdminUser = (user) =>
-  String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1;
+  String(user?.role || "").trim().toLowerCase() === "admin";
 
 export const isStaffUser = (user) =>
-  String(user?.role || "").trim().toLowerCase() === "staff" || Number(user?.role_id) === 2;
+  String(user?.role || "").trim().toLowerCase() === "staff";
 
 export const getStaffAppUrl = (token) => {
   const configuredUrl = import.meta.env.VITE_STAFF_URL;

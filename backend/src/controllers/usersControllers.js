@@ -5,14 +5,15 @@ import Booking from "../models/Booking.js";
 import RewardPointLog from "../models/RewardPointLog.js";
 import User from "../models/User.js";
 import UserVoucher from "../models/UserVoucher.js";
+import { requestAccountChange, listAccountChangeRequests, approveAccountChange, rejectAccountChange, getApprovedPasswordRequest } from "../services/accountApprovalService.js";
+import { verifyPassword } from "./authControllers.js";
 
-import { issueEmailOtp, OTP_TTL_MS } from "../services/emailOtpService.js";
+import { issueEmailOtp } from "../services/emailOtpService.js";
 
 const ALLOWED_GENDERS = ["male", "female", "other", null, ""];
 const ALLOWED_TIERS = ["member", "vip", "vvip"];
 const ALLOWED_ROLES = ["user", "staff", "admin"];
 const ALLOWED_ACCOUNT_STATUSES = ["active", "banned", "unverified"];
-const ADMIN_EDITABLE_PROFILE_FIELDS = new Set(["full_name", "phone", "birth_date", "gender"]);
 
 const isValidEmail = (email) => /^\S+@\S+\.\S+$/.test(email);
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
@@ -23,9 +24,6 @@ const resolveAccountStatus = (user) => {
 };
 
 const statusToLegacyBoolean = (accountStatus) => accountStatus === "active";
-
-export const getForbiddenAdminProfileFields = (payload = {}) =>
-  Object.keys(payload).filter((field) => field !== "reason" && !ADMIN_EDITABLE_PROFILE_FIELDS.has(field));
 
 const sanitizeUser = (user) => {
   const data = user.toObject ? user.toObject() : { ...user };
@@ -287,63 +285,26 @@ export const updateUserBasicInfo = async (req, res) => {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
     }
 
-    if (currentUser.role === "admin") {
-      const forbiddenFields = getForbiddenAdminProfileFields(req.body);
-      if (forbiddenFields.length) {
-        return res.status(403).json({
-          success: false,
-          message: "Tài khoản admin chỉ được sửa họ tên, số điện thoại, ngày sinh và giới tính",
-          fields: forbiddenFields,
-        });
-      }
-    }
-
     const { data, errors } = await validateProfilePayload(req.body, req.params.id);
     if (errors.length) {
       return res.status(400).json({ success: false, message: errors[0], errors });
-    }
-
-    if (req.user.id === req.params.id && data.account_status && data.account_status !== "active") {
-      return res.status(400).json({ success: false, message: "Không thể tự khóa tài khoản đang đăng nhập" });
     }
 
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ success: false, message: "Không có thông tin hợp lệ để cập nhật" });
     }
 
-    if (data.email && data.email !== currentUser.email) {
-      data.email_verified_at = null;
-      data.email_verification_required = true;
-      data.password_changed_at = new Date(Date.now() + 1000);
-      data.email_verification = null;
-      data.password_recovery = null;
-      if ((data.account_status || resolveAccountStatus(currentUser)) !== "banned") {
-        data.account_status = "unverified";
-        data.status = false;
-      }
-    }
-    const before = pickAuditFields(currentUser);
-    const user = await User.findOneAndUpdate(
-      { _id: req.params.id, deleted_at: null },
-      { $set: data },
-      { returnDocument: "after", runValidators: true },
-    ).select("-password -password_reset_otp -password_reset_expires_at -password_reset_attempts");
-
-    await writeAuditLog({
-      req,
-      targetUserId: req.params.id,
-      action: "UPDATE_USER_PROFILE",
-      before,
-      after: pickAuditFields(user),
-      reason: req.body.reason,
-    });
-
-    return res.json({ success: true, message: "Đã cập nhật thông tin người dùng", data: sanitizeUser(user) });
+    const changed = Object.fromEntries(Object.entries(data).filter(([key, value]) =>
+      JSON.stringify(value ?? null) !== JSON.stringify(currentUser[key] ?? null),
+    ));
+    if (!Object.keys(changed).length) return res.status(400).json({ success: false, message: "Thông tin không thay đổi" });
+    const request = await requestAccountChange({ targetId: currentUser._id, requesterId: req.user.id, kind: "profile", changes: changed, reason: req.body.reason });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({ success: false, message: "Email hoặc số điện thoại đã được sử dụng" });
     }
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
@@ -361,41 +322,15 @@ export const updateUserStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: "Trạng thái người dùng không hợp lệ" });
     }
 
-    if (req.user.id === req.params.id && nextStatus !== "active") {
-      return res.status(400).json({ success: false, message: "Không thể tự khóa tài khoản đang đăng nhập" });
-    }
-
     const currentUser = await User.findOne({ _id: req.params.id, deleted_at: null });
     if (!currentUser) {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
     }
-    if (currentUser.role === "admin") {
-      return res.status(403).json({ success: false, message: "Không được thay đổi trạng thái tài khoản admin" });
-    }
-
-    const before = pickAuditFields(currentUser);
-    const user = await User.findOneAndUpdate(
-      { _id: req.params.id, deleted_at: null },
-      { $set: { account_status: nextStatus, status: statusToLegacyBoolean(nextStatus) } },
-      { returnDocument: "after", runValidators: true },
-    ).select("-password -password_reset_otp -password_reset_expires_at -password_reset_attempts");
-
-    await writeAuditLog({
-      req,
-      targetUserId: req.params.id,
-      action: "UPDATE_USER_STATUS",
-      before,
-      after: pickAuditFields(user),
-      reason: req.body.reason,
-    });
-
-    return res.json({
-      success: true,
-      message: nextStatus === "active" ? "Đã mở khóa người dùng" : "Đã cập nhật trạng thái người dùng",
-      data: sanitizeUser(user),
-    });
+    if (resolveAccountStatus(currentUser) === nextStatus) return res.status(400).json({ success: false, message: "Trạng thái không thay đổi" });
+    const request = await requestAccountChange({ targetId: currentUser._id, requesterId: req.user.id, kind: "status", changes: { account_status: nextStatus, status: statusToLegacyBoolean(nextStatus) }, reason: req.body.reason });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất khóa/mở khóa, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
@@ -421,45 +356,11 @@ export const adjustRewardPoints = async (req, res) => {
       return res.status(400).json({ success: false, message: "Vui lòng nhập lý do điều chỉnh điểm" });
     }
 
-    const { user, rewardLog } = await withTransaction(async session => {
-    const user = await User.findOne({ _id: req.params.id, deleted_at: null }).session(session);
-    if (!user) throw Object.assign(new Error("Không tìm thấy người dùng"), { statusCode: 404 });
-    if (user.role === "admin") throw Object.assign(new Error("Không được điều chỉnh điểm của tài khoản admin"), { statusCode: 403 });
-    const before = pickAuditFields(user);
-    const currentPoints = Number(user.reward_points || 0);
-    const nextPoints = type === "add" ? currentPoints + points : currentPoints - points;
-    if (type === "subtract" && nextPoints < 0) throw Object.assign(new Error("Không đủ điểm để trừ"), { statusCode: 400 });
-
-    user.reward_points = nextPoints;
-    await user.save({ session });
-
-    const [rewardLog] = await RewardPointLog.create([{
-      user_id: user._id,
-      admin_id: req.user.id,
-      type,
-      points,
-      balance_after: nextPoints,
-      reason,
-    }], { session });
-
-    await writeAuditLog({
-      req,
-      targetUserId: req.params.id,
-      action: "ADJUST_REWARD_POINTS",
-      session,
-      before,
-      after: pickAuditFields(user),
-      reason,
+    const request = await requestAccountChange({
+      targetId: req.params.id, requesterId: req.user.id, kind: "reward_adjustment",
+      changes: { type, points }, reason,
     });
-    return { user, rewardLog };
-    });
-
-    return res.json({
-      success: true,
-      message: type === "add" ? "Đã cộng điểm thưởng" : "Đã trừ điểm thưởng",
-      data: sanitizeUser(user),
-      reward_log: rewardLog,
-    });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất điều chỉnh điểm, chờ một admin khác phê duyệt", data: request });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
@@ -475,31 +376,53 @@ export const forceResetPassword = async (req, res) => {
     if (!user) {
       return res.status(404).json({ success: false, message: "Không tìm thấy người dùng" });
     }
-    if (user.role === "admin") {
-      return res.status(403).json({ success: false, message: "Không được đặt lại mật khẩu của tài khoản admin từ trang quản lý người dùng" });
-    }
-
     if (resolveAccountStatus(user) === "banned") {
       return res.status(409).json({ success: false, message: "Tài khoản đang bị khóa." });
     }
-    await issueEmailOtp({ userId: user._id, purpose: "recovery" });
-
-    await writeAuditLog({
-      req,
-      targetUserId: req.params.id,
-      action: "FORCE_RESET_PASSWORD",
-      before: null,
-      after: { password_reset_expires_at: new Date(Date.now() + OTP_TTL_MS) },
-      reason: req.body.reason,
-    });
-
-    const payload = {
-      success: true,
-      message: "Đã gửi email đặt lại mật khẩu cho người dùng",
-    };
-
-    return res.json(payload);
+    const request = await requestAccountChange({ targetId: user._id, requesterId: req.user.id, kind: "password_reset", reason: req.body.reason });
+    return res.status(202).json({ success: true, message: "Đã tạo đề xuất đặt lại mật khẩu. OTP chỉ được gửi sau khi một admin khác phê duyệt", data: request });
   } catch (error) {
-    return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || "Không thể gửi email đặt lại mật khẩu." });
+    return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || (error.statusCode ? error.message : "Không thể tạo yêu cầu đặt lại mật khẩu.") });
   }
+};
+
+export const getAccountChangeRequests = async (req, res) => {
+  try {
+    const data = await listAccountChangeRequests(req.query);
+    return res.json({ success: true, data });
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+};
+
+export const approveAccountChangeRequest = async (req, res) => {
+  try {
+    if (typeof req.body?.current_password !== "string" || !req.body.current_password) {
+      return res.status(400).json({ success: false, message: "Vui lòng nhập mật khẩu admin để xác nhận" });
+    }
+    const reviewer = await User.findOne({ _id: req.user.id, role: "admin", account_status: "active", status: true, email_verification_required: { $ne: true }, deleted_at: null });
+    if (!reviewer || !await verifyPassword(req.body.current_password, reviewer.password)) {
+      return res.status(401).json({ success: false, message: "Mật khẩu admin xác nhận không đúng" });
+    }
+    const request = await approveAccountChange({ requestId: req.params.id, reviewerId: req.user.id, passwordValid: true });
+    let deliveryMessage = "";
+    if (request.status === "approved" && request.kind === "password_reset") {
+      try { await issueEmailOtp({ userId: request.target_user_id, purpose: "recovery" }); }
+      catch { deliveryMessage = " Yêu cầu đã được duyệt nhưng chưa gửi được OTP; hãy thử nút Gửi lại OTP."; }
+    }
+    return res.json({ success: true, message: `Admin khác đã phê duyệt đề xuất.${deliveryMessage}`, data: request });
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+};
+
+export const rejectAccountChangeRequest = async (req, res) => {
+  try {
+    const request = await rejectAccountChange({ requestId: req.params.id, reviewerId: req.user.id, reason: req.body?.reason });
+    return res.json({ success: true, message: "Đã từ chối yêu cầu", data: request });
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.message }); }
+};
+
+export const resendApprovedPasswordReset = async (req, res) => {
+  try {
+    const request = await getApprovedPasswordRequest({ requestId: req.params.id, targetId: req.body?.target_user_id, kind: "password_reset" });
+    await issueEmailOtp({ userId: request.target_user_id, purpose: "recovery" });
+    return res.json({ success: true, message: "Đã gửi OTP đặt lại mật khẩu" });
+  } catch (error) { return res.status(error.statusCode || 500).json({ success: false, message: error.publicMessage || error.message }); }
 };

@@ -9,6 +9,7 @@ const ConfirmDialog = ({
   confirmLabel = "Xác nhận xóa",
   confirmClassName = "btn-danger",
   isLoading = false,
+  children,
 }) => {
   if (!isOpen) return null;
 
@@ -21,6 +22,7 @@ const ConfirmDialog = ({
           </div>
           <h3 className="confirm-title">{title}</h3>
           <p className="confirm-message">{message}</p>
+          {children}
           <div className="confirm-actions">
             <button className="btn btn-secondary" onClick={onCancel} disabled={isLoading}>
               {"H\u1ee7y b\u1ecf"}

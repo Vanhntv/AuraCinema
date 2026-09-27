@@ -3,7 +3,6 @@ import test from "node:test";
 import User from "../src/models/User.js";
 import {
   forceResetPassword,
-  getForbiddenAdminProfileFields,
   updateUserBasicInfo,
   updateUserStatus,
 } from "../src/controllers/usersControllers.js";
@@ -17,31 +16,18 @@ const makeResponse = () => ({
   json(body) { this.body = body; return body; },
 });
 
-test("admin profile policy only permits the four basic fields", () => {
-  assert.deepEqual(getForbiddenAdminProfileFields({
-    full_name: "Admin mới",
-    phone: "0900000000",
-    birth_date: "1990-01-01",
-    gender: "other",
-  }), []);
-  assert.deepEqual(getForbiddenAdminProfileFields({ email: "new@example.com", role: "user", account_status: "banned" }), [
-    "email",
-    "role",
-    "account_status",
-  ]);
-});
-
-test("admin management endpoints reject forbidden admin account operations", async () => {
+test("admin account mutations require a reason before an approval request can be created", async () => {
   const originalFindOne = User.findOne;
-  User.findOne = async () => ({ _id: ADMIN_ID, role: "admin" });
+  User.findOne = async () => ({ _id: ADMIN_ID, role: "admin", full_name: "Admin cũ", account_status: "active" });
   try {
     const editResponse = makeResponse();
     await updateUserBasicInfo({
       params: { id: ADMIN_ID },
-      body: { email: "changed@example.com" },
+      body: { full_name: "Admin mới" },
       user: { id: ACTOR_ID },
     }, editResponse);
-    assert.equal(editResponse.statusCode, 403);
+    assert.equal(editResponse.statusCode, 400);
+    assert.match(editResponse.body.message, /lý do/i);
 
     const statusResponse = makeResponse();
     await updateUserStatus({
@@ -49,7 +35,8 @@ test("admin management endpoints reject forbidden admin account operations", asy
       body: { account_status: "banned" },
       user: { id: ACTOR_ID },
     }, statusResponse);
-    assert.equal(statusResponse.statusCode, 403);
+    assert.equal(statusResponse.statusCode, 400);
+    assert.match(statusResponse.body.message, /lý do/i);
 
     const resetResponse = makeResponse();
     await forceResetPassword({
@@ -57,7 +44,8 @@ test("admin management endpoints reject forbidden admin account operations", asy
       body: {},
       user: { id: ACTOR_ID },
     }, resetResponse);
-    assert.equal(resetResponse.statusCode, 403);
+    assert.equal(resetResponse.statusCode, 400);
+    assert.match(resetResponse.body.message, /lý do/i);
   } finally {
     User.findOne = originalFindOne;
   }

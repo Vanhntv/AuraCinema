@@ -5,8 +5,7 @@ import { ACCESS_TOKEN_KEY, AUTH_FORBIDDEN_EVENT } from "../api/axiosClient";
 import { LOGIN_PATH } from "../utils/authRoutes";
 import { AuthContext } from "./AuthContext";
 
-const isAdminUser = (user) =>
-  String(user?.role || "").trim().toLowerCase() === "admin" || Number(user?.role_id) === 1;
+const isAdminUser = (user) => String(user?.role || "").trim().toLowerCase() === "admin";
 
 function AuthProvider({ children }) {
   const navigate = useNavigate();

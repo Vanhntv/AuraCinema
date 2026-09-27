@@ -39,3 +39,23 @@ export const forceResetPassword = async (id, reason = "") => {
   const res = await axiosClient.post(`${API_URL}/${id}/force-reset-password`, { reason });
   return res.data;
 };
+
+export const getAccountChangeRequests = async (params = {}) => {
+  const res = await axiosClient.get(`${API_URL}/approval-requests`, { params });
+  return res.data;
+};
+
+export const approveAccountChangeRequest = async (id, current_password) => {
+  const res = await axiosClient.post(`${API_URL}/approval-requests/${id}/approve`, { current_password });
+  return res.data;
+};
+
+export const rejectAccountChangeRequest = async (id, reason) => {
+  const res = await axiosClient.post(`${API_URL}/approval-requests/${id}/reject`, { reason });
+  return res.data;
+};
+
+export const resendApprovedPasswordReset = async (id, target_user_id) => {
+  const res = await axiosClient.post(`${API_URL}/approval-requests/${id}/send-reset`, { target_user_id });
+  return res.data;
+};
