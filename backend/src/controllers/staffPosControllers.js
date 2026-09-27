@@ -26,7 +26,8 @@ import SeatHold from "../models/SeatHold.js";
 import Ticket from "../models/Ticket.js";
 import TicketScanLog, { createTicketScanLogSafe } from "../models/TicketScanLog.js";
 import User from "../models/User.js";
-import { createTicketsForPaidBooking, hashQrToken } from "../services/ticketService.js";
+import { buildBookingPrintPayload } from "./adminBookingPrintControllers.js";
+import { buildTicketQrPayload, createTicketsForPaidBooking, decryptQrToken, hashQrToken } from "../services/ticketService.js";
 import { issueBookingOrderQr, parseBookingQrPayload } from "../services/bookingOrderService.js";
 import { validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
 import { isBrokenSeatType } from "../utils/seatTypes.js";
@@ -330,11 +331,26 @@ export const printCounterSale = async (req, res) => {
     if (!booking) return res.status(404).json({ success: false, message: "Không tìm thấy đơn bán tại quầy." });
     const existingTickets = await Ticket.find({ bookingId: booking._id }).select("_id printedAt").sort({ seatLabel: 1 });
     if (!existingTickets.length) return res.status(404).json({ success: false, message: "Đơn chưa có vé để in." });
-    if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in trước đó và không thể in lại tại quầy." });
+    if (existingTickets.some((ticket) => ticket.printedAt)) return res.status(409).json({ success: false, message: "Vé của đơn này đã được in trước đó và không thể in lại tại quầy." });
     const now = new Date();
     const printClaim = await Ticket.updateMany({ bookingId: booking._id, printedAt: null, status: "VALID" }, { $set: { printedAt: now, printedBy: req.user.id } });
-    if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé cứng của đơn này đã được in hoặc không còn đủ điều kiện in." });
-    const tickets = await Ticket.find({ bookingId: booking._id }).sort({ seatLabel: 1 });
-    return res.json({ success: true, data: { booking_code: booking.booking_code, movie: booking.movie_snapshot.title, showtime: booking.showtime_snapshot, seats: booking.seat_items.map((item) => item.seat_label), total_price: booking.total_price, tickets: tickets.map((item) => ({ code: item.ticketCode, seat: item.seatLabel })) } });
+    if (printClaim.modifiedCount !== existingTickets.length) return res.status(409).json({ success: false, message: "Vé của đơn này đã được in hoặc không còn đủ điều kiện in." });
+    const tickets = await Ticket.find({ bookingId: booking._id })
+      .select("+qrTokenEncrypted")
+      .sort({ seatLabel: 1 });
+    const qrPayloadByTicketId = new Map(tickets.map((ticket) => [
+      String(ticket._id),
+      buildTicketQrPayload(decryptQrToken(ticket.qrTokenEncrypted)),
+    ]));
+    const printPayload = buildBookingPrintPayload({
+      booking,
+      tickets,
+      qrPayloadByTicketId,
+      printedBy: {
+        id: req.user.id,
+        accountName: String(req.user.full_name || req.user.email || req.user.id),
+      },
+    });
+    return res.json({ success: true, message: "Đã ghi nhận lượt in vé.", data: printPayload });
   } catch (error) { return res.status(500).json({ success: false, message: error.message }); }
 };
