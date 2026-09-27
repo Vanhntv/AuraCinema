@@ -36,7 +36,7 @@ const resolveVoucherStatus = (voucher) => {
     active: { label: "Đang hoạt động", className: "status-now-showing" },
     upcoming: { label: "Sắp diễn ra", className: "status-coming-soon" },
     paused: { label: "Tạm dừng", className: "status-ended" },
-    out_of_usage: { label: "Đã hết lượt", className: "status-ended" },
+    out_of_usage: { label: "Tạm dừng", className: "status-ended" },
     expired: { label: "Hết hạn", className: "status-ended" },
     cancelled: { label: "Đã hủy", className: "status-ended" },
   };
@@ -55,7 +55,7 @@ const resolveVoucherStatus = (voucher) => {
   const usageCount = Number(voucher.usage_count ?? Math.max(usageLimit - Number(voucher.quantity || 0), 0));
 
   if (startTime && now < startTime) return { label: "Sắp diễn ra", className: "status-coming-soon" };
-  if (usageLimit > 0 && usageCount >= usageLimit) return { label: "Đã hết lượt", className: "status-ended" };
+  if (Number(voucher.quantity || 0) <= 0 || (usageLimit > 0 && usageCount >= usageLimit)) return { label: "Tạm dừng", className: "status-ended" };
   if (endTime && now > endTime) return { label: "Hết hạn", className: "status-ended" };
   return { label: "Đang hoạt động", className: "status-now-showing" };
 };
@@ -101,6 +101,7 @@ const VoucherTable = ({ vouchers, onView, onEdit, onToggleStatus, onDelete }) =>
               voucher.usage_count ?? Math.max(usageLimit - Number(voucher.quantity || 0), 0),
             );
             const isCancelled = voucher.computed_status === "cancelled" || Boolean(voucher.deleted_at);
+            const isExhausted = voucher.is_usage_exhausted || Number(voucher.quantity || 0) <= 0 || (usageLimit > 0 && usageCount >= usageLimit);
 
             return (
               <tr key={voucher._id}>
@@ -160,9 +161,9 @@ const VoucherTable = ({ vouchers, onView, onEdit, onToggleStatus, onDelete }) =>
                     <button
                       className="btn btn-icon btn-ghost"
                       aria-label={`${voucher.status ? "Tạm dừng" : "Kích hoạt"} ${voucher.code}`}
-                      title={voucher.status ? "Tạm dừng mã" : "Kích hoạt mã"}
+                      title={isExhausted ? "Mã đã hết lượt, cần tăng giới hạn sử dụng trước khi kích hoạt" : voucher.status ? "Tạm dừng mã" : "Kích hoạt mã"}
                       onClick={() => onToggleStatus(voucher)}
-                      disabled={isCancelled}
+                      disabled={isCancelled || isExhausted}
                       type="button"
                     >
                       {voucher.status ? <HiOutlinePause /> : <HiOutlinePlay />}

@@ -4,6 +4,7 @@ import { walletState, validId } from "./loyaltyService.js";
 import { tierForSpend } from "./loyaltyPolicy.js";
 import { requireTransaction } from "./transactionService.js";
 import Voucher from "../models/Voucher.js";
+import { exhaustedVoucherFilter, isVoucherUsageExhausted, voucherUsageCapacityExpression } from "../modules/vouchers/voucher.availability.js";
 import VoucherUsage from "../models/VoucherUsage.js";
 import VoucherUsageCounter from "../models/VoucherUsageCounter.js";
 import User from "../models/User.js";
@@ -18,6 +19,12 @@ import {
 } from "../modules/vouchers/voucher.validation.js";
 
 const isMissing = (value) => value === undefined || value === null || value === "";
+
+const pauseExhaustedVoucher = (voucherId, session = null) => Voucher.updateOne(
+  { _id: voucherId, deleted_at: null, status: true, ...exhaustedVoucherFilter() },
+  { $set: { status: false, paused_by_usage: true } },
+  { session },
+);
 
 const normalizeVoucherCode = (value) => {
   if (isMissing(value)) {
@@ -310,6 +317,11 @@ export const releaseReservedVoucherForBooking = async ({
       { $inc: { used_count: -1 } },
       { session },
     );
+    await Voucher.updateOne(
+      { _id: usage.voucher_id, deleted_at: null, paused_by_usage: true, quantity: { $gt: 0 }, $expr: voucherUsageCapacityExpression() },
+      { $set: { status: true, paused_by_usage: false } },
+      { session },
+    );
   }
 
   usage.status = "cancelled";
@@ -363,6 +375,7 @@ export const reserveVoucherUsageForPayment = async ({
       deleted_at: null,
       status: true,
       quantity: { $gte: reserveQuantity },
+      $expr: voucherUsageCapacityExpression(reserveQuantity),
       start_date: { $lte: now },
       end_date: { $gte: now },
     },
@@ -376,6 +389,7 @@ export const reserveVoucherUsageForPayment = async ({
   );
 
   if (updateResult.modifiedCount === 1) {
+    await pauseExhaustedVoucher(voucherId, session);
     return true;
   }
 
@@ -479,23 +493,17 @@ export const consumeReservedVoucherForBooking = async ({
 
 const deriveVoucherStatus = (data) => {
   const now = new Date();
-  const usageLimit = data.usage_limit ?? (Number(data.quantity || 0) + Number(data.usage_count || 0));
-  const usageCount = data.usage_count ?? Math.max(Number(usageLimit || 0) - Number(data.quantity || 0), 0);
 
   if (data.deleted_at) {
     return { value: "cancelled", label: "Da huy" };
   }
 
-  if (!data.status) {
+  if (!data.status || isVoucherUsageExhausted(data)) {
     return { value: "paused", label: "Tam dung" };
   }
 
   if (data.start_date && now < data.start_date) {
     return { value: "upcoming", label: "Sap dien ra" };
-  }
-
-  if (Number(usageLimit || 0) > 0 && Number(usageCount || 0) >= Number(usageLimit || 0)) {
-    return { value: "out_of_usage", label: "Da het luot" };
   }
 
   if (data.end_date && now > data.end_date) {
@@ -517,6 +525,8 @@ const toVoucherListItem = (voucher) => {
     apply_scope: data.apply_scope || "order",
     usage_limit: usageLimit,
     usage_count: usageCount,
+    status: Boolean(data.status) && !isVoucherUsageExhausted(data),
+    is_usage_exhausted: isVoucherUsageExhausted(data),
     computed_status: computedStatus.value,
     computed_status_label: computedStatus.label,
   };
@@ -566,20 +576,23 @@ const buildVoucherFilter = (query = {}) => {
       filter.start_date = { $lte: new Date() };
       filter.end_date = { $gte: new Date() };
       filter.quantity = { $gt: 0 };
+      filter.$expr = voucherUsageCapacityExpression();
     } else if (["true", "1", "enabled"].includes(normalizedStatus)) {
       filter.status = true;
     } else if (["false", "0", "inactive", "disabled", "paused"].includes(normalizedStatus)) {
-      filter.status = false;
+      filter.$and = [{ $or: [{ status: false }, exhaustedVoucherFilter()] }];
     } else if (normalizedStatus === "upcoming") {
       filter.status = true;
       filter.start_date = { $gt: new Date() };
+      filter.quantity = { $gt: 0 };
+      filter.$expr = voucherUsageCapacityExpression();
     } else if (normalizedStatus === "expired") {
       filter.status = true;
       filter.end_date = { $lt: new Date() };
       filter.quantity = { $gt: 0 };
+      filter.$expr = voucherUsageCapacityExpression();
     } else if (normalizedStatus === "out_of_usage") {
-      filter.status = true;
-      filter.quantity = { $lte: 0 };
+      filter.$and = [exhaustedVoucherFilter()];
     }
   }
 
@@ -861,6 +874,7 @@ const buildPublicVoucherFilter = (now = new Date()) => ({
   deleted_at: null,
   status: true,
   quantity: { $gt: 0 },
+  $expr: voucherUsageCapacityExpression(),
   start_date: { $lte: now },
   end_date: { $gte: now },
 });
@@ -999,6 +1013,7 @@ export const getVoucherStatsService = async () => {
       start_date: { $lte: now },
       end_date: { $gte: now },
       quantity: { $gt: 0 },
+      $expr: voucherUsageCapacityExpression(),
     }),
     VoucherUsage.aggregate([
       { $match: { status: "used", payment_status: "paid" } },
@@ -1247,6 +1262,15 @@ export const updateVoucherService = async (id, payload, user = null) => {
     throw error;
   }
 
+  if (normalizedPayload.status === true && isVoucherUsageExhausted(nextVoucherState)) {
+    throw Object.assign(new Error("Mã giảm giá đã hết lượt. Hãy tăng giới hạn sử dụng trước khi kích hoạt."), { statusCode: 409 });
+  }
+  if (Object.prototype.hasOwnProperty.call(normalizedPayload, "status")) normalizedPayload.paused_by_usage = false;
+  if (isVoucherUsageExhausted(nextVoucherState) && nextVoucherState.status) {
+    normalizedPayload.status = false;
+    normalizedPayload.paused_by_usage = true;
+  }
+
   const updatedVoucher = await Voucher.findOneAndUpdate(
     { _id: id, deleted_at: null, quantity: existingVoucher.quantity, usage_count: existingVoucher.usage_count,
       allocated_count: existingVoucher.allocated_count ? existingVoucher.allocated_count : { $in: [0, null] } },
@@ -1307,7 +1331,11 @@ export const toggleVoucherStatusService = async (id) => {
     throw error;
   }
 
+  if (isVoucherUsageExhausted(voucher)) {
+    throw Object.assign(new Error("Mã giảm giá đã hết lượt. Hãy tăng giới hạn sử dụng trước khi kích hoạt."), { statusCode: 409 });
+  }
   voucher.status = !voucher.status;
+  voucher.paused_by_usage = false;
   await voucher.save();
 
   return voucher;
@@ -1330,6 +1358,7 @@ export const consumeVoucherQuantityService = async ({
     deleted_at: null,
     status: true,
     quantity: { $gte: consumeQuantity },
+    $expr: voucherUsageCapacityExpression(consumeQuantity),
   };
 
   if (voucherId) {
@@ -1384,6 +1413,11 @@ export const consumeVoucherQuantityService = async ({
     throw error;
   }
 
+  const paused = await pauseExhaustedVoucher(updatedVoucher._id);
+  if (paused.modifiedCount) {
+    updatedVoucher.status = false;
+    updatedVoucher.paused_by_usage = true;
+  }
   return {
     voucher: updatedVoucher,
     remaining_quantity: updatedVoucher.quantity,
@@ -1429,7 +1463,7 @@ export const verifyVoucherService = async (payload = {}) => {
     };
   }
 
-  if (voucher.quantity <= 0) {
+  if (!owned && isVoucherUsageExhausted(voucher)) {
     return {
       valid: false,
       message: VOUCHER_MESSAGES.OUT_OF_USAGE,

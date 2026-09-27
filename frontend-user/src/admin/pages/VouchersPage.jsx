@@ -551,7 +551,6 @@ const VouchersPage = () => {
               <option value="paused">Tạm dừng</option>
               <option value="upcoming">Sắp diễn ra</option>
               <option value="expired">Hết hạn</option>
-              <option value="out_of_usage">Đã hết lượt</option>
               <option value="cancelled">Đã hủy</option>
             </select>
             <select
