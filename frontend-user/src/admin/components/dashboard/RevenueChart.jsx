@@ -19,7 +19,7 @@ const compactFormatter = new Intl.NumberFormat("vi-VN", {
   maximumFractionDigits: 1,
 });
 
-const RevenueChart = ({ data, loading = false }) => {
+const RevenueChart = ({ data, loading = false, xAxisLabel = "Ngày" }) => {
   if (loading) {
     return <div className="dashboard-chart-state">Đang tải biểu đồ...</div>;
   }
@@ -50,7 +50,7 @@ const RevenueChart = ({ data, loading = false }) => {
             height={42}
             interval={Math.max(Math.ceil(data.length / 12) - 1, 0)}
             label={{
-              value: "Ngày",
+              value: xAxisLabel,
               position: "insideBottom",
               offset: -3,
               fill: "#64748b",

@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getBookingStatusStats,
+  getCustomDateRange,
   getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
   getDateRange,
   getMonthlyRevenue,
+  getRangeRevenue,
   getMonthRange,
   getMovieRevenue,
   getRevenueComparison,
@@ -15,6 +17,8 @@ import {
   getTodayRange,
   getWeeklyRevenue,
   getWeekRange,
+  getYearlyRevenue,
+  getYearRange,
 } from "../src/controllers/dashboardControllers.js";
 import Booking from "../src/models/Booking.js";
 import Cinema from "../src/models/Cinema.js";
@@ -154,6 +158,30 @@ test("getMonthRange returns every day in a leap-year month", () => {
   assert.equal(range.days[0].date, "2028-02-01");
   assert.equal(range.days[28].date, "2028-02-29");
   assert.equal(getMonthRange("13", "2028"), null);
+});
+
+test("getYearRange creates Vietnam boundaries and all month labels", () => {
+  const range = getYearRange("2026");
+
+  assert.equal(range.start.toISOString(), "2025-12-31T17:00:00.000Z");
+  assert.equal(range.end.toISOString(), "2026-12-31T17:00:00.000Z");
+  assert.equal(range.months.length, 12);
+  assert.deepEqual(range.months[0], { month: 1, label: "T1" });
+  assert.deepEqual(range.months[11], { month: 12, label: "T12" });
+  assert.equal(getYearRange("20x6"), null);
+});
+
+test("getCustomDateRange includes both selected dates in Vietnam", () => {
+  const range = getCustomDateRange("2026-08-07", "2026-08-09");
+
+  assert.equal(range.start.toISOString(), "2026-08-06T17:00:00.000Z");
+  assert.equal(range.end.toISOString(), "2026-08-09T17:00:00.000Z");
+  assert.deepEqual(range.days, [
+    { date: "2026-08-07", label: "07/08" },
+    { date: "2026-08-08", label: "08/08" },
+    { date: "2026-08-09", label: "09/08" },
+  ]);
+  assert.equal(getCustomDateRange("2026-08-09", "2026-08-07"), null);
 });
 
 test("getDashboardOverview returns tickets and successful paid bookings", async () => {
@@ -394,6 +422,176 @@ test("getMonthlyRevenue returns daily values and the monthly total", async () =>
   assert.equal(responseBody.data.days.length, 31);
   assert.equal(responseBody.data.days[1].revenue, 0);
   assert.equal(responseBody.data.totalRevenue, 18000000);
+});
+
+test("getRangeRevenue returns totals and fills dates without revenue", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [{
+      summary: [{ revenue: 18000000, ticketsSold: 12, bookingCount: 7 }],
+      dailyRevenue: [
+        { _id: "2026-08-07", revenue: 10000000 },
+        { _id: "2026-08-09", revenue: 8000000 },
+      ],
+    }];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getRangeRevenue(
+      { query: { from: "2026-08-07", to: "2026-08-09" } },
+      response,
+    );
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$gte.toISOString(),
+    "2026-08-06T17:00:00.000Z",
+  );
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$lt.toISOString(),
+    "2026-08-09T17:00:00.000Z",
+  );
+  assert.equal(
+    receivedPipeline[1].$facet.dailyRevenue[0].$group._id.$dateToString.timezone,
+    "Asia/Ho_Chi_Minh",
+  );
+  assert.deepEqual(responseBody.data.days.map((day) => day.revenue), [10000000, 0, 8000000]);
+  assert.equal(responseBody.data.totalRevenue, 18000000);
+  assert.equal(responseBody.data.ticketsSold, 12);
+  assert.equal(responseBody.data.bookingCount, 7);
+});
+
+test("getYearlyRevenue returns all months and the yearly total", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [
+      { _id: 1, revenue: 12000000 },
+      { _id: 12, revenue: 18000000 },
+    ];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getYearlyRevenue({ query: { year: "2026" } }, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$gte.toISOString(),
+    "2025-12-31T17:00:00.000Z",
+  );
+  assert.equal(receivedPipeline[1].$group._id.$month.timezone, "Asia/Ho_Chi_Minh");
+  assert.equal(responseBody.data.months.length, 12);
+  assert.equal(responseBody.data.months[1].revenue, 0);
+  assert.equal(responseBody.data.totalRevenue, 30000000);
+});
+
+test("getRevenueComparison compares the selected year with the previous year", async () => {
+  const originalAggregate = Booking.aggregate;
+  let responseBody;
+
+  Booking.aggregate = async () => [{
+    current: [{ revenue: 400000000 }],
+    previous: [{ revenue: 320000000 }],
+  }];
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getRevenueComparison({
+      query: { period: "year", date: "2026-08-07" },
+    }, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.deepEqual(responseBody.data, {
+    period: "year",
+    current: { label: "Năm 2026", revenue: 400000000 },
+    previous: { label: "Năm 2025", revenue: 320000000 },
+    percentageChange: 25,
+  });
+});
+
+test("getRevenueComparison compares a custom range with the preceding equal range", async () => {
+  const originalAggregate = Booking.aggregate;
+  let receivedPipeline;
+  let responseBody;
+
+  Booking.aggregate = async (pipeline) => {
+    receivedPipeline = pipeline;
+    return [{
+      current: [{ revenue: 9000000 }],
+      previous: [{ revenue: 6000000 }],
+    }];
+  };
+
+  const response = {
+    status(statusCode) {
+      assert.equal(statusCode, 200);
+      return this;
+    },
+    json(body) {
+      responseBody = body;
+      return this;
+    },
+  };
+
+  try {
+    await getRevenueComparison({
+      query: { period: "range", from: "2026-08-07", to: "2026-08-09" },
+    }, response);
+  } finally {
+    Booking.aggregate = originalAggregate;
+  }
+
+  assert.equal(
+    receivedPipeline[0].$match.created_at.$gte.toISOString(),
+    "2026-08-03T17:00:00.000Z",
+  );
+  assert.equal(responseBody.data.previous.label, "2026-08-04 - 2026-08-06");
+  assert.equal(responseBody.data.percentageChange, 50);
 });
 
 test("getRevenueComparison compares the selected month with the previous month", async () => {

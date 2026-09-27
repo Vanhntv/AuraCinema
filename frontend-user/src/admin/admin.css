@@ -613,6 +613,163 @@
   flex-direction: column;
 }
 
+.dashboard-page--compact .page-header {
+  margin-bottom: 18px;
+}
+
+.dashboard-summary-grid .dashboard-stat-card {
+  grid-column: span 3;
+  min-height: 96px;
+}
+
+.dashboard-summary-grid .stat-card-label {
+  margin-top: 3px;
+}
+
+.dashboard-revenue-workspace {
+  margin-bottom: 22px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--gradient-card), var(--color-bg-card);
+}
+
+.dashboard-revenue-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+.dashboard-revenue-toolbar h2 {
+  color: var(--color-text-primary);
+  font-size: 18px;
+}
+
+.dashboard-revenue-toolbar p {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.dashboard-revenue-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-date-shortcuts {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+}
+
+.dashboard-date-shortcuts button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 3px);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dashboard-date-shortcuts button:hover,
+.dashboard-date-shortcuts button.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.dashboard-revenue-summary {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.1fr) minmax(360px, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.dashboard-revenue-primary,
+.dashboard-comparison-inline > div {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+}
+
+.dashboard-revenue-primary {
+  border-color: rgba(45, 212, 191, 0.25);
+  background: linear-gradient(135deg, rgba(45, 212, 191, 0.09), rgba(59, 130, 246, 0.05));
+}
+
+.dashboard-revenue-primary span,
+.dashboard-revenue-primary small,
+.dashboard-comparison-inline span,
+.dashboard-comparison-inline small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dashboard-revenue-primary strong {
+  display: block;
+  margin: 8px 0 6px;
+  color: var(--color-accent-light);
+  font-size: clamp(24px, 2.4vw, 34px);
+  line-height: 1.2;
+}
+
+.dashboard-comparison-inline {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-comparison-inline strong {
+  display: block;
+  overflow: hidden;
+  margin: 8px 0 6px;
+  color: var(--color-text-primary);
+  font-size: clamp(16px, 1.4vw, 20px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-trend.increase strong {
+  color: #22c55e;
+}
+
+.dashboard-trend.decrease strong {
+  color: #ef4444;
+}
+
+.dashboard-trend.neutral strong {
+  color: var(--color-text-secondary);
+}
+
+.dashboard-compact-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  gap: 14px;
+}
+
+.dashboard-compact-grid > section {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.dashboard-today-panel {
+  padding: 18px;
+}
+
 .dashboard-header-actions {
   display: flex;
   align-items: center;
@@ -880,8 +1037,19 @@
   font-weight: 600;
 }
 
+.dashboard-range-filter {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
 .dashboard-date-input {
   min-width: 170px;
+  color-scheme: dark;
+}
+
+.dashboard-year-input {
+  width: 120px;
   color-scheme: dark;
 }
 
@@ -1078,6 +1246,45 @@
   .dashboard-ranking-grid {
     grid-template-columns: 1fr;
   }
+
+  .dashboard-summary-grid .dashboard-stat-card {
+    grid-column: span 6;
+  }
+
+  .dashboard-revenue-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-revenue-controls {
+    justify-content: flex-start;
+  }
+
+  .dashboard-compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-ranking-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.dashboard-ranking-button:not(:disabled) {
+  cursor: pointer;
+}
+
+.dashboard-ranking-button:not(:disabled):hover {
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.dashboard-ranking-button:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 .dashboard-top-movie-info small {
@@ -1309,6 +1516,53 @@
   border-top: 1px solid var(--color-border);
 }
 
+.dashboard-movie-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 18px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+
+.dashboard-recent-bookings {
+  display: grid;
+}
+
+.dashboard-recent-booking {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard-recent-booking:last-child {
+  border-bottom: 0;
+}
+
+.dashboard-recent-booking > div:last-child {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.dashboard-recent-booking strong,
+.dashboard-recent-booking span {
+  display: block;
+}
+
+.dashboard-recent-booking strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.dashboard-recent-booking span {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
 .dashboard-movie-chart-heading {
   margin-bottom: 12px;
 }
@@ -1457,6 +1711,10 @@
 @media (max-width: 1024px) {
   .dashboard-movie-revenue-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-movie-detail-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3367,11 +3625,42 @@ html.dark .admin-layout .showtime-conflict-range strong {
     flex-direction: column;
   }
 
+  .dashboard-revenue-workspace {
+    padding: 16px;
+  }
+
+  .dashboard-revenue-controls,
+  .dashboard-date-shortcuts {
+    width: 100%;
+  }
+
+  .dashboard-date-shortcuts button {
+    flex: 1;
+  }
+
+  .dashboard-revenue-controls .dashboard-date-filter {
+    width: 100%;
+  }
+
+  .dashboard-range-filter {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .dashboard-revenue-summary,
+  .dashboard-comparison-inline {
+    grid-template-columns: 1fr;
+  }
+
   .dashboard-period-select {
     width: 100%;
   }
 
   .dashboard-date-input {
+    width: 100%;
+  }
+
+  .dashboard-year-input {
     width: 100%;
   }
 
