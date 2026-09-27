@@ -1,9 +1,19 @@
 import axiosClient from "../../api/axiosClient";
+import { retryReadRequest } from "../utils/retryReadRequest";
 
 const API_URL = "/vouchers";
 
+export const uploadVoucherImage = async (file) => {
+  const form = new FormData();
+  form.append("image", file);
+  const response = await axiosClient.post(`${API_URL}/upload-image`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+};
+
 export const getVouchers = async (params = {}) => {
-  const response = await axiosClient.get(API_URL, { params });
+  const response = await retryReadRequest(() => axiosClient.get(API_URL, { params, timeout: 10000 }));
   return response.data;
 };
 
@@ -13,7 +23,7 @@ export const getVoucherById = async (id) => {
 };
 
 export const getVoucherStats = async () => {
-  const response = await axiosClient.get(`${API_URL}/stats`);
+  const response = await retryReadRequest(() => axiosClient.get(`${API_URL}/stats`, { timeout: 10000 }));
   return response.data;
 };
 

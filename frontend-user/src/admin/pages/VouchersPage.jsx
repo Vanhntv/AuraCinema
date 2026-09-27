@@ -446,7 +446,6 @@ const VouchersPage = () => {
               <option value="active">Đang hoạt động</option>
               <option value="paused">Tạm dừng</option>
               <option value="expired">Hết hạn</option>
-              <option value="out_of_usage">Đã hết lượt</option>
               <option value="cancelled">Đã hủy</option>
             </select>
             <select

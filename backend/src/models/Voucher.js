@@ -97,6 +97,7 @@ const voucherSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    paused_by_usage: { type: Boolean, default: false },
     deleted_at: {
       type: Date,
       default: null,

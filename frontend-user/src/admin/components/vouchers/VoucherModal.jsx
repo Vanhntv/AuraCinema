@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { HiOutlineX } from "react-icons/hi";
+import { uploadVoucherImage } from "../../services/voucherService";
+import { getMovies } from "../../services/movieService";
+import ConditionMultiSelect from "../common/ConditionMultiSelect";
 
 const emptyForm = {
   name: "",
@@ -62,6 +65,10 @@ const buildFormFromVoucher = (voucher) => ({
 const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null }) => {
   const [formData, setFormData] = useState(emptyForm);
   const [errors, setErrors] = useState({});
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
+  const [movieOptions, setMovieOptions] = useState({ items: [], loading: true, error: "" });
   const isEditMode = Boolean(initialData?._id);
   const usageCount = Number(initialData?.usage_count || 0);
   const isUsedVoucher = isEditMode && usageCount > 0;
@@ -70,7 +77,35 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     if (!isOpen) return;
     setFormData(initialData ? buildFormFromVoucher(initialData) : emptyForm);
     setErrors({});
+    setImageFile(null);
+    setImagePreview("");
   }, [initialData, isOpen]);
+
+  useEffect(() => () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+  }, [imagePreview]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    const loadMovies = async () => {
+      const items = [];
+      let page = 1;
+      let totalPages;
+      do {
+        const response = await getMovies("", page, 100);
+        if (cancelled) return;
+        items.push(...(response.data || []));
+        totalPages = response.pagination?.totalPages || response.totalPages || 1;
+        page += 1;
+      } while (page <= totalPages);
+      setMovieOptions({ items, loading: false, error: "" });
+    };
+    loadMovies().catch(() => {
+      if (!cancelled) setMovieOptions({ items: [], loading: false, error: "Không tải được phim. Hãy đóng và mở lại form để thử lại." });
+    });
+    return () => { cancelled = true; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -104,7 +139,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     if (!isUsedVoucher && (!Number.isFinite(minOrder) || minOrder < 0)) {
       nextErrors.min_order = "Đơn hàng tối thiểu không hợp lệ";
     }
-    if (!isUsedVoucher && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
+    if (!isUsedVoucher && formData.discount_type !== "percent" && maxDiscount !== null && (!Number.isFinite(maxDiscount) || maxDiscount < 0)) {
       nextErrors.max_discount_amount = "Giảm tối đa không được nhỏ hơn 0";
     }
     if (!isUsedVoucher && !formData.start_date) nextErrors.start_date = "Ngày bắt đầu là bắt buộc";
@@ -150,8 +185,9 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
     }));
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    if (isLoading || imageUploading) return;
     if (!validate()) return;
 
     const usageLimit = Number(formData.usage_limit);
@@ -170,7 +206,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
       image_url: formData.image_url.trim(),
       discount_type: formData.discount_type,
       discount_value: Number(formData.discount_value),
-      max_discount_amount: formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
+      max_discount_amount: formData.discount_type === "percent" ? null : formData.max_discount_amount ? Number(formData.max_discount_amount) : null,
       min_order: Number(formData.min_order || 0),
       start_date: formData.start_date,
       end_date: formData.end_date,
@@ -186,7 +222,23 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
       status: formData.status_mode === "active",
     };
 
-    onSubmit(isUsedVoucher ? editableUsedPayload : fullPayload);
+    setImageUploading(true);
+    try {
+      if (imageFile && !isUsedVoucher) {
+        const response = await uploadVoucherImage(imageFile);
+        const imageUrl = response.data?.image_url;
+        if (!imageUrl) throw new Error("Không nhận được ảnh đã tải lên.");
+        fullPayload.image_url = imageUrl;
+        setFormData((previous) => ({ ...previous, image_url: imageUrl }));
+        setImageFile(null);
+        setImagePreview("");
+      }
+      await onSubmit(isUsedVoucher ? editableUsedPayload : fullPayload);
+    } catch (error) {
+      setErrors((previous) => ({ ...previous, image_url: error.response?.data?.message || error.message || "Không thể tải ảnh chương trình lên." }));
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   return (
@@ -226,7 +278,23 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
               </div>
               <div className="form-group">
                 <label className="form-label">Ảnh chương trình</label>
-                <input className="form-input" type="url" placeholder="https://..." value={formData.image_url} onChange={(event) => handleChange("image_url", event.target.value)} disabled={isUsedVoucher} />
+                <input aria-label="Ảnh chương trình" className={`form-input ${errors.image_url ? "error" : ""}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={isUsedVoucher || isLoading || imageUploading} onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 5 * 1024 * 1024) {
+                    setImageFile(null);
+                    setImagePreview("");
+                    setErrors((previous) => ({ ...previous, image_url: "Chọn ảnh JPG, PNG, WEBP hoặc GIF, tối đa 5 MB." }));
+                    event.target.value = "";
+                    return;
+                  }
+                  setImageFile(file);
+                  setImagePreview(URL.createObjectURL(file));
+                  setErrors((previous) => ({ ...previous, image_url: "" }));
+                }} />
+                <p className="form-hint">JPG, PNG, WEBP hoặc GIF · tối đa 5 MB</p>
+                {(imagePreview || formData.image_url) && <img className="gift-upload-preview" src={imagePreview || formData.image_url} alt="Ảnh chương trình" />}
+                {errors.image_url && <p className="form-error">{errors.image_url}</p>}
               </div>
             </section>
 
@@ -242,15 +310,15 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
               <h3>Điều kiện giá trị</h3>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Giá trị giảm <span className="required">*</span></label>
-                  <input className={`form-input ${errors.discount_value ? "error" : ""}`} type="number" min="1" value={formData.discount_value} onChange={(event) => handleChange("discount_value", event.target.value)} disabled={isUsedVoucher} />
+                  <label className="form-label">Giá trị giảm ({formData.discount_type === "percent" ? "%" : "VNĐ"}) <span className="required">*</span></label>
+                  <input aria-label={formData.discount_type === "percent" ? "Giá trị giảm phần trăm" : "Giá trị giảm VNĐ"} className={`form-input ${errors.discount_value ? "error" : ""}`} type="number" min="1" max={formData.discount_type === "percent" ? "100" : undefined} placeholder={formData.discount_type === "percent" ? "Ví dụ: 10 (%)" : "Ví dụ: 20000 (VNĐ)"} value={formData.discount_value} onChange={(event) => handleChange("discount_value", event.target.value)} disabled={isUsedVoucher} />
                   {errors.discount_value && <p className="form-error">{errors.discount_value}</p>}
                 </div>
-                <div className="form-group">
+                {formData.discount_type !== "percent" && <div className="form-group">
                   <label className="form-label">Giảm tối đa</label>
                   <input className={`form-input ${errors.max_discount_amount ? "error" : ""}`} type="number" min="0" value={formData.max_discount_amount} onChange={(event) => handleChange("max_discount_amount", event.target.value)} disabled={isUsedVoucher} />
                   {errors.max_discount_amount && <p className="form-error">{errors.max_discount_amount}</p>}
-                </div>
+                </div>}
                 <div className="form-group">
                   <label className="form-label">Đơn hàng tối thiểu</label>
                   <input className={`form-input ${errors.min_order ? "error" : ""}`} type="number" min="0" value={formData.min_order} onChange={(event) => handleChange("min_order", event.target.value)} disabled={isUsedVoucher} />
@@ -306,8 +374,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
                 </div>
                 <div className="form-group">
                   <label className="form-label">Phim cụ thể</label>
-                  <input className={`form-input ${errors.applicable_movie_ids ? "error" : ""}`} placeholder="Nhập ID phim, cách nhau bằng dấu phẩy" value={formData.applicable_movie_ids} onChange={(event) => handleChange("applicable_movie_ids", event.target.value)} disabled={isUsedVoucher} />
-                  {errors.applicable_movie_ids && <p className="form-error">{errors.applicable_movie_ids}</p>}
+                  <ConditionMultiSelect label="Phim cụ thể" compact selectAllLabel="Chọn tất cả phim" options={movieOptions.items} value={formData.applicable_movie_ids} onChange={(value) => handleChange("applicable_movie_ids", value)} disabled={isUsedVoucher} loading={movieOptions.loading} loadError={movieOptions.error} error={errors.applicable_movie_ids} />
                 </div>
               </div>
               <div className="segmented-options">
@@ -332,7 +399,7 @@ const VoucherModal = ({ isOpen, onClose, onSubmit, isLoading, initialData = null
 
           <div className="modal-footer">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Hủy bỏ</button>
-            <button type="submit" className="btn btn-primary" disabled={isLoading}>{isLoading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo mã giảm giá"}</button>
+            <button type="submit" className="btn btn-primary" disabled={isLoading || imageUploading}>{isLoading || imageUploading ? "Đang lưu..." : isEditMode ? "Lưu thay đổi" : "Tạo mã giảm giá"}</button>
           </div>
         </form>
       </div>

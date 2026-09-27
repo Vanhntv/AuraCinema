@@ -4,14 +4,15 @@ import express from "express";
 import path from "node:path";
 import os from "node:os";
 import { mkdtemp, rm } from "node:fs/promises";
-import { uploadGiftImage } from "../src/middleware/giftUploadMiddleware.js";
+import { uploadGiftImage, uploadVoucherImage } from "../src/middleware/giftUploadMiddleware.js";
 
-test("gift image upload saves a readable image and rejects invalid or oversized files", async () => {
+for (const [folder, handler] of [["gifts", uploadGiftImage], ["vouchers", uploadVoucherImage]]) {
+test(`${folder} image upload saves a readable image and rejects invalid or oversized files`, async () => {
   const previousDirectory = process.cwd();
   const directory = await mkdtemp(path.join(os.tmpdir(), "aura-gift-upload-"));
   process.chdir(directory);
   const app = express();
-  app.post("/upload", uploadGiftImage);
+  app.post("/upload", handler);
   app.use("/uploads", express.static(path.join(directory, "uploads")));
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
@@ -26,6 +27,7 @@ test("gift image upload saves a readable image and rejects invalid or oversized 
     const uploaded = await postImage(png, "gift.png", "image/png");
     assert.equal(uploaded.status, 201);
     const result = await uploaded.json();
+    assert.equal(new URL(result.data.image_url).pathname.startsWith(`/uploads/${folder}/`), true);
     const image = await fetch(result.data.image_url);
     assert.equal(image.status, 200);
     assert.deepEqual(Buffer.from(await image.arrayBuffer()), png);
@@ -42,3 +44,4 @@ test("gift image upload saves a readable image and rejects invalid or oversized 
     await rm(directory, { recursive: true, force: true });
   }
 });
+}

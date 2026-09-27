@@ -16,6 +16,7 @@ import {
   updateVoucher,
 } from "../controllers/voucherControllers.js";
 import { authMiddleware, authorizeRoles } from "../middleware/authMiddleware.js";
+import { uploadVoucherImage } from "../middleware/giftUploadMiddleware.js";
 
 const router = express.Router();
 const adminOnly = [authMiddleware, authorizeRoles("admin")];
@@ -31,6 +32,7 @@ router.get("/", adminOnly, getAllVouchers);
 router.get("/stats", adminOnly, getVoucherStats);
 router.get("/:id/usages", adminOnly, getVoucherUsageHistory);
 router.get("/:id", adminOnly, getVoucherById);
+router.post("/upload-image", adminOnly, uploadVoucherImage);
 router.post("/", adminOnly, createVoucher);
 router.post("/:id/consume", adminOnly, consumeVoucherQuantity);
 router.put("/:id", adminOnly, updateVoucher);
