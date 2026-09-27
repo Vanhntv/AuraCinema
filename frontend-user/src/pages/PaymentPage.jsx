@@ -109,7 +109,7 @@ function PaymentMethodButton({ active, logo, title, subtitle, onClick }) {
 
 function DetailRow({ label, value, strong = false }) {
   return (
-    <p className="flex items-start justify-between gap-6 text-xs">
+    <p className="flex items-start justify-between gap-6 text-sm leading-6">
       <span className="text-slate-500">{label}</span>
       <span className={`max-w-[58%] text-right ${strong ? "font-bold text-white" : "text-slate-200"}`}>{value}</span>
     </p>
@@ -614,8 +614,8 @@ function PaymentPage() {
           )}
         </header>
 
-        <div className="mx-auto mt-6 w-full max-w-[560px] rounded-[var(--aura-radius-md)] bg-[var(--aura-surface)] p-5">
-          <div className="grid gap-4">
+        <div className="mx-auto mt-6 w-full max-w-[760px] rounded-[var(--aura-radius-md)] bg-[var(--aura-surface)] p-5 sm:p-8">
+          <div className="grid gap-3">
             <DetailRow label="Phim" value={summary?.movieTitle || "Thanh toán đơn vé"} strong />
             <DetailRow label="Phân loại độ tuổi" value={summary?.ageClassification || "P"} strong />
             <DetailRow label="Phòng" value={summary?.roomName || "Đang cập nhật"} />
@@ -668,7 +668,7 @@ function PaymentPage() {
 
         </div>
 
-        {paymentError && <p className="mx-auto mt-4 max-w-[560px] rounded-md border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
+        {paymentError && <p className="mx-auto mt-4 max-w-[760px] rounded-md border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{paymentError}</p>}
 
         <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap gap-3">

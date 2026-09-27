@@ -37,12 +37,10 @@ const AdminRoomsPage = lazy(() => import('./admin/pages/RoomsPage'));
 const AdminShowtimesPage = lazy(() => import('./admin/pages/ShowtimesPage'));
 const AdminBookingsPage = lazy(() => import('./admin/pages/BookingsPage'));
 const AdminMarketingContentPage = lazy(() => import('./admin/pages/MarketingContentPage'));
-const AdminTrailersPage = lazy(() => import('./admin/pages/TrailersPage'));
 const AdminUsersPage = lazy(() => import('./admin/pages/UsersPage'));
 const AdminAccountApprovalsPage = lazy(() => import('./admin/pages/AccountApprovalsPage'));
 const AdminConcessionsPage = lazy(() => import('./admin/pages/ConcessionsPage'));
 const AdminVouchersPage = lazy(() => import('./admin/pages/VouchersPage'));
-const AdminTicketScannerPage = lazy(() => import('./admin/pages/TicketScannerPage'));
 const AdminTicketScanHistoryPage = lazy(() => import('./admin/pages/TicketScanHistoryPage'));
 const AdminGiftsPage = lazy(() => import('./admin/pages/GiftsPage'));
 const AdminPoliciesPage = lazy(() => import('./admin/pages/PoliciesPage'));
@@ -176,13 +174,13 @@ function App() {
           <Route path="rooms" element={<AdminRoomsPage />} />
           <Route path="showtimes" element={<AdminShowtimesPage />} />
           <Route path="bookings" element={<AdminBookingsPage />} />
-          <Route path="ticket-scanner" element={<AdminTicketScannerPage />} />
+          <Route path="ticket-scanner" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="ticket-scan-history" element={<AdminTicketScanHistoryPage />} />
           <Route path="concessions" element={<AdminConcessionsPage />} />
           <Route path="vouchers" element={<AdminVouchersPage />} />
           <Route path="marketing" element={<AdminMarketingContentPage />} />
           <Route path="gifts" element={<AdminGiftsPage />} />
-          <Route path="trailers" element={<AdminTrailersPage />} />
+          <Route path="trailers" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="account-approvals" element={<AdminAccountApprovalsPage />} />
           <Route path="policies" element={<AdminPoliciesPage />} />
