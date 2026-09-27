@@ -14,11 +14,17 @@ export const getActiveShowtimeSeatHold = async (showtimeId, holdToken = "") => {
   return response.data;
 };
 
-export const holdShowtimeSeats = async (showtimeId, seatIds, holdToken = "") => {
+export const holdShowtimeSeats = async (
+  showtimeId,
+  seatIds,
+  holdToken = "",
+  { previousBookingId = "" } = {},
+) => {
   const response = await axiosClient.post("/showtime-seats/hold", {
     showtime_id: showtimeId,
     showtime_seat_ids: seatIds,
     hold_token: holdToken || undefined,
+    previous_booking_id: previousBookingId || undefined,
   });
   return response.data;
 };

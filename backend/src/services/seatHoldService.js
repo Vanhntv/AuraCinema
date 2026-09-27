@@ -96,14 +96,23 @@ export const getActiveSeatHold = async ({
   return hold;
 };
 
-const createHold = async ({ userId, showtimeId, now, session }) => {
+const getEarlierExpiry = (defaultExpiry, expiresAtLimit) => {
+  if (!expiresAtLimit) return defaultExpiry;
+  const limit = new Date(expiresAtLimit);
+  if (Number.isNaN(limit.getTime())) throw makeError("Thời hạn giữ ghế không hợp lệ", 400);
+  return limit.getTime() < defaultExpiry.getTime() ? limit : defaultExpiry;
+};
+
+const createHold = async ({ userId, showtimeId, now, expiresAtLimit, session }) => {
+  const expiresAt = getEarlierExpiry(createSeatHoldExpiry(now), expiresAtLimit);
+  if (isExpired(expiresAt, now)) throw makeError("Thời gian thanh toán đã hết", 410);
   const payload = {
     token: randomBytes(24).toString("hex"),
     user_id: userId,
     showtime_id: showtimeId,
     showtime_seat_ids: [],
     status: "active",
-    expires_at: createSeatHoldExpiry(now),
+    expires_at: expiresAt,
   };
 
   try {
@@ -137,6 +146,7 @@ export const acquireSeatHold = async ({
   seatIds,
   token = "",
   now = new Date(),
+  expiresAtLimit = null,
   session = null,
 }) => {
   const normalizedSeatIds = normalizeSeatIds(seatIds);
@@ -149,7 +159,24 @@ export const acquireSeatHold = async ({
   if (hold && !token && (hold.showtime_seat_ids || []).length > 0) {
     throw makeError("Bạn đã có phiên giữ ghế đang hoạt động. Vui lòng khôi phục phiên giữ ghế.", 409);
   }
-  if (!hold) hold = await createHold({ userId, showtimeId, now, session });
+  if (!hold) hold = await createHold({ userId, showtimeId, now, expiresAtLimit, session });
+  if (hold && expiresAtLimit) {
+    const limitedExpiry = getEarlierExpiry(new Date(hold.expires_at), expiresAtLimit);
+    if (isExpired(limitedExpiry, now)) throw makeError("Thời gian thanh toán đã hết", 410);
+    if (limitedExpiry.getTime() !== new Date(hold.expires_at).getTime()) {
+      hold.expires_at = limitedExpiry;
+      await SeatHold.updateOne(
+        { _id: hold._id, status: "active" },
+        { $set: { expires_at: limitedExpiry } },
+        { session },
+      );
+      await ShowtimeSeat.updateMany(
+        { hold_id: hold._id, status: "held" },
+        { $set: { hold_expires_at: limitedExpiry } },
+        { session },
+      );
+    }
+  }
   if (!hold || isExpired(hold.expires_at, now)) {
     throw makeError("Phiên giữ ghế đã hết hạn", 410);
   }
