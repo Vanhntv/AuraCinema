@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
+import { scanHistoryGrouping } from "../modules/tickets/scanHistoryGrouping.js";
+import { BOOKING_SCAN_ACTIONS, bookingScanHistoryUnion } from "../modules/tickets/bookingScanHistory.js";
+import { BOOKING_ACTION_RESULTS } from "../models/BookingActionLog.js";
 import TicketScanLog, {
   TICKET_SCAN_ACTIONS,
   TICKET_SCAN_RESULTS,
@@ -81,15 +84,17 @@ const buildScanLogAggregation = (query = {}) => {
   const scannedAtRange = parseDateRange(query);
 
   if (scannedAtRange) match.scannedAt = scannedAtRange;
-  if (TICKET_SCAN_ACTIONS.includes(String(query.action || "").trim())) {
+  if ([...TICKET_SCAN_ACTIONS, ...BOOKING_SCAN_ACTIONS].includes(String(query.action || "").trim())) {
     match.action = String(query.action).trim();
   }
 
-  if (TICKET_SCAN_RESULTS.includes(String(query.result || "").trim())) {
+  if ([...TICKET_SCAN_RESULTS, ...BOOKING_ACTION_RESULTS].includes(String(query.result || "").trim())) {
     match.result = String(query.result).trim();
   }
 
   const pipeline = [
+    { $set: { source: "ticket" } },
+    bookingScanHistoryUnion(),
     { $match: match },
     {
       $lookup: {
@@ -100,10 +105,18 @@ const buildScanLogAggregation = (query = {}) => {
       },
     },
     { $unwind: { path: "$ticket", preserveNullAndEmptyArrays: true } },
+    { $set: { bookingJoinId: { $ifNull: ["$bookingId", "$ticket.bookingId"] } } },
+    { $lookup: { from: "bookings", localField: "bookingJoinId", foreignField: "_id", as: "booking" } },
+    { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
+    { $set: {
+      linkedMovieId: { $ifNull: ["$ticket.movieId", "$booking.movie_snapshot.movie_id"] },
+      linkedShowtimeId: { $ifNull: ["$ticket.showtimeId", "$booking.showtime_id"] },
+      linkedRoomId: { $ifNull: ["$ticket.roomId", "$booking.showtime_snapshot.room_id"] },
+    } },
     {
       $lookup: {
         from: "movies",
-        localField: "ticket.movieId",
+        localField: "linkedMovieId",
         foreignField: "_id",
         as: "movie",
       },
@@ -112,7 +125,7 @@ const buildScanLogAggregation = (query = {}) => {
     {
       $lookup: {
         from: "showtimes",
-        localField: "ticket.showtimeId",
+        localField: "linkedShowtimeId",
         foreignField: "_id",
         as: "showtime",
       },
@@ -121,7 +134,7 @@ const buildScanLogAggregation = (query = {}) => {
     {
       $lookup: {
         from: "rooms",
-        localField: "ticket.roomId",
+        localField: "linkedRoomId",
         foreignField: "_id",
         as: "room",
       },
@@ -143,9 +156,9 @@ const buildScanLogAggregation = (query = {}) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
   const roomId = objectIdOrNull(query.roomId);
 
-  if (movieId) linkedMatch["ticket.movieId"] = movieId;
-  if (showtimeId) linkedMatch["ticket.showtimeId"] = showtimeId;
-  if (roomId) linkedMatch["ticket.roomId"] = roomId;
+  if (movieId) linkedMatch.linkedMovieId = movieId;
+  if (showtimeId) linkedMatch.linkedShowtimeId = showtimeId;
+  if (roomId) linkedMatch.linkedRoomId = roomId;
 
   if (query.movie) {
     linkedMatch["movie.title"] = new RegExp(escapeRegex(query.movie), "i");
@@ -158,8 +171,9 @@ const buildScanLogAggregation = (query = {}) => {
   if (query.q || query.search) {
     const regex = new RegExp(escapeRegex(query.q || query.search), "i");
     linkedMatch.$or = [
-      { "ticket.ticketCode": regex },
+      { "booking.booking_code": regex },
       { "ticket.seatLabel": regex },
+      { "booking.seat_items.seat_label": regex },
     ];
   }
 
@@ -170,8 +184,20 @@ const buildScanLogAggregation = (query = {}) => {
   return pipeline;
 };
 
+const getOrderSeatLabels = (log) => {
+  const snapshotSeats = (log.booking?.seat_items || []).map((seat) => seat.seat_label).filter(Boolean);
+  const ticketSeats = (log.bookingTickets || []).map((ticket) => ticket.seatLabel).filter(Boolean);
+  const seats = snapshotSeats.length ? snapshotSeats : ticketSeats.length ? ticketSeats : log.scannedSeats?.filter(Boolean) || [log.ticket?.seatLabel].filter(Boolean);
+  return [...new Set(seats)].sort((first, second) => first.localeCompare(second, "vi", { numeric: true }));
+};
+
 const formatScanLogRow = (log) => ({
-  id: log._id,
+  id: `${log.source || "ticket"}-${log._id}`,
+  bookingId: log.booking?._id || log.ticket?.bookingId || null,
+  bookingCode: log.booking?.booking_code || "",
+  historyCount: log.scanCount || 1,
+  ticketCount: getOrderSeatLabels(log).length,
+  scanCount: log.source === "booking" ? log.ticketIds?.length || log.booking?.seat_items?.length || 0 : log.scanCount || 1,
   scannedAt: log.scannedAt,
   ticketCode: log.ticket?.ticketCode || "",
   ticketStatus: log.ticket?.status || "",
@@ -180,21 +206,21 @@ const formatScanLogRow = (log) => ({
       id: log.movie._id,
       title: log.movie.title,
     }
-    : null,
+    : log.booking?.movie_snapshot?.title ? { id: log.booking.movie_snapshot.movie_id, title: log.booking.movie_snapshot.title } : null,
   showtime: log.showtime?._id
     ? {
       id: log.showtime._id,
       startTime: log.showtime.start_time,
       endTime: log.showtime.end_time,
     }
-    : null,
+    : log.booking?.showtime_snapshot?.start_time ? { id: log.booking.showtime_id, startTime: log.booking.showtime_snapshot.start_time, endTime: log.booking.showtime_snapshot.end_time } : null,
   room: log.room?._id
     ? {
       id: log.room._id,
       name: log.room.name,
     }
-    : null,
-  seatLabel: log.ticket?.seatLabel || "",
+    : log.booking?.showtime_snapshot?.room_name ? { id: log.booking.showtime_snapshot.room_id, name: log.booking.showtime_snapshot.room_name } : null,
+  seatLabel: getOrderSeatLabels(log).join(", "),
   admin: log.admin?._id
     ? {
       id: log.admin._id,
@@ -211,22 +237,22 @@ const formatScanLogRow = (log) => ({
   updatedAt: log.updatedAt,
 });
 
-const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
+const getScanStats = async ({ query = {} }) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
   const [errorResult, successScanResult, verifyScanResult, successfulCheckInResult] = await Promise.all([
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { result: { $ne: "SUCCESS" } } },
+      { $match: { result: { $nin: ["SUCCESS", "PARTIAL"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { result: "SUCCESS" } },
+      { $match: { result: { $in: ["SUCCESS", "PARTIAL"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
       ...buildScanLogAggregation(query),
-      { $match: { action: "VERIFY" } },
+      { $match: { action: { $in: ["VERIFY", "LOOKUP"] } } },
       { $count: "count" },
     ]),
     TicketScanLog.aggregate([
@@ -248,7 +274,7 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
       successScans: successScanResult[0]?.count || 0,
       verifyScans: verifyScanResult[0]?.count || 0,
       successfulCheckIns: successfulCheckInResult[0]?.count || 0,
-      totalScans: totalFiltered,
+      totalScans: (errorResult[0]?.count || 0) + (successScanResult[0]?.count || 0),
     };
   }
 
@@ -272,7 +298,7 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
     verifyScans: verifyScanResult[0]?.count || 0,
     successfulCheckIns: successfulCheckInResult[0]?.count || 0,
     checkInRate: totalTicketsOfShowtime > 0 ? Math.round((checkedInTickets / totalTicketsOfShowtime) * 100) : 0,
-    totalScans: totalFiltered,
+    totalScans: (errorResult[0]?.count || 0) + (successScanResult[0]?.count || 0),
   };
 };
 
@@ -584,13 +610,15 @@ export const getAdminTicketScanLogs = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const basePipeline = buildScanLogAggregation(req.query);
+    const historyPipeline = req.query.groupBy === "booking" ? [...basePipeline, ...scanHistoryGrouping()] : basePipeline;
 
     const [items, totalResult] = await Promise.all([
       TicketScanLog.aggregate([
-        ...basePipeline,
+        ...historyPipeline,
         { $sort: { scannedAt: -1, _id: -1 } },
         { $skip: skip },
         { $limit: limit },
+        { $lookup: { from: "tickets", localField: "booking._id", foreignField: "bookingId", as: "bookingTickets", pipeline: [{ $project: { seatLabel: 1 } }] } },
         {
           $project: {
             qrTokenHash: 0,
@@ -601,7 +629,7 @@ export const getAdminTicketScanLogs = async (req, res) => {
         },
       ]),
       TicketScanLog.aggregate([
-        ...basePipeline,
+        ...historyPipeline,
         { $count: "totalItems" },
       ]),
     ]);

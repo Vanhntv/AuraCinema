@@ -6931,6 +6931,10 @@ html.dark .admin-layout .showtime-conflict-range strong {
   object-fit: contain;
 }
 
+.ticket-scan-detail-modal .modal-body > h3 {
+  margin: 20px 0 12px;
+}
+
 .gift-condition-selections {
   display: flex;
   flex-wrap: wrap;

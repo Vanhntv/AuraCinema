@@ -6,6 +6,7 @@ import {
   HiOutlineSearch,
 } from "react-icons/hi";
 import { getTicketScanLogs } from "../services/ticketAdminService";
+import { getAdminBookingById } from "../services/bookingAdminService";
 import { getApiErrorMessage, showToast } from "../../utils/toast";
 
 const PAGE_SIZE = 10;
@@ -13,6 +14,9 @@ const PAGE_SIZE = 10;
 const actionLabels = {
   VERIFY: "Xác minh",
   CHECK_IN: "Check-in",
+  LOOKUP: "Quét / tra cứu đơn",
+  PRINT_INITIAL: "In đơn vé",
+  REPRINT: "In lại vé",
 };
 
 const resultLabels = {
@@ -23,6 +27,10 @@ const resultLabels = {
   EXPIRED: "Vé hết hạn",
   WRONG_SHOWTIME: "Sai thời gian",
   PAYMENT_NOT_COMPLETED: "Chưa thanh toán",
+  PARTIAL: "In một phần",
+  NO_ELIGIBLE_TICKETS: "Không còn vé để in",
+  BOOKING_NOT_PAYABLE: "Đơn chưa thanh toán / đã hủy",
+  ERROR: "Lỗi xử lý đơn",
 };
 
 const formatDateTime = (value) => {
@@ -40,7 +48,7 @@ const formatDateTime = (value) => {
 
 const resultBadgeClass = (result) => {
   if (result === "SUCCESS") return "status-badge status-now-showing";
-  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN"].includes(result)) {
+  if (["WRONG_SHOWTIME", "ALREADY_CHECKED_IN", "PARTIAL", "NO_ELIGIBLE_TICKETS"].includes(result)) {
     return "status-badge status-coming-soon";
   }
   return "status-badge status-ended";
@@ -67,6 +75,7 @@ const TicketScanHistoryPage = () => {
     const params = {
       page: currentPage,
       limit: PAGE_SIZE,
+      groupBy: "booking",
     };
 
     Object.entries(appliedFilters).forEach(([key, value]) => {
@@ -129,7 +138,7 @@ const TicketScanHistoryPage = () => {
       <div className="page-header">
         <div className="page-header-info">
           <h1>Lịch sử quét QR</h1>
-          <p>Theo dõi toàn bộ lượt xác minh và check-in vé điện tử.</p>
+          <p>Theo dõi quét mã đơn, in vé, xác minh và check-in vé điện tử.</p>
         </div>
         <button className="btn btn-secondary" onClick={fetchLogs} disabled={loading} type="button">
           <HiOutlineRefresh />
@@ -153,7 +162,7 @@ const TicketScanHistoryPage = () => {
           <input
             className="form-input"
             onChange={(event) => updateFilter("q", event.target.value)}
-            placeholder="Tìm mã vé, ghế..."
+            placeholder="Tìm mã đơn, ghế..."
             value={filters.q}
           />
         </div>
@@ -169,16 +178,16 @@ const TicketScanHistoryPage = () => {
       <div className="table-container ticket-scan-table-container">
         <div className="table-toolbar">
           <div className="table-toolbar-left">
-            <span className="table-toolbar-title">Danh sách lượt quét</span>
-            <span className="table-toolbar-count">{totalItems} log</span>
+            <span className="table-toolbar-title">Danh sách đơn đã quét</span>
+            <span className="table-toolbar-count">{totalItems} kết quả</span>
           </div>
         </div>
         <div className="table-wrapper">
           <table className="data-table ticket-scan-table">
             <thead>
               <tr>
-                <th>Thời gian</th>
-                <th>Mã vé</th>
+                <th>Quét gần nhất</th>
+                <th>Mã đơn</th>
                 <th>Phim</th>
                 <th>Suất chiếu</th>
                 <th>Ghế</th>
@@ -201,8 +210,8 @@ const TicketScanHistoryPage = () => {
                   <tr key={log.id}>
                     <td className="ticket-scan-time">{formatDateTime(log.scannedAt)}</td>
                     <td>
-                      <strong className="ticket-scan-code" title={log.ticketCode || "-"}>
-                        {log.ticketCode || "-"}
+                      <strong className="ticket-scan-code" title={log.bookingCode || "Không xác định được đơn"}>
+                        {log.bookingCode || "Không xác định được đơn"}
                       </strong>
                     </td>
                     <td>
@@ -270,22 +279,76 @@ const StatCard = ({ label, value }) => (
   </div>
 );
 
-const ScanLogDetailModal = ({ log, onClose }) => (
+const currency = (value) => Number(value || 0).toLocaleString("vi-VN", { style: "currency", currency: "VND" });
+
+const ScanLogDetailModal = ({ log, onClose }) => {
+  const [detail, setDetail] = useState({ booking: null, loading: Boolean(log.bookingId), error: "" });
+  useEffect(() => {
+    if (!log.bookingId) return;
+    let cancelled = false;
+    getAdminBookingById(log.bookingId).then((response) => {
+      if (!cancelled) setDetail({ booking: response.data, loading: false, error: "" });
+    }).catch((error) => {
+      if (!cancelled) setDetail({ booking: null, loading: false, error: getApiErrorMessage(error, "Không thể tải thông tin đơn.") });
+    });
+    return () => { cancelled = true; };
+  }, [log.bookingId]);
+  const booking = detail.booking;
+  return (
   <div className="modal-overlay" onClick={onClose}>
     <div className="modal modal-large ticket-scan-detail-modal" onClick={(event) => event.stopPropagation()}>
       <div className="modal-header">
         <div>
-          <h2 className="modal-title">Chi tiết lượt quét</h2>
-          <p className="modal-subtitle">{log.ticketCode || "Không có mã vé"}</p>
+          <h2 className="modal-title">Chi tiết đơn đã quét</h2>
+          <p className="modal-subtitle">{log.bookingCode || "Không xác định được đơn"}</p>
         </div>
         <button className="modal-close" onClick={onClose} type="button">×</button>
       </div>
 
       <div className="modal-body">
+        {detail.loading && <p role="status">Đang tải thông tin đơn...</p>}
+        {detail.error && <div className="booking-admin-alert error">{detail.error}</div>}
+        {!log.bookingId && <p>QR không liên kết với đơn hàng. Không có thông tin đơn để hiển thị.</p>}
+        {booking && <>
+          <h3>Thông tin đơn</h3>
+          <div className="ticket-scan-detail-grid">
+            <DetailField label="Mã đơn" value={booking.booking_code || log.bookingCode} />
+            <DetailField label="Khách hàng" value={booking.customer_name || booking.user_id?.full_name || "-"} />
+            <DetailField label="Email" value={booking.customer_email || "-"} />
+            <DetailField label="Điện thoại" value={booking.customer_phone || "-"} />
+            <DetailField label="Phim" value={booking.movie_snapshot?.title || log.movie?.title || "-"} />
+            <DetailField label="Suất chiếu" value={formatDateTime(booking.showtime_snapshot?.start_time || log.showtime?.startTime)} />
+            <DetailField label="Rạp / phòng" value={[booking.showtime_snapshot?.cinema_name, booking.showtime_snapshot?.room_name || log.room?.name].filter(Boolean).join(" / ") || "-"} />
+            <DetailField label="Trạng thái thanh toán" value={({ paid: "Đã thanh toán", pending: "Chờ thanh toán", failed: "Thất bại", cancelled: "Đã hủy", expired: "Hết hạn", review_required: "Cần kiểm tra", refund_pending: "Chờ hoàn tiền", refunded: "Đã hoàn tiền" })[booking.payment_status] || booking.payment_status || "-"} />
+          </div>
+          <h3>Vé và ghế</h3>
+          <div className="table-wrapper"><table className="data-table">
+            <thead><tr><th>Ghế</th><th>Mã vé</th><th>Giá vé</th><th>Trạng thái</th></tr></thead>
+            <tbody>{(booking.tickets || []).map((ticket) => <tr key={ticket.id}><td>{ticket.seatLabel}</td><td>{ticket.ticketCode}</td><td>{currency(ticket.price)}</td><td>{({ VALID: "Hợp lệ", CHECKED_IN: "Đã check-in", CANCELLED: "Đã hủy", EXPIRED: "Hết hạn" })[ticket.status] || ticket.status}</td></tr>)}
+            {!booking.tickets?.length && (booking.seat_items || []).map((seat) => <tr key={seat.seat_id}><td>{seat.seat_label}</td><td>-</td><td>{currency(seat.price)}</td><td>Chưa phát hành vé</td></tr>)}
+            {!booking.tickets?.length && !booking.seat_items?.length && <tr><td colSpan="4">Không có dữ liệu vé.</td></tr>}</tbody>
+          </table></div>
+          <h3>Dịch vụ / combo</h3>
+          {booking.combos?.length ? <div className="table-wrapper"><table className="data-table">
+            <thead><tr><th>Dịch vụ</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+            <tbody>{booking.combos.map((combo, index) => <tr key={combo._id || index}><td>{combo.name || combo.combo_id?.name || "-"}</td><td>{combo.quantity}</td><td>{currency(combo.price)}</td><td>{currency(combo.subtotal ?? Number(combo.price || 0) * Number(combo.quantity || 0))}</td></tr>)}</tbody>
+          </table></div> : <p>Không có dịch vụ / combo.</p>}
+          <h3>Thanh toán và ưu đãi</h3>
+          <div className="ticket-scan-detail-grid">
+            <DetailField label="Tổng trước giảm" value={currency(booking.subtotal_price)} />
+            <DetailField label="Mã giảm giá" value={booking.voucher?.code || booking.voucher?.voucher_id?.code || "Không sử dụng"} />
+            <DetailField label="Giảm từ mã" value={currency(booking.voucher?.discount_amount)} />
+            {booking.gift?.code && <DetailField label="Quà tặng sử dụng" value={`${booking.gift.label || booking.gift.code} (${currency(booking.gift.discount_amount)})`} />}
+            <DetailField label="Tổng giảm" value={currency(booking.discount_amount)} />
+            <DetailField label="Tổng thanh toán" value={currency(booking.total_price)} />
+          </div>
+        </>}
+        <h3>Lượt quét gần nhất</h3>
         <div className="ticket-scan-detail-grid">
-          <DetailField label="Thời gian quét" value={formatDateTime(log.scannedAt)} />
-          <DetailField label="Mã vé" value={log.ticketCode || "-"} />
-          <DetailField label="Trạng thái vé" value={log.ticketStatus || "-"} />
+          <DetailField label="Quét gần nhất" value={formatDateTime(log.scannedAt)} />
+          <DetailField label="Mã đơn" value={log.bookingCode || "-"} />
+          <DetailField label="Số ghế đã đặt" value={log.ticketCount ?? log.scanCount ?? 0} />
+          <DetailField label="Số bản ghi quét / in của đơn" value={log.historyCount || 1} />
           <DetailField label="Phim" value={log.movie?.title || "-"} />
           <DetailField label="Suất chiếu" value={formatDateTime(log.showtime?.startTime)} />
           <DetailField label="Phòng" value={log.room?.name || "-"} />
@@ -305,7 +368,8 @@ const ScanLogDetailModal = ({ log, onClose }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const DetailField = ({ label, value, wide = false }) => (
   <div className={`ticket-scan-detail-field ${wide ? "wide" : ""}`}>
