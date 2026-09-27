@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Ticket from "../models/Ticket.js";
+import { scanHistoryGrouping } from "../modules/tickets/scanHistoryGrouping.js";
 import TicketScanLog, {
   TICKET_SCAN_ACTIONS,
   TICKET_SCAN_RESULTS,
@@ -100,6 +101,8 @@ const buildScanLogAggregation = (query = {}) => {
       },
     },
     { $unwind: { path: "$ticket", preserveNullAndEmptyArrays: true } },
+    { $lookup: { from: "bookings", localField: "ticket.bookingId", foreignField: "_id", as: "booking" } },
+    { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
     {
       $lookup: {
         from: "movies",
@@ -158,7 +161,7 @@ const buildScanLogAggregation = (query = {}) => {
   if (query.q || query.search) {
     const regex = new RegExp(escapeRegex(query.q || query.search), "i");
     linkedMatch.$or = [
-      { "ticket.ticketCode": regex },
+      { "booking.booking_code": regex },
       { "ticket.seatLabel": regex },
     ];
   }
@@ -172,6 +175,9 @@ const buildScanLogAggregation = (query = {}) => {
 
 const formatScanLogRow = (log) => ({
   id: log._id,
+  bookingId: log.booking?._id || log.ticket?.bookingId || null,
+  bookingCode: log.booking?.booking_code || "",
+  scanCount: log.scanCount || 1,
   scannedAt: log.scannedAt,
   ticketCode: log.ticket?.ticketCode || "",
   ticketStatus: log.ticket?.status || "",
@@ -194,7 +200,7 @@ const formatScanLogRow = (log) => ({
       name: log.room.name,
     }
     : null,
-  seatLabel: log.ticket?.seatLabel || "",
+  seatLabel: log.scannedSeats?.filter(Boolean).sort().join(", ") || log.ticket?.seatLabel || "",
   admin: log.admin?._id
     ? {
       id: log.admin._id,
@@ -211,7 +217,7 @@ const formatScanLogRow = (log) => ({
   updatedAt: log.updatedAt,
 });
 
-const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
+const getScanStats = async ({ query = {} }) => {
   const showtimeId = objectIdOrNull(query.showtimeId);
   const [errorResult, successScanResult, verifyScanResult, successfulCheckInResult] = await Promise.all([
     TicketScanLog.aggregate([
@@ -248,7 +254,7 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
       successScans: successScanResult[0]?.count || 0,
       verifyScans: verifyScanResult[0]?.count || 0,
       successfulCheckIns: successfulCheckInResult[0]?.count || 0,
-      totalScans: totalFiltered,
+      totalScans: (errorResult[0]?.count || 0) + (successScanResult[0]?.count || 0),
     };
   }
 
@@ -272,7 +278,7 @@ const getScanStats = async ({ query = {}, totalFiltered = 0 }) => {
     verifyScans: verifyScanResult[0]?.count || 0,
     successfulCheckIns: successfulCheckInResult[0]?.count || 0,
     checkInRate: totalTicketsOfShowtime > 0 ? Math.round((checkedInTickets / totalTicketsOfShowtime) * 100) : 0,
-    totalScans: totalFiltered,
+    totalScans: (errorResult[0]?.count || 0) + (successScanResult[0]?.count || 0),
   };
 };
 
@@ -584,10 +590,11 @@ export const getAdminTicketScanLogs = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const basePipeline = buildScanLogAggregation(req.query);
+    const historyPipeline = req.query.groupBy === "booking" ? [...basePipeline, ...scanHistoryGrouping()] : basePipeline;
 
     const [items, totalResult] = await Promise.all([
       TicketScanLog.aggregate([
-        ...basePipeline,
+        ...historyPipeline,
         { $sort: { scannedAt: -1, _id: -1 } },
         { $skip: skip },
         { $limit: limit },
@@ -601,7 +608,7 @@ export const getAdminTicketScanLogs = async (req, res) => {
         },
       ]),
       TicketScanLog.aggregate([
-        ...basePipeline,
+        ...historyPipeline,
         { $count: "totalItems" },
       ]),
     ]);
