@@ -45,6 +45,12 @@ const memberTierOptions = [
   { value: "vvip", label: "VVIP" },
 ];
 
+const seatTypeOptions = [
+  { _id: "normal", name: "Ghế thường" },
+  { _id: "vip", name: "Ghế VIP" },
+  { _id: "couple", name: "Ghế đôi" },
+];
+
 const formatCurrency = (value) =>
   new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -617,7 +623,22 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
               <div className="form-row">
                 {["combo", "voucher"].includes(formData.type) && <div className="form-group"><label className="form-label">ID {formData.type === "combo" ? "combo" : "voucher"} liên kết <span className="required">*</span></label><input className={`form-input ${errors.benefit_reference_id ? "error" : ""}`} value={formData.benefit_reference_id} onChange={(event) => handleChange("benefit_reference_id", event.target.value)} disabled={isIssuedGift} />{errors.benefit_reference_id && <p className="form-error">{errors.benefit_reference_id}</p>}</div>}
                 {["ticket", "combo"].includes(formData.type) && <div className="form-group"><label className="form-label">Số lượng được tặng</label><input className="form-input" type="number" min="1" value={formData.benefit_quantity} onChange={(event) => handleChange("benefit_quantity", event.target.value)} disabled={isIssuedGift} /></div>}
-                {formData.type === "ticket" && <div className="form-group"><label className="form-label">Loại ghế áp dụng</label><input className="form-input" placeholder="normal, vip; bỏ trống là tất cả" value={formData.seat_types} onChange={(event) => handleChange("seat_types", event.target.value)} disabled={isIssuedGift} /></div>}
+                {formData.type === "ticket" && <div className="form-group">
+                  <label className="form-label">Loại ghế áp dụng</label>
+                  <GiftConditionSelect
+                    label="Loại ghế áp dụng"
+                    compact
+                    itemLabel="loại ghế"
+                    selectAllLabel="Chọn tất cả loại ghế"
+                    options={seatTypeOptions}
+                    value={formData.seat_types}
+                    onChange={(value) => handleChange("seat_types", value)}
+                    disabled={isIssuedGift}
+                    loading={false}
+                    loadError=""
+                  />
+                  {!formData.seat_types && <p className="form-helper">Bỏ trống để áp dụng cho tất cả loại ghế.</p>}
+                </div>}
               </div>
             </section>
 
