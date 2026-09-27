@@ -85,15 +85,15 @@ button.loyalty-wallet-catalog-item { width: 100%; color: inherit; font-weight: i
 .loyalty-dialog .loyalty-benefit { font-size: 20px; color: #ff9da9; font-weight: 700; }
 .loyalty-terms { white-space: pre-wrap; overflow-wrap: anywhere; }
 .loyalty-code { display: flex; align-items: center; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
-.loyalty-admin { padding: 20px 0; border-block: 1px solid var(--border-color, #d6dce5); margin: 20px 0; }
-.loyalty-admin summary { cursor: pointer; font-weight: 800; }
+.loyalty-admin { padding: 20px 0; border-block: 1px solid var(--color-border, #d6dce5); margin: 20px 0; color: var(--color-text-primary, #101828); }
+.loyalty-admin summary { cursor: pointer; color: var(--color-text-primary, #101828); font-weight: 800; }
 .loyalty-admin form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
-.loyalty-admin label { display: grid; gap: 6px; flex: 1 1 180px; }
+.loyalty-admin label { display: grid; gap: 6px; flex: 1 1 180px; color: var(--color-text-primary, #101828); font-weight: 600; }
 .loyalty-admin input, .loyalty-admin select { color: inherit; background: var(--color-bg-primary, white); border: 1px solid #aeb8c8; border-radius: 6px; padding: 9px; width: 100%; }
 .loyalty-admin input[type=checkbox] { width: 20px; height: 20px; }
-.loyalty-admin h3 { margin: 24px 0 12px; font-size: 16px; font-weight: 700; }
+.loyalty-admin h3 { margin: 24px 0 12px; color: var(--color-text-primary, #101828); font-size: 16px; font-weight: 800; }
 .loyalty-admin table { width: 100%; text-align: left; border-collapse: collapse; }
-.loyalty-admin td, .loyalty-admin th { padding: 10px; border-bottom: 1px solid #d6dce5; }
+.loyalty-admin td, .loyalty-admin th { padding: 10px; border-bottom: 1px solid var(--color-border, #d6dce5); color: var(--color-text-primary, #101828); }
 @media(max-width:640px) { .loyalty-surface { padding: 16px 0; } .loyalty-dialog { padding: 20px; } .loyalty-tabs button { flex: 1 1 140px; } }
 @media(max-width:1100px) { .loyalty-reward-catalog { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:900px) { .loyalty-redemption-grid:not(.loyalty-reward-catalog) { grid-template-columns: minmax(0,1fr); } }
