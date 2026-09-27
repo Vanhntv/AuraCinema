@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   cancelBooking,
@@ -16,6 +16,11 @@ import {
   isBookingExpired,
 } from "../utils/bookingExpiry";
 import { buildPaymentClosePath } from "../utils/paymentNavigation";
+import {
+  isTrustedSepayCheckoutMessage,
+  openSepayCheckoutWindow,
+  submitSepayCheckoutForm,
+} from "../utils/sepayCheckoutWindow";
 
 const DEFAULT_PAYMENT_POLICIES = [
   {
@@ -85,24 +90,6 @@ function mapBookingToSummary(booking, current = {}) {
     paymentStatus: booking?.payment_status || existing.paymentStatus || "pending",
     paymentExpiresAt: booking?.payment_expires_at || existing.paymentExpiresAt || null,
   };
-}
-
-function submitPaymentForm({ checkoutUrl, fields }) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = checkoutUrl;
-  form.style.display = "none";
-
-  Object.entries(fields || {}).forEach(([name, value]) => {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = String(value ?? "");
-    form.appendChild(input);
-  });
-
-  document.body.appendChild(form);
-  form.submit();
 }
 
 function PaymentMethodButton({ active, logo, title, subtitle, onClick }) {
@@ -179,6 +166,24 @@ function PaymentPage() {
   const [remainingSeconds, setRemainingSeconds] = useState(() =>
     getRemainingSeconds(summary?.paymentExpiresAt),
   );
+  const sepayPopupRef = useRef(null);
+  const expiryHandledRef = useRef(false);
+
+  const closeSepayPopup = useCallback(() => {
+    const popup = sepayPopupRef.current;
+    if (popup && !popup.closed) popup.close();
+    sepayPopupRef.current = null;
+  }, []);
+
+  const redirectExpiredBooking = useCallback(() => {
+    closeSepayPopup();
+    const message = "Đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn.";
+    showToast("error", message);
+    navigate("/lich-chieu", {
+      replace: true,
+      state: { message },
+    });
+  }, [closeSepayPopup, navigate]);
 
   const amount = useMemo(
     () => Number(summary?.finalTotal || summary?.total_price || 0),
@@ -268,13 +273,109 @@ function PaymentPage() {
   }, [bookingIsPaid, summary?.paymentExpiresAt]);
 
   useEffect(() => {
+    if (
+      expiryHandledRef.current
+      || bookingIsPaid
+      || !summary?.paymentExpiresAt
+      || remainingSeconds > 0
+      || getRemainingSeconds(summary.paymentExpiresAt) > 0
+    ) {
+      return;
+    }
+
+    expiryHandledRef.current = true;
+    const expireAndRedirect = async () => {
+      try {
+        const response = await getBookingPaymentStatus(bookingId);
+        const status = response.data?.payment_status;
+        if (status === "paid") {
+          closeSepayPopup();
+          navigate(`/booking/success/${bookingId}`, { replace: true });
+          return;
+        }
+        if (status === "pending") {
+          // The browser clock can be slightly ahead of the server. Keep the
+          // server deadline authoritative and retry on the next countdown tick.
+          expiryHandledRef.current = false;
+          setRemainingSeconds(1);
+          return;
+        }
+      } catch {
+        // The lifecycle worker remains the server-side fallback if this request fails.
+      }
+      redirectExpiredBooking();
+    };
+
+    void expireAndRedirect();
+  }, [
+    bookingId,
+    bookingIsPaid,
+    closeSepayPopup,
+    navigate,
+    redirectExpiredBooking,
+    remainingSeconds,
+    summary?.paymentExpiresAt,
+  ]);
+
+  useEffect(() => {
     if (!serverBookingIsExpired || bookingIsPaid) return;
-    showToast("error", "Đơn vé đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn.");
-    navigate("/lich-chieu", {
-      replace: true,
-      state: { message: "Đơn vé đã hết thời gian thanh toán. Ghế đã được mở lại để bạn chọn." },
-    });
-  }, [serverBookingIsExpired, bookingIsPaid, navigate]);
+    expiryHandledRef.current = true;
+    redirectExpiredBooking();
+  }, [serverBookingIsExpired, bookingIsPaid, redirectExpiredBooking]);
+
+  useEffect(() => {
+    const receiveSepayResult = (event) => {
+      if (!isTrustedSepayCheckoutMessage(event, {
+        bookingId,
+        expectedSource: sepayPopupRef.current,
+      })) return;
+
+      closeSepayPopup();
+      const result = event.data;
+      if (result.success) {
+        navigate(`/booking/success/${bookingId}`, { replace: true });
+        return;
+      }
+
+      const message = result.message || "Thanh toán SePay chưa hoàn tất.";
+      if (!result.paymentStatus || result.paymentStatus === "pending") {
+        setIsPaying(false);
+        setPaymentError(message);
+        showToast("error", message);
+        return;
+      }
+
+      if (["review_required", "refund_pending"].includes(result.paymentStatus)) {
+        showToast("error", message);
+        navigate("/booking/failed", {
+          replace: true,
+          state: { message },
+        });
+        return;
+      }
+
+      showToast("error", message);
+      navigate("/lich-chieu", {
+        replace: true,
+        state: { message },
+      });
+    };
+
+    window.addEventListener("message", receiveSepayResult);
+    return () => window.removeEventListener("message", receiveSepayResult);
+  }, [bookingId, closeSepayPopup, navigate]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      if (sepayPopupRef.current?.closed) {
+        sepayPopupRef.current = null;
+        setIsPaying(false);
+      }
+    }, 500);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => () => closeSepayPopup(), [closeSepayPopup]);
 
   useEffect(() => {
     if (!bookingId) return undefined;
@@ -302,6 +403,15 @@ function PaymentPage() {
   const completeSepayPgPayment = async () => {
     if (!bookingId) return;
 
+    const checkoutWindow = openSepayCheckoutWindow(bookingId);
+    if (!checkoutWindow) {
+      const message = "Trình duyệt đang chặn cửa sổ thanh toán. Hãy cho phép pop-up cho AuraCinema rồi thử lại.";
+      setPaymentError(message);
+      showToast("error", message);
+      return;
+    }
+    sepayPopupRef.current = checkoutWindow.popup;
+
     try {
       setIsPaying(true);
       setPaymentError("");
@@ -314,6 +424,7 @@ function PaymentPage() {
       const fields = response.data?.fields;
 
       if (!checkoutUrl || !fields) {
+        closeSepayPopup();
         const message = "Backend chưa trả về form thanh toán SePay.";
         setPaymentError(message);
         showToast("error", message);
@@ -321,8 +432,14 @@ function PaymentPage() {
         return;
       }
 
-      submitPaymentForm({ checkoutUrl, fields });
+      submitSepayCheckoutForm({
+        checkoutUrl,
+        fields,
+        target: checkoutWindow.target,
+      });
+      checkoutWindow.popup.focus();
     } catch (requestError) {
+      closeSepayPopup();
       const message = getApiErrorMessage(requestError, "Không thể mở thanh toán SePay.");
       setPaymentError(message);
       showToast("error", message);

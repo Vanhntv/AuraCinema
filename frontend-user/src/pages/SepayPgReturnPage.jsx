@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { verifySepayPgReturn } from "../services/bookingService";
+import { SEPAY_CHECKOUT_MESSAGE_TYPE } from "../utils/sepayCheckoutWindow";
 
 function SepayPgReturnPage() {
   const location = useLocation();
@@ -9,31 +10,90 @@ function SepayPgReturnPage() {
 
   useEffect(() => {
     let isActive = true;
+    const query = new URLSearchParams(location.search || "");
+    const requestedBookingId = query.get("booking_id") || "";
+
+    const notifyCheckoutWindow = ({ success, bookingId, paymentStatus, resultMessage }) => {
+      if (!window.opener || window.opener.closed) return false;
+
+      window.opener.postMessage({
+        type: SEPAY_CHECKOUT_MESSAGE_TYPE,
+        success,
+        bookingId: bookingId || requestedBookingId,
+        paymentStatus,
+        message: resultMessage,
+      }, window.location.origin);
+      window.setTimeout(() => window.close(), 150);
+      return true;
+    };
+
+    const navigateAfterFailure = ({ paymentStatus, resultMessage }) => {
+      if (["expired", "cancelled"].includes(paymentStatus)) {
+        navigate("/lich-chieu", {
+          replace: true,
+          state: { message: resultMessage },
+        });
+        return;
+      }
+
+      navigate("/booking/failed", {
+        replace: true,
+        state: { message: resultMessage },
+      });
+    };
 
     const verifyPayment = async () => {
       try {
         const response = await verifySepayPgReturn(location.search || "");
-        const bookingId = response.data?.booking_id;
+        const bookingId = response.data?.booking_id || requestedBookingId;
+        const paymentStatus = response.data?.payment_status || "";
 
         if (!isActive) return;
 
         if (response.success && bookingId) {
+          if (notifyCheckoutWindow({
+            success: true,
+            bookingId,
+            paymentStatus,
+            resultMessage: response.message,
+          })) {
+            setMessage("Thanh toán thành công. Đang quay lại AuraCinema...");
+            return;
+          }
           navigate(`/booking/success/${bookingId}`, { replace: true });
           return;
         }
 
-        navigate("/booking/failed", {
-          replace: true,
-          state: { message: response.message || "Thanh toán SePay chưa hoàn tất." },
+        if (notifyCheckoutWindow({
+          success: false,
+          bookingId,
+          paymentStatus,
+          resultMessage: response.message || "Thanh toán SePay chưa hoàn tất.",
+        })) {
+          setMessage(response.message || "Thanh toán chưa hoàn tất. Đang quay lại AuraCinema...");
+          return;
+        }
+
+        navigateAfterFailure({
+          paymentStatus,
+          resultMessage: response.message || "Thanh toán SePay chưa hoàn tất.",
         });
       } catch (error) {
         if (!isActive) return;
 
         const errorMessage = error.response?.data?.message || "Không thể xác minh thanh toán SePay.";
         setMessage(errorMessage);
-        navigate("/booking/failed", {
-          replace: true,
-          state: { message: errorMessage },
+        const responseData = error.response?.data?.data || {};
+        if (notifyCheckoutWindow({
+          success: false,
+          bookingId: responseData.booking_id || requestedBookingId,
+          paymentStatus: responseData.payment_status || "",
+          resultMessage: errorMessage,
+        })) return;
+
+        navigateAfterFailure({
+          paymentStatus: responseData.payment_status || "",
+          resultMessage: errorMessage,
         });
       }
     };

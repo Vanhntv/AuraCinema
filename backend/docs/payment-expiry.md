@@ -31,6 +31,10 @@ Form checkout của SePay không có trường thời hạn đơn hàng. AuraCin
 1. Backend từ chối tạo checkout sau `payment_expires_at`.
 2. Worker chạy mỗi 30 giây, hết hạn booking và gọi API hủy đơn SePay đang chờ. Lỗi tạm thời được thử lại tối đa 3 lần, cách nhau 5 phút.
 
+Frontend mở checkout SePay trong một cửa sổ do AuraCinema quản lý và giữ trang thanh toán chính ở lại website. Trang chính tiếp tục đếm theo `payment_expires_at` và hỏi trạng thái backend. Khi backend xác nhận hết hạn, frontend đóng cửa sổ SePay, chuyển về `/lich-chieu`; backend đồng thời giải phóng ghế. Khi SePay trả kết quả về, cửa sổ checkout gửi kết quả cho trang chính bằng `postMessage` có kiểm tra origin, cửa sổ nguồn và booking ID.
+
+Nếu trình duyệt chặn pop-up, frontend yêu cầu người dùng cho phép pop-up cho AuraCinema và không chuyển sang SePay trong cùng tab. Điều này giữ được khả năng đóng checkout và điều hướng khi hết hạn.
+
 Tạo IPN trong SePay Payment Gateway với:
 
 ```text
