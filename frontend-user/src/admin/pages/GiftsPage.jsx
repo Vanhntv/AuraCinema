@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi";
 import ConfirmDialog from "../components/common/ConfirmDialog";
 import Toast from "../components/common/Toast";
+import { resolveGiftFormValue } from "../utils/giftFormValue";
 import { confirmGiftGrant, createGift, deleteGift, getGiftById, getGiftGrantHistory, getGifts, previewGiftGrant, toggleGiftStatus, updateGift, uploadGiftImage } from "../services/giftService";
 
 const PAGE_SIZE = 10;
@@ -365,7 +366,7 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
   const validate = () => {
     const nextErrors = {};
     const quantity = Number(formData.quantity);
-    const value = formData.value === "" ? 0 : Number(formData.value);
+    const value = resolveGiftFormValue(formData, initialData);
     const minOrder = formData.min_order === "" ? null : Number(formData.min_order);
     const pointRequired = formData.point_required === "" ? null : Number(formData.point_required);
     const movieIds = parseDelimitedList(formData.movie_ids);
@@ -386,9 +387,9 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
       nextErrors.value_label = "Vui lòng nhập giá trị quà";
     }
     if (!isIssuedGift && ["voucher", "point"].includes(formData.type) && (!Number.isFinite(value) || value <= 0)) {
-      nextErrors.value = formData.type === "point"
-        ? "Quà điểm thưởng phải có số điểm lớn hơn 0"
-        : "Quà voucher phải có giá trị lớn hơn 0";
+      nextErrors.value_label = formData.type === "point"
+        ? "Nhập số điểm được tặng, ví dụ: 500 điểm"
+        : "Nhập giá trị voucher, ví dụ: Voucher 50.000 VNĐ";
     }
     if (!isIssuedGift && (!Number.isInteger(quantity) || quantity <= 0)) {
       nextErrors.quantity = "Tổng số lượng phải là số nguyên lớn hơn 0";
@@ -452,10 +453,10 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
           : formData.type === "voucher"
             ? { voucher_id: formData.benefit_reference_id }
             : formData.type === "point"
-              ? { points: Number(formData.value || 0) }
+              ? { points: resolveGiftFormValue(formData, initialData) }
               : { label: formData.value_label.trim() },
       value_label: formData.value_label.trim(),
-      value: formData.value === "" ? 0 : Number(formData.value),
+      value: resolveGiftFormValue(formData, initialData),
       quantity: Number(formData.quantity),
       condition: {
         min_order: formData.min_order === "" ? null : Number(formData.min_order),
@@ -592,12 +593,8 @@ const GiftCreateModal = ({ isOpen, isLoading, onClose, onSubmit, initialData = n
                 <div className="form-group">
                   <label className="form-label">Giá trị hiển thị <span className="required">*</span></label>
                   <input className={`form-input ${errors.value_label ? "error" : ""}`} placeholder="Combo Big, Voucher 50.000 VNĐ, 500 điểm" value={formData.value_label} onChange={(event) => handleChange("value_label", event.target.value)} disabled={isIssuedGift} />
+                  {["point", "voucher"].includes(formData.type) && <p className="form-helper">{formData.type === "point" ? "Ví dụ: 500 điểm — số điểm sẽ cộng vào tài khoản." : "Ví dụ: Voucher 50.000 VNĐ — nhập đúng giá trị voucher liên kết."}</p>}
                   {errors.value_label && <p className="form-error">{errors.value_label}</p>}
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Giá trị quy đổi</label>
-                  <input className={`form-input ${errors.value ? "error" : ""}`} type="number" min="0" value={formData.value} onChange={(event) => handleChange("value", event.target.value)} disabled={isIssuedGift} />
-                  {errors.value && <p className="form-error">{errors.value}</p>}
                 </div>
                 <div className="form-group">
                   <label className="form-label">Tổng số lượng <span className="required">*</span></label>
