@@ -6942,6 +6942,62 @@ html.dark .admin-layout .showtime-conflict-range strong {
   cursor: not-allowed;
 }
 
+.gift-condition-selections-compact {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.gift-condition-selections-compact .gift-condition-selection {
+  flex-shrink: 0;
+  justify-content: space-between;
+  min-width: 0;
+  border-color: var(--color-border);
+}
+
+.gift-condition-selections-compact .gift-condition-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.gift-condition-selections-expanded {
+  max-height: 160px;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
+
+.gift-condition-summary {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.gift-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.gift-condition-actions button,
+.gift-condition-more {
+  border: 0;
+  padding: 3px 0;
+  background: transparent;
+  color: var(--color-accent);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gift-condition-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .form-row.gift-receiving-fields {
   grid-template-columns: minmax(0, 1fr) 120px;
   align-items: start;
