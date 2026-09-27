@@ -273,6 +273,44 @@ test("create booking rejects broken seats", async () => {
   });
 });
 
+test("create booking rejects a single empty seat between held seats like staff checkout", async () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  const showtimeId = new mongoose.Types.ObjectId().toString();
+  const seatIds = [new mongoose.Types.ObjectId().toString(), new mongoose.Types.ObjectId().toString()];
+  const middleId = new mongoose.Types.ObjectId().toString();
+  const hold = makeActiveHold({ userId, showtimeId, seatIds });
+  const selectedSeats = seatIds.map((id, index) => ({
+    ...makeSeat({ id, typeName: "Ghế thường", number: index * 2 + 1, heldBy: userId }),
+    status: "held",
+    hold_id: hold._id,
+  }));
+  const allSeats = [selectedSeats[0], {
+    ...makeSeat({ id: middleId, typeName: "Ghế thường", number: 2 }),
+    status: "available",
+  }, selectedSeats[1]];
+  let findCalls = 0;
+  let seatsReserved = false;
+
+  await withPatched([
+    [mongoose, "startSession", async () => makeFakeSession()],
+    [User, "findOne", () => sessionResult({ _id: userId, full_name: "Test User", email: "test@example.com" })],
+    [Showtime, "findOne", () => sessionResult({ _id: showtimeId, movie_id: new mongoose.Types.ObjectId() })],
+    [SeatHold, "findOne", () => sessionResult(hold)],
+    [ShowtimeSeat, "find", () => populateSessionResult(++findCalls === 1 ? selectedSeats : allSeats)],
+    [ShowtimeSeat, "updateMany", async () => { seatsReserved = true; return { modifiedCount: 2 }; }],
+  ], async () => {
+    const res = makeResponse();
+    await createBooking({
+      user: { id: userId, role: "user" },
+      body: { showtime_id: showtimeId, showtime_seat_ids: seatIds, hold_token: hold.token },
+    }, res);
+
+    assert.equal(res.statusCode, 409);
+    assert.match(res.body.message, /cách nhau đúng một ghế trống/);
+    assert.equal(seatsReserved, false);
+  });
+});
+
 test("create booking allows multiple seat types in one booking", async () => {
   const userId = new mongoose.Types.ObjectId().toString();
   const showtimeId = new mongoose.Types.ObjectId().toString();

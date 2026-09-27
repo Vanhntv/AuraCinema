@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { requireTransaction } from "../services/transactionService.js";
 import { randomInt } from "crypto";
+import { validateSeatSpacing } from "../../../shared/seatSpacing.mjs";
 import Booking from "../models/Booking.js";
 import Combo from "../models/Combo.js";
 import SeatHold from "../models/SeatHold.js";
@@ -20,7 +21,7 @@ import { createTicketsForPaidBooking } from "../services/ticketService.js";
 import { creditRewardPointsForBooking } from "../services/rewardPointService.js";
 import { isBrokenSeatType, normalizeSeatTypeName } from "../utils/seatTypes.js";
 import { isSeatInMaintenance } from "../utils/seatStatus.js";
-import { createPaymentExpiry } from "../services/seatHoldPolicy.js";
+import { createPaymentExpiry, validateCoupleSeatSelection } from "../services/seatHoldPolicy.js";
 import {
   assertBookingPayable,
   expirePendingBooking,
@@ -534,6 +535,21 @@ export const createBooking = async (req, res) => {
 
       if (seats.some((seat) => isSeatInMaintenance(seat.seat_id))) {
         throw Object.assign(new Error("Ghế đang bảo trì không thể đặt vé"), { statusCode: 409 });
+      }
+
+      validateCoupleSeatSelection(seats);
+      const allShowtimeSeats = await ShowtimeSeat.find({ showtime_id, deleted_at: null })
+        .populate({ path: "seat_id", select: "seat_row seat_number seat_type_id status operational_status", populate: { path: "seat_type_id", select: "name" } })
+        .session(session);
+      const spacingError = validateSeatSpacing([...requestedSeatIds], allShowtimeSeats.map((seat) => ({
+        id: String(seat._id),
+        row: seat.seat_id?.seat_row,
+        number: Number(seat.seat_id?.seat_number),
+        status: isSeatInMaintenance(seat.seat_id) || isBrokenSeatType(seat.seat_id?.seat_type_id) ? "maintenance" : seat.status,
+        type: isCoupleSeat(seat) ? "couple" : "regular",
+      })));
+      if (spacingError) {
+        throw Object.assign(new Error(spacingError), { statusCode: 409 });
       }
 
       const combos = await appendGiftComboToOrder({ userGiftId, userId: user._id, combos: requestedCombos, session });

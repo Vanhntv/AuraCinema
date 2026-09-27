@@ -73,9 +73,11 @@ function getCoupleSeatClass({ type, seats, seatIndex }) {
     previousCoupleCount += 1;
   }
 
-  const hasNextCouple = getSeatType(seats[seatIndex + 1]) === "couple";
+  const hasNextCouple = getSeatType(seats[seatIndex + 1]) === "couple" &&
+    Number(seats[seatIndex + 1]?.seat_id?.seat_number) === Number(seats[seatIndex]?.seat_id?.seat_number) + 1;
   const isPairStart = previousCoupleCount % 2 === 0 && hasNextCouple;
-  const isPairEnd = previousCoupleCount % 2 === 1;
+  const isPairEnd = previousCoupleCount % 2 === 1 &&
+    Number(seats[seatIndex - 1]?.seat_id?.seat_number) === Number(seats[seatIndex]?.seat_id?.seat_number) - 1;
 
   if (isPairStart) return "rounded-r-none border-r-0";
   if (isPairEnd) return "-ml-2 rounded-l-none border-l border-fuchsia-300/30";
@@ -102,7 +104,11 @@ function getCoupleSeatPair(targetSeat, allSeats) {
   const pairIndex = previousCoupleCount % 2 === 1 ? seatIndex - 1 : seatIndex + 1;
   const pairSeat = rowSeats[pairIndex];
 
-  if (!pairSeat || getSeatType(pairSeat) !== "couple") return null;
+  if (
+    !pairSeat ||
+    getSeatType(pairSeat) !== "couple" ||
+    Math.abs(Number(pairSeat.seat_id?.seat_number) - Number(targetSeat.seat_id?.seat_number)) !== 1
+  ) return null;
 
   return [targetSeat, pairSeat].sort(
     (first, second) => Number(first.seat_id?.seat_number) - Number(second.seat_id?.seat_number),
@@ -264,6 +270,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   const [step, setStep] = useState(initialShowtime ? "select-seat" : "select-showtime");
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingSeats, setIsLoadingSeats] = useState(false);
+  const [isSeatBusy, setIsSeatBusy] = useState(false);
   const [error, setError] = useState("");
   const [seatError, setSeatError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -334,6 +341,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
   );
   const currentUserId = getUserId(user);
   const selectedSeatsRef = useRef([]);
+  const seatBusyRef = useRef(false);
   const bookingResultRef = useRef(null);
   const selectedShowtimeRef = useRef(selectedShowtime);
   const holdTokenRef = useRef(holdToken);
@@ -802,11 +810,14 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     if (!showtimeId || step !== "select-seat") return undefined;
 
     let isActive = true;
+    let refreshing = false;
     const syncSeats = async () => {
+      if (refreshing || seatBusyRef.current) return;
+      refreshing = true;
       try {
         const response = await getShowtimeSeats(showtimeId);
         const seats = response?.data || [];
-        if (!isActive) return;
+        if (!isActive || seatBusyRef.current) return;
 
         setShowtimeSeats(seats);
         if (
@@ -829,6 +840,8 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         }
       } catch {
         if (isActive) setSeatError("Không thể đồng bộ trạng thái ghế mới nhất.");
+      } finally {
+        refreshing = false;
       }
     };
 
@@ -1069,7 +1082,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
     });
   };
 
-  const toggleSeat = async (seat) => {
+  const toggleSeatInternal = async (seat) => {
     if (!isAuthenticated) {
       requestLoginNotice();
       return;
@@ -1136,11 +1149,24 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       }
 
       try {
-        await releaseShowtimeSeats(
+        const releaseResponse = await releaseShowtimeSeats(
           getShowtimeId(selectedShowtime),
           releaseIds,
           holdToken,
         );
+        const remainingIds = new Set((releaseResponse.data?.showtime_seat_ids || []).map(String));
+        setSelectedSeats((current) => current.filter((item) => remainingIds.has(String(item._id))));
+        setShowtimeSeats((current) => current.map((item) =>
+          releaseIds.includes(item._id)
+            ? { ...item, status: "available", held_by: null, hold_id: null }
+            : item,
+        ));
+        if (!remainingIds.size) {
+          setHoldExpiresAt(null);
+          holdTokenRef.current = "";
+          setHoldToken("");
+        }
+        setSeatError("");
       } catch (requestError) {
         if (requestError.response?.status === 401) {
           logout();
@@ -1150,15 +1176,6 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
         }
         return;
       }
-      setSelectedSeats((current) =>
-        current.filter((item) => !releaseIds.includes(item._id)),
-      );
-      if (selectedSeats.length === releaseIds.length) {
-        setHoldExpiresAt(null);
-        holdTokenRef.current = "";
-        setHoldToken("");
-      }
-      setSeatError("");
       return;
     }
 
@@ -1218,6 +1235,18 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
       } catch {
         setSeatError(requestError.response?.data?.message || "Không thể giữ ghế này.");
       }
+    }
+  };
+
+  const toggleSeat = async (seat) => {
+    if (seatBusyRef.current || isSubmitting || isCancellingBooking) return;
+    seatBusyRef.current = true;
+    setIsSeatBusy(true);
+    try {
+      await toggleSeatInternal(seat);
+    } finally {
+      seatBusyRef.current = false;
+      setIsSeatBusy(false);
     }
   };
 
@@ -1797,7 +1826,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                   <div className="grid min-w-[560px] gap-3">{seatsByRow.map(([row, seats]) => <div key={row} className="flex items-center justify-center gap-3"><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span><div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${seatColumnCount}, 44px)` }}>{seats.map((seat, seatIndex) => {
                     const type = getSeatType(seat); const config = SEAT_TYPES[type]; const status = getSeatStatus(seat); const selected = selectedSeats.some((item) => item._id === seat._id); const seatHolderId = getSeatHolderId(seat); const heldByOther = isHeldSeat(seat) && (!currentUserId || !seatHolderId || seatHolderId !== currentUserId); const booked = isBookedSeat(seat); const unavailable = (status !== "available" && !selected) || type === "broken";
                     const seatLabel = `${row}${seat.seat_id?.seat_number}, ${config.label}, ${Number(seat.price).toLocaleString("vi-VN")}đ`;
-                    return <button key={seat._id} type="button" disabled={unavailable} onClick={() => toggleSeat(seat)} title={seatLabel} aria-label={seatLabel} aria-pressed={selected} className={`h-11 w-11 rounded-lg text-[11px] font-black transition ${getCoupleSeatClass({ type, seats, seatIndex })} ${selected ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : heldByOther ? "cursor-not-allowed bg-[#ff8a96]/60 text-[#0a0e1a]" : booked ? "cursor-not-allowed bg-slate-800 text-white opacity-40" : unavailable ? "cursor-not-allowed bg-slate-700/70 text-white opacity-60" : `${config.color} text-white hover:brightness-125`}`}>{row}{seat.seat_id?.seat_number}</button>;
+                    return <button key={seat._id} type="button" disabled={unavailable || isSeatBusy} onClick={() => toggleSeat(seat)} title={seatLabel} aria-label={seatLabel} aria-pressed={selected} className={`h-11 w-11 rounded-lg text-[11px] font-black transition ${getCoupleSeatClass({ type, seats, seatIndex })} ${selected ? "bg-[var(--aura-coral)] text-[var(--aura-coral-ink)]" : heldByOther ? "cursor-not-allowed bg-[#ff8a96]/60 text-[#0a0e1a]" : booked ? "cursor-not-allowed bg-slate-800 text-white opacity-40" : unavailable ? "cursor-not-allowed bg-slate-700/70 text-white opacity-60" : `${config.color} text-white hover:brightness-125`}`}>{row}{seat.seat_id?.seat_number}</button>;
                   })}</div><span className="w-5 text-center text-xs font-bold text-slate-500">{row}</span></div>)}</div>
                 </div>
               </div>}
@@ -2013,7 +2042,7 @@ function BookingModal({ movie, initialShowtime = null, onClose, variant = "modal
                 Đăng nhập để đặt vé
               </button>
             )}
-            <button className="mt-6 h-12 w-full rounded-full bg-[var(--aura-coral)] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={openPolicyDialog} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
+            <button className="mt-6 h-12 w-full rounded-full bg-[var(--aura-coral)] text-sm font-extrabold text-[var(--aura-coral-ink)] hover:bg-[var(--aura-coral-hover)] disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={openPolicyDialog} disabled={!selectedSeats.length || !selectedShowtime || isSubmitting || isSeatBusy}>{isSubmitting ? "Đang đặt vé..." : "Xác nhận đặt vé"}</button>
           </aside>
 	        </div>
         )}
