@@ -6908,6 +6908,31 @@ html.dark .admin-layout .showtime-conflict-range strong {
   object-fit: contain;
 }
 
+.form-row.gift-receiving-fields {
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1.4fr);
+  align-items: start;
+}
+
+.gift-receiving-fields .form-group {
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .form-row.gift-receiving-fields {
+    grid-template-columns: minmax(0, 1fr) 120px;
+  }
+
+  .gift-receiving-fields .form-group:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .form-row.gift-receiving-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
 .gifts-table td {
   vertical-align: middle;
 }
