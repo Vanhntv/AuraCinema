@@ -165,22 +165,31 @@ const createQrPayloadMap = (tickets) => new Map(tickets.map((ticket) => [
 ]));
 
 export const scanPrintBookingOrder = async (req, res) => {
-  const token = parseBookingQrPayload(req.body?.qrToken);
-  if (!token) {
+  const qrToken = String(req.body?.qrToken || "").trim();
+  const bookingCode = String(req.body?.bookingCode || "").trim().toUpperCase();
+  const token = qrToken ? parseBookingQrPayload(qrToken) : "";
+  if ((qrToken && !token) || (!token && !bookingCode)) {
     await createBookingActionLogSafe({
       action: "LOOKUP",
       result: "INVALID_TOKEN",
       ...getRequestMeta(req),
     });
-    return res.status(400).json({ success: false, code: "INVALID_TOKEN", message: "QR đơn vé không hợp lệ" });
+    return res.status(400).json({
+      success: false,
+      code: "INVALID_TOKEN",
+      message: "Vui lòng cung cấp mã đơn hoặc QR đơn vé hợp lệ",
+    });
   }
 
   try {
     const result = await runWithOptionalTransaction(async (session) => {
-      const booking = await Booking.findOne({
-        ticketing_version: 2,
-        "order_qr.token_hash": hashQrToken(token),
-      }).session(session);
+      const bookingQuery = token
+        ? {
+            ticketing_version: 2,
+            "order_qr.token_hash": hashQrToken(token),
+          }
+        : { booking_code: bookingCode };
+      const booking = await Booking.findOne(bookingQuery).session(session);
       assertPrintableBooking(booking);
 
       const allTickets = await Ticket.find({ bookingId: booking._id })

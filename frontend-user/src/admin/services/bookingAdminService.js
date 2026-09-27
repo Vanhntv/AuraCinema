@@ -32,8 +32,9 @@ export const lookupBookingOrderPrint = async ({ bookingCode, qrToken } = {}) => 
   return res.data;
 };
 
-export const scanPrintBookingOrder = async (qrToken) => {
-  const res = await axiosClient.post(`${API_URL}/scan-print`, { qrToken });
+export const scanPrintBookingOrder = async (input = {}) => {
+  const payload = typeof input === "string" ? { qrToken: input } : input;
+  const res = await axiosClient.post(`${API_URL}/scan-print`, payload);
   return res.data;
 };
 

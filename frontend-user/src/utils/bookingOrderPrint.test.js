@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createBookingOrderPrintDefinition } from "./bookingOrderPrint.js";
 
-test("order print creates one receipt per booked seat with order-wide summaries", () => {
+test("order print creates one receipt per ticket with only that ticket's seat", () => {
   const definition = createBookingOrderPrintDefinition({
     booking: {
       bookingCode: "AURA000000000001",
@@ -26,22 +26,32 @@ test("order print creates one receipt per booked seat with order-wide summaries"
   });
 
   const text = JSON.stringify(definition);
+  const firstTicketText = JSON.stringify(definition.content[0]);
+  const secondTicketText = JSON.stringify(definition.content[1]);
+  const serviceText = JSON.stringify(definition.content[2]);
   assert.match(text, /AURA000000000001/);
   assert.match(text, /THÔNG TIN SUẤT CHIẾU/);
-  assert.match(text, /A1, A2/);
+  assert.match(firstTicketText, /A1/);
+  assert.equal(firstTicketText.includes("A2"), false);
+  assert.match(secondTicketText, /A2/);
+  assert.equal(secondTicketText.includes("A1"), false);
+  assert.match(text, /Ghế/);
   assert.match(text, /Loại ghế/);
-  assert.match(text, /SL dịch vụ/);
-  assert.match(text, /Tiền dịch vụ/);
-  assert.match(text, /GIAM20/);
+  assert.match(text, /Đơn giá/);
   assert.match(text, /THANH TOÁN/);
-  assert.match(text, /PHIẾU NHẬN DỊCH VỤ/);
-  assert.match(text, /Combo/);
-  assert.match(text, /x1/);
-  assert.match(text, /Đơn giá:/);
-  assert.match(text, /Thành tiền:/);
-  assert.match(text, /Nhân viên giao dịch vụ/);
-  assert.match(text, /Thời gian giao/);
   assert.match(text, /staff.nguyenvana/);
+  assert.equal(text.includes("Danh sách ghế"), false);
+  assert.equal(firstTicketText.includes("Thành tiền"), false);
+  assert.equal(secondTicketText.includes("Thành tiền"), false);
+  assert.equal(firstTicketText.includes("DỊCH VỤ & ƯU ĐÃI"), false);
+  assert.equal(secondTicketText.includes("DỊCH VỤ & ƯU ĐÃI"), false);
+  assert.match(serviceText, /PHIẾU NHẬN DỊCH VỤ/);
+  assert.match(serviceText, /Combo/);
+  assert.match(serviceText, /x1/);
+  assert.match(serviceText, /Thành tiền/);
+  assert.equal(text.includes("GIAM20"), false);
+  assert.equal(text.includes("Tạm tính"), false);
+  assert.equal(text.includes("Tổng đơn"), false);
   assert.equal(text.includes("______________________________"), false);
   assert.equal(text.includes("Rạp"), false);
   assert.equal(text.includes("TÓM TẮT ĐƠN"), false);

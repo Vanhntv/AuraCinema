@@ -42,22 +42,6 @@ const getSeatType = (seat = {}) =>
 
 const getSeatPrice = (seat = {}) => numberValue(seat.price);
 
-const formatSeatList = (seats = []) =>
-  seats.map(getSeatLabel).filter(Boolean).join(", ") || "Không có dữ liệu ghế";
-
-const groupSeatsByTypeAndPrice = (seats = []) => {
-  const groups = new Map();
-  seats.forEach((seat) => {
-    const type = getSeatType(seat);
-    const price = getSeatPrice(seat);
-    const key = `${type}:${price}`;
-    const current = groups.get(key) || { type, price, quantity: 0 };
-    current.quantity += 1;
-    groups.set(key, current);
-  });
-  return [...groups.values()];
-};
-
 const infoTable = (rows, widths = [92, "*"]) => ({
   table: {
     widths,
@@ -100,24 +84,22 @@ const sectionTitle = (text) => ({
   margin: [0, 14, 0, 5],
 });
 
-const seatPriceTable = (groups) => ({
+const seatPriceTable = (seat) => ({
   table: {
     headerRows: 1,
-    widths: ["*", 72, 34, 78],
+    widths: ["*", 110],
     body: [
-      ["Loại ghế", "Đơn giá", "SL", "Thành tiền"].map((text) => ({
+      ["Loại ghế", "Đơn giá"].map((text) => ({
         text,
         bold: true,
         color: "#64748b",
         fontSize: 8,
         margin: [0, 4, 0, 4],
       })),
-      ...groups.map((group) => [
-        { text: group.type, bold: true, fontSize: 9, margin: [0, 4, 0, 4] },
-        { text: currencyFormatter.format(group.price), fontSize: 9, margin: [0, 4, 0, 4] },
-        { text: group.quantity, alignment: "center", fontSize: 9, margin: [0, 4, 0, 4] },
-        { text: currencyFormatter.format(group.price * group.quantity), bold: true, alignment: "right", fontSize: 9, margin: [0, 4, 0, 4] },
-      ]),
+      [
+        { text: getSeatType(seat), bold: true, fontSize: 9, margin: [0, 4, 0, 4] },
+        { text: currencyFormatter.format(getSeatPrice(seat)), fontSize: 9, margin: [0, 4, 0, 4] },
+      ],
     ],
   },
   layout: {
@@ -162,18 +144,22 @@ export const createBookingOrderPrintDefinition = (payload = {}) => {
   const booking = payload.booking || {};
   const services = booking.services || [];
   const seats = booking.seats || [];
-  const seatGroups = groupSeatsByTypeAndPrice(seats);
-  const serviceQuantity = services.reduce((total, service) => total + getServiceQuantity(service), 0);
-  const serviceTotal = numberValue(
-    booking.pricing?.service_subtotal,
-    services.reduce((total, service) => total + getServiceSubtotal(service), 0),
-  );
   const printedAt = new Date();
   const printedAtText = formatDateTime(printedAt);
   const printOperator = printable(payload.printedBy?.accountName);
-  const printableTicketCount = (payload.tickets || []).length;
-  const receiptCount = printableTicketCount > 0 ? seats.length || printableTicketCount : 0;
-  const ticketPages = Array.from({ length: receiptCount }, (_, index) => ({
+  const tickets = payload.tickets || [];
+  const ticketSeats = tickets.length > 0
+    ? tickets.map((ticket) => {
+      const bookingSeat = seats.find((seat) => getSeatLabel(seat) === getSeatLabel(ticket)) || {};
+      return {
+        ...bookingSeat,
+        seat_label: getSeatLabel(ticket) || getSeatLabel(bookingSeat),
+        seat_type: ticket.seatType || ticket.seat_type || getSeatType(bookingSeat),
+        price: ticket.price ?? getSeatPrice(bookingSeat),
+      };
+    })
+    : seats;
+  const ticketPages = ticketSeats.map((ticketSeat, index) => ({
     auraTicketPage: true,
     ...(index > 0 ? { pageBreak: "before" } : {}),
     stack: [
@@ -197,21 +183,15 @@ export const createBookingOrderPrintDefinition = (payload = {}) => {
         ["Ngày chiếu", formatDate(booking.showtime?.start_time), "Suất chiếu", formatTime(booking.showtime?.start_time)],
       ]),
       infoTable([
-        ["Danh sách ghế", formatSeatList(seats)],
+        ["Ghế", getSeatLabel(ticketSeat)],
       ]),
-      seatPriceTable(seatGroups),
-      sectionTitle("DỊCH VỤ & ƯU ĐÃI"),
-      detailGrid([
-        ["SL dịch vụ", serviceQuantity, "Tiền dịch vụ", currencyFormatter.format(serviceTotal)],
-        ["Mã giảm giá", booking.voucher?.code || "Không áp dụng", "Giảm giá", `-${currencyFormatter.format(numberValue(booking.pricing?.discount))}`],
-      ]),
+      seatPriceTable(ticketSeat),
       sectionTitle("THANH TOÁN"),
       detailGrid([
-        ["Tạm tính", currencyFormatter.format(numberValue(booking.pricing?.subtotal || booking.total_price)), "Tổng đơn", currencyFormatter.format(numberValue(booking.pricing?.total || booking.total_price))],
         ["Phương thức", booking.payment?.provider, "Mã giao dịch", booking.payment?.transactionId],
         ["Thời gian in", printedAtText, "Nhân viên in", printOperator],
       ]),
-      { text: "Mã đơn dùng để đối chiếu vé và dịch vụ.", alignment: "center", bold: true, margin: [0, 18, 0, 0] },
+      { text: "Mã đơn dùng để đối chiếu vé.", alignment: "center", bold: true, margin: [0, 18, 0, 0] },
       { text: "Vui lòng kiểm tra đúng phim, suất chiếu, phòng và ghế trước khi vào rạp.", alignment: "center", color: "#64748b", fontSize: 8, margin: [0, 5, 0, 0] },
       { text: "Cảm ơn bạn đã sử dụng Aura Cinema!", alignment: "center", color: "#e11d48", bold: true, margin: [0, 12, 0, 0] },
     ],
@@ -224,15 +204,15 @@ export const createBookingOrderPrintDefinition = (payload = {}) => {
       { text: "AURA CINEMA", color: "#e11d48", bold: true, fontSize: 20, alignment: "center" },
       { text: "PHIẾU NHẬN DỊCH VỤ", bold: true, fontSize: 13, alignment: "center", margin: [0, 6, 0, 0] },
       { text: `Mã đơn: ${printable(booking.bookingCode)}`, bold: true, fontSize: 10, alignment: "center", margin: [0, 6, 0, 0] },
-      { text: "THÔNG TIN PHIẾU", bold: true, color: "#e11d48", fontSize: 9, margin: [0, 14, 0, 5] },
+      sectionTitle("THÔNG TIN PHIẾU"),
       infoTable([
         ["Khách hàng", booking.customer?.name],
         ["Nhân viên in", printOperator],
         ["Thời gian in", printedAtText],
       ]),
-      { text: "DỊCH VỤ ĐÃ ĐẶT", bold: true, color: "#e11d48", fontSize: 9, margin: [0, 14, 0, 5] },
+      sectionTitle("DỊCH VỤ ĐÃ ĐẶT"),
       serviceItemsTable(services),
-      { text: "TỔNG KẾT", bold: true, color: "#e11d48", fontSize: 9, margin: [0, 14, 0, 5] },
+      sectionTitle("TỔNG KẾT"),
       infoTable([
         ["Tổng số lượng", services.reduce((total, service) => total + getServiceQuantity(service), 0)],
         ["Tổng tiền dịch vụ", currencyFormatter.format(numberValue(
