@@ -16,6 +16,7 @@ import {
 import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import "./App.css";
 import TransactionHistory from "./TransactionHistory.jsx";
+import { validateSeatSpacing } from "../../shared/seatSpacing.mjs";
 import auraCinemaLogo from "../../frontend-user/src/assets/logo-datn-auracinema.jpg";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
@@ -871,6 +872,9 @@ function CounterSale() {
     seatBusyRef.current = true;
     if (seatsToToggle.some((item) => selectedIds.has(item.id))) {
       const releaseIds = seatsToToggle.filter((item) => selectedIds.has(item.id)).map((item) => item.id);
+      const remainingSelection = selected.filter((id) => !releaseIds.includes(id));
+      const spacingError = validateSeatSpacing(remainingSelection, seats);
+      if (spacingError) { seatBusyRef.current = false; setError(spacingError); return; }
       try {
         const result = await api("/showtime-seats/release", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: releaseIds, hold_token: holdToken }) });
         const remainingIds = (result.showtime_seat_ids || []).map(String);
@@ -884,6 +888,8 @@ function CounterSale() {
     }
     if (seatsToToggle.some((item) => item.status !== "available")) { seatBusyRef.current = false; setError("Cặp ghế đôi này đã có ghế không còn trống."); return; }
     const nextSelected = [...selected, ...seatsToToggle.map((item) => item.id)];
+    const spacingError = validateSeatSpacing(nextSelected, seats);
+    if (spacingError) { seatBusyRef.current = false; setError(spacingError); return; }
     try {
       const result = await api("/showtime-seats/hold", { method: "POST", body: JSON.stringify({ showtime_id: current.id, showtime_seat_ids: nextSelected, hold_token: holdToken || undefined }) });
       holdIdRef.current = String(result.hold_id || "");
