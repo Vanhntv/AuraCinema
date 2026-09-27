@@ -1,36 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   HiOutlineCalendar,
   HiOutlineCash,
   HiOutlineChartBar,
-  HiOutlineChartPie,
   HiOutlineCheckCircle,
   HiOutlineFilm,
   HiOutlineClock,
-  HiOutlineLogout,
   HiOutlinePlus,
   HiOutlineRefresh,
-  HiOutlineShoppingBag,
-  HiOutlineTag,
   HiOutlineTicket,
 } from "react-icons/hi";
+import MovieSearch from "../components/dashboard/MovieSearch";
+import RevenueChart from "../components/dashboard/RevenueChart";
 import {
-  getBookingStatusStats,
   getDailyRevenue,
   getDashboardOverview,
   getDashboardStats,
   getMonthlyRevenue,
   getMovieRevenue,
+  getRangeRevenue,
   getRevenueComparison,
   getTopMoviesRevenue,
   getTopSellingCombos,
-  getTodayRevenue,
   getWeeklyRevenue,
+  getYearlyRevenue,
 } from "../services/dashboardService";
 import RevenueChart from "../components/dashboard/RevenueChart";
 import MovieSearch from "../components/dashboard/MovieSearch";
-import { useAuth } from "../../hooks/useAuth";
 
 const emptyDashboard = {
   stats: {
@@ -67,274 +63,195 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   currency: "VND",
   maximumFractionDigits: 0,
 });
-
 const numberFormatter = new Intl.NumberFormat("vi-VN");
-const dashboardDateFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Ho_Chi_Minh",
+const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
+const displayDateFormatter = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh",
 });
-const dashboardDateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
-  timeZone: "Asia/Ho_Chi_Minh",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
+const dateTimeFormatter = new Intl.DateTimeFormat("vi-VN", {
+  dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
 });
-const dashboardCurrentDate = dashboardDateFormatter.format(new Date());
-const [dashboardCurrentYear, dashboardCurrentMonth] = dashboardCurrentDate
-  .split("-")
-  .map(Number);
 
-const emptyDailyStats = {
-  revenue: 0,
-  ticketsSold: 0,
-  bookingCount: 0,
+const currentDate = dateFormatter.format(new Date());
+const currentYear = Number(currentDate.slice(0, 4));
+const shiftDate = (dateValue, amount) => {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + amount)).toISOString().slice(0, 10);
+};
+const yesterdayDate = shiftDate(currentDate, -1);
+
+const getPeriodRange = (period, selectedDate, rangeFrom, rangeTo) => {
+  if (period === "range") return { from: rangeFrom, to: rangeTo };
+  if (period === "day") return { from: selectedDate, to: selectedDate };
+  if (period === "week") {
+    const date = new Date(`${selectedDate}T00:00:00Z`);
+    const from = shiftDate(selectedDate, -((date.getUTCDay() + 6) % 7));
+    return { from, to: shiftDate(from, 6) };
+  }
+  if (period === "month") {
+    const [year, month] = selectedDate.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const prefix = `${year}-${String(month).padStart(2, "0")}`;
+    return { from: `${prefix}-01`, to: `${prefix}-${lastDay}` };
+  }
+  return { from: `${selectedDate.slice(0, 4)}-01-01`, to: `${selectedDate.slice(0, 4)}-12-31` };
 };
 
-const emptyRevenueComparison = {
-  period: "day",
+const emptyDashboard = {
+  stats: {
+    genres: 0, movies: 0, cinemas: 0, bookings: 0, revenue: 0,
+    todayRevenue: 0, ticketsSold: 0, successfulBookings: 0, todayShowtimes: 0,
+  },
+  recentBookings: [],
+  todayShowtimes: [],
+};
+const emptyDailyStats = { revenue: 0, ticketsSold: 0, bookingCount: 0 };
+const emptyComparison = {
   current: { label: "", revenue: 0 },
   previous: { label: "", revenue: 0 },
   percentageChange: null,
 };
 
-const emptyMovieRevenue = {
-  revenue: 0,
-  ticketsSold: 0,
-  bookingCount: 0,
-  showtimeCount: 0,
-  dailyRevenue: [],
-  ticketsBySeatType: {
-    normal: 0,
-    vip: 0,
-    couple: 0,
-  },
-  averageOccupancyRate: 0,
-  occupancyByShowtime: [],
-};
-
-const bookingStatusItems = [
-  { key: "pending", label: "Chờ xử lý", tone: "pending" },
-  { key: "confirmed", label: "Đã xác nhận", tone: "confirmed" },
-  { key: "cancelled", label: "Đã hủy", tone: "cancelled" },
-  { key: "expired", label: "Hết hạn", tone: "expired" },
-  { key: "refunded", label: "Đã hoàn tiền", tone: "refunded" },
-  { key: "checked_in", label: "Đã check-in", tone: "checked-in" },
-];
-
 const DashboardPage = () => {
-  const { logout } = useAuth();
   const [dashboard, setDashboard] = useState(emptyDashboard);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [topMoviesLoading, setTopMoviesLoading] = useState(true);
-  const [topMoviesError, setTopMoviesError] = useState("");
-  const [topCombosLoading, setTopCombosLoading] = useState(true);
-  const [revenuePeriod, setRevenuePeriod] = useState("today");
-  const [selectedDate, setSelectedDate] = useState(dashboardCurrentDate);
+  const [revenuePeriod, setRevenuePeriod] = useState("day");
+  const [selectedDate, setSelectedDate] = useState(currentDate);
+  const [rangeFrom, setRangeFrom] = useState(currentDate);
+  const [rangeTo, setRangeTo] = useState(currentDate);
   const [dailyStats, setDailyStats] = useState(emptyDailyStats);
-  const [dailyLoading, setDailyLoading] = useState(true);
-  const [dailyError, setDailyError] = useState("");
-  const [revenueComparison, setRevenueComparison] = useState(emptyRevenueComparison);
-  const [comparisonLoading, setComparisonLoading] = useState(true);
-  const [comparisonError, setComparisonError] = useState("");
-  const [weeklyRevenue, setWeeklyRevenue] = useState([]);
-  const [weeklyLoading, setWeeklyLoading] = useState(true);
-  const [weeklyError, setWeeklyError] = useState("");
-  const [monthlyRevenue, setMonthlyRevenue] = useState({
-    totalRevenue: 0,
-    days: [],
-  });
-  const [monthlyLoading, setMonthlyLoading] = useState(true);
-  const [monthlyError, setMonthlyError] = useState("");
+  const [chartData, setChartData] = useState([]);
+  const [periodTotal, setPeriodTotal] = useState(0);
+  const [comparison, setComparison] = useState(emptyComparison);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+  const [revenueError, setRevenueError] = useState("");
+  const [topMovies, setTopMovies] = useState([]);
+  const [topCombos, setTopCombos] = useState([]);
+  const [rankingsLoading, setRankingsLoading] = useState(true);
   const [selectedMovie, setSelectedMovie] = useState(null);
-  const [movieRevenue, setMovieRevenue] = useState(emptyMovieRevenue);
-  const [movieRevenueLoading, setMovieRevenueLoading] = useState(false);
-  const [movieRevenueError, setMovieRevenueError] = useState("");
-  const [movieRevenueFrom, setMovieRevenueFrom] = useState("");
-  const [movieRevenueTo, setMovieRevenueTo] = useState("");
+  const [movieReport, setMovieReport] = useState(null);
+  const [movieReportLoading, setMovieReportLoading] = useState(false);
+  const [movieReportError, setMovieReportError] = useState("");
+
+  const periodRange = useMemo(
+    () => getPeriodRange(revenuePeriod, selectedDate, rangeFrom, rangeTo),
+    [rangeFrom, rangeTo, revenuePeriod, selectedDate],
+  );
 
   const fetchDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
-      const [
-        statsResponse,
-        overviewResponse,
-        todayRevenueResponse,
-        topMoviesResponse,
-        topCombosResponse,
-        bookingStatusesResponse,
-      ] = await Promise.all([
-        getDashboardStats(),
-        getDashboardOverview(),
-        getTodayRevenue(),
-        getTopMoviesRevenue({ period: "today", date: dashboardCurrentDate }),
-        getTopSellingCombos({ period: "today", date: dashboardCurrentDate }),
-        getBookingStatusStats(),
+      const [statsResponse, overviewResponse, todayResponse] = await Promise.all([
+        getDashboardStats(), getDashboardOverview(), getDailyRevenue(currentDate),
       ]);
-
+      const overview = overviewResponse.data || {};
       setDashboard({
         ...emptyDashboard,
         ...(statsResponse.data || {}),
-        topMovies: topMoviesResponse.data || [],
-        topCombos: topCombosResponse.data || [],
-        bookingStatuses: {
-          ...emptyDashboard.bookingStatuses,
-          ...(bookingStatusesResponse.data || {}),
-        },
         stats: {
           ...emptyDashboard.stats,
           ...(statsResponse.data?.stats || {}),
-          revenue: overviewResponse.data?.revenue ?? 0,
-          todayRevenue: todayRevenueResponse.data?.revenue ?? 0,
-          ticketsSold: overviewResponse.data?.ticketsSold ?? 0,
-          successfulBookings: overviewResponse.data?.successfulBookings ?? 0,
-          comboRevenue: overviewResponse.data?.comboRevenue ?? 0,
-          voucherUsageCount: overviewResponse.data?.voucherUsageCount ?? 0,
-          voucherDiscountAmount: overviewResponse.data?.voucherDiscountAmount ?? 0,
+          revenue: overview.revenue || 0,
+          todayRevenue: todayResponse.data?.revenue || 0,
+          ticketsSold: overview.ticketsSold || 0,
+          successfulBookings: overview.successfulBookings || 0,
         },
       });
     } catch (err) {
-      setError("Không thể tải thống kê dashboard. Vui lòng kiểm tra API.");
-      console.error(err);
+      setError(err.response?.data?.message || "Không thể tải dữ liệu dashboard.");
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
-
-  const fetchTopRankings = useCallback(async (period, date) => {
+  const fetchRevenue = useCallback(async () => {
     try {
-      setTopMoviesLoading(true);
-      setTopCombosLoading(true);
-      setTopMoviesError("");
-      const params = { period };
-      if (period === "custom") params.date = date;
+      setRevenueLoading(true);
+      setRevenueError("");
+      const comparisonRequest = getRevenueComparison(
+        revenuePeriod,
+        selectedDate,
+        revenuePeriod === "range" ? periodRange : {},
+      );
+      let revenueRequest;
+      if (revenuePeriod === "day") revenueRequest = getDailyRevenue(selectedDate);
+      else if (revenuePeriod === "week") revenueRequest = getWeeklyRevenue(selectedDate);
+      else if (revenuePeriod === "month") {
+        const [year, month] = selectedDate.split("-").map(Number);
+        revenueRequest = getMonthlyRevenue(month, year);
+      } else if (revenuePeriod === "year") {
+        revenueRequest = getYearlyRevenue(Number(selectedDate.slice(0, 4)));
+      } else revenueRequest = getRangeRevenue(rangeFrom, rangeTo);
+
+      const [revenueResponse, comparisonResponse] = await Promise.all([revenueRequest, comparisonRequest]);
+      const data = revenueResponse.data || {};
+      setComparison({ ...emptyComparison, ...(comparisonResponse.data || {}) });
+      if (revenuePeriod === "day") {
+        const daily = { ...emptyDailyStats, ...data };
+        setDailyStats(daily);
+        setPeriodTotal(Number(daily.revenue || 0));
+        setChartData([]);
+      } else if (revenuePeriod === "week") {
+        setDailyStats(emptyDailyStats);
+        setChartData(data);
+        setPeriodTotal(data.reduce((sum, item) => sum + Number(item.revenue || 0), 0));
+      } else if (revenuePeriod === "range") {
+        setDailyStats({ revenue: Number(data.totalRevenue || 0), ticketsSold: Number(data.ticketsSold || 0), bookingCount: Number(data.bookingCount || 0) });
+        setChartData(data.days || []);
+        setPeriodTotal(Number(data.totalRevenue || 0));
+      } else if (revenuePeriod === "year") {
+        setDailyStats(emptyDailyStats);
+        setChartData(data.months || []);
+        setPeriodTotal(Number(data.totalRevenue || 0));
+      } else {
+        setDailyStats(emptyDailyStats);
+        setChartData(data.days || []);
+        setPeriodTotal(Number(data.totalRevenue || 0));
+      }
+    } catch (err) {
+      setRevenueError(err.response?.data?.message || "Không thể tải dữ liệu doanh thu.");
+    } finally {
+      setRevenueLoading(false);
+    }
+  }, [periodRange, rangeFrom, rangeTo, revenuePeriod, selectedDate]);
+
+  const fetchRankings = useCallback(async () => {
+    try {
+      setRankingsLoading(true);
+      const filters = { period: revenuePeriod, date: selectedDate, ...(revenuePeriod === "range" ? periodRange : {}) };
       const [moviesResponse, combosResponse] = await Promise.all([
-        getTopMoviesRevenue(params),
-        getTopSellingCombos(params),
+        getTopMoviesRevenue(filters), getTopSellingCombos(filters),
       ]);
-      setDashboard((current) => ({
-        ...current,
-        topMovies: moviesResponse.data || [],
-        topCombos: combosResponse.data || [],
-      }));
-    } catch (err) {
-      setTopMoviesError(
-        err.response?.data?.message || "Không thể tải top phim theo khoảng thời gian.",
-      );
-      setDashboard((current) => ({ ...current, topMovies: [], topCombos: [] }));
+      setTopMovies(moviesResponse.data || []);
+      setTopCombos(combosResponse.data || []);
+    } catch {
+      setTopMovies([]);
+      setTopCombos([]);
     } finally {
-      setTopMoviesLoading(false);
-      setTopCombosLoading(false);
+      setRankingsLoading(false);
     }
-  }, []);
+  }, [periodRange, revenuePeriod, selectedDate]);
 
-  useEffect(() => {
-    fetchTopRankings(
-      revenuePeriod,
-      revenuePeriod === "custom" ? selectedDate : dashboardCurrentDate,
-    );
-  }, [fetchTopRankings, revenuePeriod, selectedDate]);
-
-  const fetchDailyStats = useCallback(async (date) => {
-    if (!date) {
-      setDailyStats(emptyDailyStats);
-      setDailyError("Vui lòng chọn ngày cần xem.");
-      setDailyLoading(false);
+  const fetchSelectedMovie = useCallback(async () => {
+    if (!selectedMovie) {
+      setMovieReport(null);
+      setMovieReportError("");
       return;
     }
-
     try {
-      setDailyLoading(true);
-      setDailyError("");
-      const response = await getDailyRevenue(date);
-      setDailyStats({
-        ...emptyDailyStats,
-        ...(response.data || {}),
-      });
+      setMovieReportLoading(true);
+      setMovieReportError("");
+      const response = await getMovieRevenue(selectedMovie._id || selectedMovie.id, periodRange);
+      setMovieReport(response.data || null);
     } catch (err) {
-      setDailyError(
-        err.response?.data?.message || "Không thể tải doanh thu theo ngày.",
-      );
+      setMovieReport(null);
+      setMovieReportError(err.response?.data?.message || "Không thể tải doanh thu phim.");
     } finally {
-      setDailyLoading(false);
+      setMovieReportLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    if (revenuePeriod === "today") {
-      fetchDailyStats(dashboardCurrentDate);
-    } else if (revenuePeriod === "custom") {
-      fetchDailyStats(selectedDate);
-    }
-  }, [fetchDailyStats, revenuePeriod, selectedDate]);
-
-  const fetchWeeklyRevenue = useCallback(async (date) => {
-    if (!date) {
-      setWeeklyRevenue([]);
-      setWeeklyError("Vui lòng chọn một ngày trong tuần cần xem.");
-      setWeeklyLoading(false);
-      return;
-    }
-
-    try {
-      setWeeklyLoading(true);
-      setWeeklyError("");
-      const response = await getWeeklyRevenue(date);
-      setWeeklyRevenue(response.data || []);
-    } catch (err) {
-      setWeeklyError(
-        err.response?.data?.message || "Không thể tải doanh thu theo tuần.",
-      );
-    } finally {
-      setWeeklyLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (revenuePeriod === "week") {
-      fetchWeeklyRevenue(dashboardCurrentDate);
-    }
-  }, [fetchWeeklyRevenue, revenuePeriod]);
-
-  const weeklyRevenueSummary = useMemo(() => {
-    const total = weeklyRevenue.reduce(
-      (sum, item) => sum + Number(item.revenue || 0),
-      0,
-    );
-
-    return { total };
-  }, [weeklyRevenue]);
-
-  const fetchMonthlyRevenue = useCallback(async (month, year) => {
-    if (!month || !year) {
-      setMonthlyRevenue({ totalRevenue: 0, days: [] });
-      setMonthlyError("Vui lòng chọn đầy đủ tháng và năm.");
-      setMonthlyLoading(false);
-      return;
-    }
-
-    try {
-      setMonthlyLoading(true);
-      setMonthlyError("");
-      const response = await getMonthlyRevenue(month, year);
-      setMonthlyRevenue({
-        totalRevenue: response.data?.totalRevenue ?? 0,
-        days: response.data?.days || [],
-      });
-    } catch (err) {
-      setMonthlyError(
-        err.response?.data?.message || "Không thể tải doanh thu theo tháng.",
-      );
-    } finally {
-      setMonthlyLoading(false);
-    }
-  }, []);
+  }, [periodRange, selectedMovie]);
 
   useEffect(() => {
     if (revenuePeriod === "month") {
@@ -397,18 +314,12 @@ const DashboardPage = () => {
   );
 
   const comparisonTrend = useMemo(() => {
-    const change = revenueComparison.percentageChange;
-    if (change === null || change === undefined) {
-      return { label: "Chưa có dữ liệu kỳ trước", tone: "neutral" };
-    }
-    if (change > 0) {
-      return { label: `Tăng ${numberFormatter.format(change)}%`, tone: "increase" };
-    }
-    if (change < 0) {
-      return { label: `Giảm ${numberFormatter.format(Math.abs(change))}%`, tone: "decrease" };
-    }
+    const change = comparison.percentageChange;
+    if (change === null || change === undefined) return { label: "Chưa có dữ liệu đối chiếu", tone: "neutral" };
+    if (change > 0) return { label: `Tăng ${numberFormatter.format(change)}%`, tone: "increase" };
+    if (change < 0) return { label: `Giảm ${numberFormatter.format(Math.abs(change))}%`, tone: "decrease" };
     return { label: "Không thay đổi", tone: "neutral" };
-  }, [revenueComparison.percentageChange]);
+  }, [comparison.percentageChange]);
 
   const fetchSelectedMovieRevenue = useCallback(async (movie, filters = {}) => {
     if (!movie?._id) return;
@@ -554,10 +465,6 @@ const DashboardPage = () => {
     [dashboard.stats],
   );
 
-  const handleLogout = () => {
-    logout();
-  };
-
   return (
     <div className="dashboard-page">
       <div className="page-header dashboard-header">
@@ -575,41 +482,17 @@ const DashboardPage = () => {
             <HiOutlineRefresh />
             Làm mới
           </button>
-          <button className="btn btn-danger" onClick={handleLogout}>
-            <HiOutlineLogout />
-            Đăng xuất
-          </button>
         </div>
       </div>
-
       {error && <div className="dashboard-alert">{error}</div>}
 
-      <div className="stats-grid">
+      <div className="stats-grid dashboard-summary-grid">
         {statCards.map((card) => (
-          <div
-            className={`stat-card dashboard-stat-card${
-              card.isCurrency ? " dashboard-stat-card--revenue" : ""
-            }`}
-            key={card.label}
-          >
+          <div className="stat-card dashboard-stat-card" key={card.label}>
             <div className={`stat-card-icon ${card.tone}`}>{card.icon}</div>
             <div className="dashboard-stat-content">
-              <div
-                className="stat-card-value"
-                title={
-                  !loading && card.isCurrency
-                    ? currencyFormatter.format(card.value || 0)
-                    : undefined
-                }
-              >
-                {loading
-                  ? "..."
-                  : card.isCurrency
-                  ? currencyFormatter.format(card.value || 0)
-                  : numberFormatter.format(card.value || 0)}
-              </div>
+              <div className="stat-card-value">{loading ? "..." : card.currency ? currencyFormatter.format(card.value || 0) : numberFormatter.format(card.value || 0)}</div>
               <div className="stat-card-label">{card.label}</div>
-              <div className="stat-card-hint">{card.hint}</div>
             </div>
           </div>
         ))}
@@ -637,7 +520,6 @@ const DashboardPage = () => {
                     : numberFormatter.format(dashboard.bookingStatuses[status.key] || 0)}
                 </strong>
                 <span>{status.label}</span>
-                <small>{status.key}</small>
               </div>
             </div>
           ))}
@@ -802,314 +684,20 @@ const DashboardPage = () => {
       )}
 
       <div className="dashboard-ranking-grid">
-      <section className="dashboard-top-movies-panel">
-        <div className="dashboard-panel-header dashboard-top-movies-header">
-          <div>
-            <h2>Top phim doanh thu cao nhất</h2>
-            <p>Xếp hạng theo tổng doanh thu từ booking đã thanh toán</p>
-          </div>
-          <HiOutlineChartBar />
-        </div>
-
-        {topMoviesError ? (
-          <div className="dashboard-daily-error">{topMoviesError}</div>
-        ) : topMoviesLoading ? (
-          <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
-        ) : dashboard.topMovies.length ? (
-          <div className="dashboard-top-movies-list">
-            {dashboard.topMovies.map((movie, index) => {
-              const revenue = Number(movie.revenue || 0);
-              const width = topMovieRevenueMax
-                ? Math.max((revenue / topMovieRevenueMax) * 100, 3)
-                : 0;
-
-              return (
-                <div className="dashboard-top-movie" key={movie.id || movie.title}>
-                  <span className={`dashboard-movie-rank rank-${index + 1}`}>
-                    {index + 1}
-                  </span>
-                  <div className="dashboard-top-movie-info">
-                    <div className="dashboard-top-movie-title-row">
-                      <strong>{movie.title || "Phim không xác định"}</strong>
-                      <span>{currencyFormatter.format(revenue)}</span>
-                    </div>
-                    <div className="dashboard-top-movie-track">
-                      <div
-                        className="dashboard-top-movie-bar"
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                    <small>
-                      {numberFormatter.format(movie.ticketsSold || 0)} vé · {numberFormatter.format(movie.bookingCount || 0)} đơn
-                    </small>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="dashboard-empty-state">
-            Chưa có dữ liệu doanh thu theo phim.
-          </div>
-        )}
-      </section>
-
-      <section className="dashboard-top-movies-panel dashboard-top-combos-panel">
-        <div className="dashboard-panel-header dashboard-top-movies-header">
-          <div>
-            <h2>Top combo bán chạy</h2>
-            <p>Xếp hạng theo số lượng combo trong booking đã thanh toán</p>
-          </div>
-          <HiOutlineShoppingBag />
-        </div>
-
-        {topMoviesError ? (
-          <div className="dashboard-daily-error">{topMoviesError}</div>
-        ) : topCombosLoading ? (
-          <div className="dashboard-chart-state">Đang tải xếp hạng...</div>
-        ) : dashboard.topCombos.length ? (
-          <div className="dashboard-top-movies-list">
-            {dashboard.topCombos.map((combo, index) => {
-              const quantitySold = Number(combo.quantitySold || 0);
-              const width = topComboQuantityMax
-                ? Math.max((quantitySold / topComboQuantityMax) * 100, 3)
-                : 0;
-
-              return (
-                <div className="dashboard-top-movie" key={combo.id || combo.name}>
-                  <span className={`dashboard-movie-rank rank-${index + 1}`}>
-                    {index + 1}
-                  </span>
-                  <div className="dashboard-top-movie-info">
-                    <div className="dashboard-top-movie-title-row">
-                      <strong>{combo.name || "Combo không xác định"}</strong>
-                      <span>{numberFormatter.format(quantitySold)} phần</span>
-                    </div>
-                    <div className="dashboard-top-movie-track">
-                      <div
-                        className="dashboard-top-movie-bar dashboard-top-combo-bar"
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                    <small>{currencyFormatter.format(combo.revenue || 0)} doanh thu</small>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="dashboard-empty-state">
-            Chưa có dữ liệu combo đã bán.
-          </div>
-        )}
-      </section>
+        <RankingPanel title="Doanh thu theo phim" subtitle={selectedPeriodLabel} items={topMovies} loading={rankingsLoading} maxRevenue={topMovieRevenue} type="movie" onSelect={(item) => setSelectedMovie({ _id: item.id, title: item.title })} />
+        <RankingPanel title="Doanh thu combo" subtitle={selectedPeriodLabel} items={topCombos} loading={rankingsLoading} maxRevenue={topComboRevenue} type="combo" />
       </div>
 
       <section className="dashboard-movie-search-panel">
-        <div className="dashboard-panel-header">
-          <div>
-            <h2>Tìm kiếm phim</h2>
-            <p>Chọn một phim để xem thống kê chi tiết</p>
-          </div>
-          <HiOutlineFilm />
-        </div>
-        <MovieSearch
-          selectedMovie={selectedMovie}
-          onSelect={handleMovieSelect}
-        />
+        <div className="dashboard-panel-header"><div><h2>Xem doanh thu từng phim</h2><p>Tìm một phim để xem doanh thu, số vé, suất chiếu và tỷ lệ lấp đầy trong kỳ đang chọn</p></div><HiOutlineFilm /></div>
+        <MovieSearch selectedMovie={selectedMovie} onSelect={setSelectedMovie} />
       </section>
+      {selectedMovie && <MovieRevenueReport report={movieReport} loading={movieReportLoading} error={movieReportError} periodLabel={selectedPeriodLabel} />}
 
-      {selectedMovie && (
-        <section className="dashboard-movie-revenue-panel">
-          <div className="dashboard-daily-header">
-            <div>
-              <h2>Doanh thu phim: {selectedMovie.title}</h2>
-              <p>Lọc theo ngày thanh toán booking, timezone Việt Nam</p>
-            </div>
-            <form
-              className="dashboard-movie-revenue-filter"
-              onSubmit={handleMovieRevenueFilter}
-            >
-              <label className="dashboard-date-filter">
-                <span>Từ ngày</span>
-                <input
-                  className="form-input dashboard-date-input"
-                  type="date"
-                  value={movieRevenueFrom}
-                  onChange={(event) => setMovieRevenueFrom(event.target.value)}
-                />
-              </label>
-              <label className="dashboard-date-filter">
-                <span>Đến ngày</span>
-                <input
-                  className="form-input dashboard-date-input"
-                  type="date"
-                  value={movieRevenueTo}
-                  onChange={(event) => setMovieRevenueTo(event.target.value)}
-                />
-              </label>
-              <button
-                className="btn btn-primary dashboard-movie-filter-button"
-                disabled={movieRevenueLoading}
-                type="submit"
-              >
-                Áp dụng
-              </button>
-              {(movieRevenueFrom || movieRevenueTo) && (
-                <button
-                  className="btn btn-secondary dashboard-movie-filter-button"
-                  disabled={movieRevenueLoading}
-                  onClick={handleClearMovieRevenueFilter}
-                  type="button"
-                >
-                  Toàn bộ
-                </button>
-              )}
-            </form>
-          </div>
-
-          {movieRevenueError ? (
-            <div className="dashboard-daily-error">{movieRevenueError}</div>
-          ) : (
-            <>
-            <div className="dashboard-movie-revenue-grid" aria-busy={movieRevenueLoading}>
-              <div className="dashboard-movie-revenue-metric primary">
-                <HiOutlineCash />
-                <span>Tổng doanh thu</span>
-                <strong>
-                  {movieRevenueLoading
-                    ? "..."
-                    : currencyFormatter.format(movieRevenue.revenue)}
-                </strong>
-              </div>
-              <div className="dashboard-movie-revenue-metric">
-                <HiOutlineTicket />
-                <span>Vé đã bán</span>
-                <strong>
-                  {movieRevenueLoading
-                    ? "..."
-                    : numberFormatter.format(movieRevenue.ticketsSold)}
-                </strong>
-              </div>
-              <div className="dashboard-movie-revenue-metric">
-                <HiOutlineCheckCircle />
-                <span>Số booking</span>
-                <strong>
-                  {movieRevenueLoading
-                    ? "..."
-                    : numberFormatter.format(movieRevenue.bookingCount)}
-                </strong>
-              </div>
-              <div className="dashboard-movie-revenue-metric">
-                <HiOutlineClock />
-                <span>Số suất chiếu</span>
-                <strong>
-                  {movieRevenueLoading
-                    ? "..."
-                  : numberFormatter.format(movieRevenue.showtimeCount)}
-                </strong>
-              </div>
-              <div className="dashboard-movie-revenue-metric occupancy">
-                <HiOutlineChartPie />
-                <span>Lấp đầy trung bình</span>
-                <strong>
-                  {movieRevenueLoading
-                    ? "..."
-                    : `${numberFormatter.format(movieRevenue.averageOccupancyRate)}%`}
-                </strong>
-              </div>
-            </div>
-            <div className="dashboard-movie-daily-chart">
-              <div className="dashboard-movie-chart-heading">
-                <h3>Số vé bán theo loại ghế</h3>
-                <p>Tổng hợp từ các ghế trong booking của phim</p>
-              </div>
-              <div className="dashboard-seat-type-grid">
-                <div className="dashboard-seat-type-item normal">
-                  <HiOutlineTicket />
-                  <span>Ghế thường</span>
-                  <strong>
-                    {movieRevenueLoading
-                      ? "..."
-                      : numberFormatter.format(movieRevenue.ticketsBySeatType.normal)}
-                  </strong>
-                </div>
-                <div className="dashboard-seat-type-item vip">
-                  <HiOutlineTicket />
-                  <span>Ghế VIP</span>
-                  <strong>
-                    {movieRevenueLoading
-                      ? "..."
-                      : numberFormatter.format(movieRevenue.ticketsBySeatType.vip)}
-                  </strong>
-                </div>
-                <div className="dashboard-seat-type-item couple">
-                  <HiOutlineTicket />
-                  <span>Ghế đôi</span>
-                  <strong>
-                    {movieRevenueLoading
-                      ? "..."
-                      : numberFormatter.format(movieRevenue.ticketsBySeatType.couple)}
-                  </strong>
-                </div>
-              </div>
-            </div>
-            <div className="dashboard-movie-daily-chart">
-              <div className="dashboard-movie-chart-heading">
-                <h3>Tỷ lệ lấp đầy theo suất chiếu</h3>
-                <p>Số ghế bán được trên tổng ghế hoạt động của phòng</p>
-              </div>
-              {movieRevenueLoading ? (
-                <div className="dashboard-mini-loading">Đang tải suất chiếu...</div>
-              ) : movieRevenue.occupancyByShowtime.length ? (
-                <div className="dashboard-occupancy-list">
-                  {movieRevenue.occupancyByShowtime.map((showtime) => (
-                    <div className="dashboard-occupancy-row" key={showtime.id}>
-                      <div className="dashboard-occupancy-showtime">
-                        <strong>
-                          {dashboardDateTimeFormatter.format(
-                            new Date(showtime.startTime),
-                          )}
-                        </strong>
-                        <span>{showtime.roomName || "Chưa xác định phòng"}</span>
-                      </div>
-                      <div className="dashboard-occupancy-seats">
-                        {numberFormatter.format(showtime.soldSeats)} / {numberFormatter.format(showtime.totalSeats)} ghế
-                      </div>
-                      <div className="dashboard-occupancy-progress">
-                        <div
-                          style={{
-                            width: `${Math.min(
-                              Number(showtime.occupancyRate || 0),
-                              100,
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                      <strong className="dashboard-occupancy-rate">
-                        {numberFormatter.format(showtime.occupancyRate)}%
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="dashboard-empty-state">
-                  Chưa có suất chiếu để tính tỷ lệ lấp đầy.
-                </div>
-              )}
-            </div>
-            <div className="dashboard-movie-daily-chart">
-              <div className="dashboard-movie-chart-heading">
-                <h3>Doanh thu phim theo ngày</h3>
-                <p>So sánh hiệu quả bán vé của phim giữa các ngày</p>
-              </div>
-              <RevenueChart
-                data={movieRevenue.dailyRevenue}
-                loading={movieRevenueLoading}
-              />
-            </div>
-            </>
-          )}
+      <div className="dashboard-compact-grid">
+        <section className="dashboard-panel dashboard-today-panel">
+          <div className="dashboard-panel-header"><div><h2>Lịch chiếu hôm nay</h2><p>{numberFormatter.format(dashboard.stats.todayShowtimes || 0)} suất chiếu</p></div><HiOutlineCalendar /></div>
+          {loading ? <div className="dashboard-mini-loading">Đang tải...</div> : dashboard.todayShowtimes.length ? <div className="showtime-list">{dashboard.todayShowtimes.slice(0, 6).map((showtime) => <div className="showtime-item" key={showtime.id || showtime._id}><div><strong>{showtime.movieTitle}</strong><span>{showtime.cinemaName || "Rạp"} · {showtime.roomName || "Phòng chiếu"}</span></div><time>{showtime.startTime}</time></div>)}</div> : <div className="dashboard-empty-state">Chưa có lịch chiếu hôm nay.</div>}
         </section>
       )}
 

@@ -41,9 +41,23 @@ export const getMonthlyRevenue = async (month, year) => {
   return res.data;
 };
 
-export const getRevenueComparison = async (period, date) => {
+export const getYearlyRevenue = async (year) => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/yearly", {
+    params: { year },
+  });
+  return res.data;
+};
+
+export const getRangeRevenue = async (from, to) => {
+  const res = await axiosClient.get("/admin/dashboard/revenue/range", {
+    params: { from, to },
+  });
+  return res.data;
+};
+
+export const getRevenueComparison = async (period, date, filters = {}) => {
   const res = await axiosClient.get("/admin/dashboard/revenue/comparison", {
-    params: { period, date },
+    params: { period, date, ...filters },
   });
   return res.data;
 };
