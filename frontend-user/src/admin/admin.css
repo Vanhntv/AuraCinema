@@ -1158,8 +1158,8 @@
 .dashboard-top-movie {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 13px 0;
+  gap: 10px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -1202,13 +1202,16 @@
 }
 
 .dashboard-top-movie-title-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .dashboard-top-movie-title-row strong {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   color: var(--color-text-primary);
   font-size: 14px;
@@ -1216,17 +1219,18 @@
   white-space: nowrap;
 }
 
-.dashboard-top-movie-title-row span {
-  flex-shrink: 0;
+.dashboard-top-movie-title-row .dashboard-ranking-revenue {
+  max-width: 100%;
   color: var(--color-accent-light);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .dashboard-top-movie-track {
-  height: 7px;
+  height: 5px;
   overflow: hidden;
-  margin: 8px 0 5px;
+  margin: 6px 0 4px;
   border-radius: var(--radius-full);
   background: rgba(148, 163, 184, 0.1);
 }

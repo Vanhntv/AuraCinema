@@ -29,6 +29,12 @@ const currencyFormatter = new Intl.NumberFormat("vi-VN", {
   currency: "VND",
   maximumFractionDigits: 0,
 });
+const compactCurrencyFormatter = new Intl.NumberFormat("vi-VN", {
+  style: "currency",
+  currency: "VND",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 const numberFormatter = new Intl.NumberFormat("vi-VN");
 const dateFormatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" });
 const displayDateFormatter = new Intl.DateTimeFormat("vi-VN", {
@@ -251,7 +257,6 @@ const DashboardPage = () => {
     { label: "Đơn thành công", value: dashboard.stats.successfulBookings, icon: <HiOutlineCheckCircle />, tone: "purple" },
     { label: "Tổng đơn đặt vé", value: dashboard.stats.bookings, icon: <HiOutlineTicket />, tone: "blue" },
     { label: "Phim trong hệ thống", value: dashboard.stats.movies, icon: <HiOutlineFilm />, tone: "purple" },
-    { label: "Rạp đang quản lý", value: dashboard.stats.cinemas, icon: <HiOutlineChartBar />, tone: "teal" },
     { label: "Suất chiếu hôm nay", value: dashboard.stats.todayShowtimes, icon: <HiOutlineCalendar />, tone: "orange" },
   ];
   const topMovieRevenue = Math.max(...topMovies.map((item) => Number(item.revenue || 0)), 0);
@@ -330,7 +335,7 @@ const RankingPanel = ({ title, subtitle, items, loading, maxRevenue, type, onSel
     <div className="dashboard-panel-header dashboard-top-movies-header"><div><h2>{title}</h2><p>{subtitle}</p></div>{type === "movie" ? <HiOutlineFilm /> : <HiOutlineCash />}</div>
     {loading ? <div className="dashboard-chart-state">Đang tải dữ liệu...</div> : items.length ? <div className="dashboard-top-movies-list">{items.map((item, index) => {
       const name = type === "movie" ? item.title : item.name;
-      return <button className="dashboard-top-movie dashboard-ranking-button" key={item.id || name} type="button" onClick={() => onSelect?.(item)} disabled={!onSelect}><span className={`dashboard-movie-rank rank-${index + 1}`}>{index + 1}</span><span className="dashboard-top-movie-info"><span className="dashboard-top-movie-title-row"><strong>{name || "Chưa xác định"}</strong><span>{currencyFormatter.format(item.revenue || 0)}</span></span><span className="dashboard-top-movie-track"><span className={`dashboard-top-movie-bar ${type === "combo" ? "dashboard-top-combo-bar" : ""}`} style={{ width: `${maxRevenue ? Math.max((Number(item.revenue || 0) / maxRevenue) * 100, 3) : 0}%` }} /></span><small>{type === "movie" ? `${numberFormatter.format(item.ticketsSold || 0)} vé · ${numberFormatter.format(item.bookingCount || 0)} đơn` : `${numberFormatter.format(item.quantitySold || 0)} sản phẩm`}</small></span></button>;
+      return <button className="dashboard-top-movie dashboard-ranking-button" key={item.id || name} type="button" onClick={() => onSelect?.(item)} disabled={!onSelect}><span className={`dashboard-movie-rank rank-${index + 1}`}>{index + 1}</span><span className="dashboard-top-movie-info"><span className="dashboard-top-movie-title-row"><strong title={name || "Chưa xác định"}>{name || "Chưa xác định"}</strong><span className="dashboard-ranking-revenue" title={currencyFormatter.format(item.revenue || 0)}>{compactCurrencyFormatter.format(item.revenue || 0)}</span></span><span className="dashboard-top-movie-track"><span className={`dashboard-top-movie-bar ${type === "combo" ? "dashboard-top-combo-bar" : ""}`} style={{ width: `${maxRevenue ? Math.max((Number(item.revenue || 0) / maxRevenue) * 100, 3) : 0}%` }} /></span><small>{type === "movie" ? `${numberFormatter.format(item.ticketsSold || 0)} vé · ${numberFormatter.format(item.bookingCount || 0)} đơn` : `${numberFormatter.format(item.quantitySold || 0)} sản phẩm`}</small></span></button>;
     })}</div> : <div className="dashboard-empty-state">Chưa có dữ liệu trong kỳ này.</div>}
   </section>
 );
